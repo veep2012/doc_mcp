@@ -1,0 +1,39 @@
+sites:
+
+  # ---------------------------------------------------------------------------
+  # Authenticated site (headful — user logs in manually in browser)
+  # ---------------------------------------------------------------------------
+  - name: "My Private Docs"
+    url: "https://docs.example.com"
+    auth_required: true
+    auth_type: "magic_link"         # email_code | magic_link | password_only
+    auth_mode: "headful"            # headful: visible browser, user logs in manually
+    username: "${SITE1_USERNAME}"   # set in .env
+    password: "${SITE1_PASSWORD}"   # set in .env (if needed)
+    session_file: "storage/my_private_docs.json"
+    crawl:
+      start_url: "https://docs.example.com/documentation"
+      max_depth: 5
+      delay_seconds: 1.0
+      respect_robots_txt: true
+      block_images: true            # skip image/font/media requests to speed up crawling
+      allow_patterns: []            # e.g. ["https://docs.example.com/documentation/*"]
+      deny_patterns: []             # e.g. ["*/changelog/*", "*/print/*"]
+    index_file: "index/my_private_docs.db"
+
+  # ---------------------------------------------------------------------------
+  # Public site (no auth required)
+  # ---------------------------------------------------------------------------
+  - name: "My Public Docs"
+    url: "https://public-docs.example.com/"
+    auth_required: false
+    session_file: null
+    crawl:
+      start_url: "https://public-docs.example.com/"
+      max_depth: 3
+      delay_seconds: 0.5
+      respect_robots_txt: true
+      block_images: true
+      allow_patterns: []
+      deny_patterns: ["https://public-docs.example.com/auth/*"]
+    index_file: "index/my_public_docs.db"

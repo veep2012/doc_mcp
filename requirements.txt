@@ -1,0 +1,14 @@
+# Browser Automation
+playwright>=1.43.0
+
+# HTML to Markdown
+markdownify>=0.12.0
+
+# MCP Server
+mcp>=1.0.0
+
+# Config
+PyYAML>=6.0.1
+
+# Utilities
+python-dotenv>=1.0.0
