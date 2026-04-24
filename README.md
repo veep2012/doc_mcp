@@ -111,6 +111,7 @@ sites:
       max_depth: 5
       delay_seconds: 1.0
       block_images: true
+      ignore_anchor_links: true
       allow_patterns: []
       deny_patterns: []
     index_file: "index/my_docs.db"
@@ -171,6 +172,9 @@ Manual fallback:
 ```
 
 ### 5. Crawl and index
+
+One-page sites that use in-page anchors such as `#section-1` stay as a single canonical page in the index. The crawler does not split anchor links into separate records.
+When possible, the crawler indexes the most complete rendered HTML for the page, so long single-page documents are less likely to be truncated to just the first content block.
 
 #### Windows
 
@@ -335,6 +339,7 @@ docs-mcp/
 | `crawl.max_depth` | BFS depth limit |
 | `crawl.delay_seconds` | Delay between page requests |
 | `crawl.block_images` | Skip image/font/media requests (faster crawl) |
+| `crawl.ignore_anchor_links` | Skip links that only change `#fragment` on the same page |
 | `crawl.allow_patterns` | Glob patterns — only crawl matching URLs |
 | `crawl.deny_patterns` | Glob patterns — skip matching URLs |
 | `index_file` | SQLite DB path for this site's index |

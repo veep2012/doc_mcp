@@ -17,6 +17,7 @@ sites:
       delay_seconds: 1.0
       respect_robots_txt: true
       block_images: true            # skip image/font/media requests to speed up crawling
+      ignore_anchor_links: true     # skip links that only differ by #fragment
       allow_patterns: []            # e.g. ["https://docs.example.com/documentation/*"]
       deny_patterns: []             # e.g. ["*/changelog/*", "*/print/*"]
     index_file: "index/my_private_docs.db"
@@ -34,6 +35,7 @@ sites:
       delay_seconds: 0.5
       respect_robots_txt: true
       block_images: true
+      ignore_anchor_links: true
       allow_patterns: []
       deny_patterns: ["https://public-docs.example.com/auth/*"]
     index_file: "index/my_public_docs.db"

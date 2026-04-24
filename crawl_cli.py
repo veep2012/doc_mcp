@@ -18,7 +18,7 @@ import re
 import sys
 from fnmatch import fnmatch
 from pathlib import Path
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import urljoin, urlparse, urlunparse
 
 from dotenv import load_dotenv
 
@@ -51,7 +51,7 @@ except ImportError:
 
 
 def _normalize_url(url: str) -> str:
-    """Strip fragments, query strings; normalize scheme/host to lowercase."""
+    """Strip fragments and query strings; normalize scheme/host to lowercase."""
     p = urlparse(url)
     path = p.path
     if path != "/" and path.endswith("/"):
@@ -115,6 +115,12 @@ def _is_allowed(
 
 def _html_to_markdown(html: str) -> str:
     """Convert HTML to Markdown, or fall back to stripping tags."""
+    # Remove non-content blocks first so markdownify does not turn their inner text
+    # into visible garbage in the indexed document.
+    html = re.sub(r"<!--.*?-->", " ", html, flags=re.S)
+    html = re.sub(
+        r"<(script|style|noscript|template|head)\b.*?>.*?</\1>", " ", html, flags=re.S | re.I
+    )
     if HAS_MARKDOWNIFY:
         return md_convert(html, heading_style="ATX", strip=["script", "style", "nav", "footer"])
     # Fallback: strip all HTML tags
@@ -122,21 +128,53 @@ def _html_to_markdown(html: str) -> str:
     return re.sub(r"\s{2,}", " ", text).strip()
 
 
-def _extract_links(page_url: str, link_elements: list[dict]) -> list[str]:
-    """Extract and normalize hrefs from Playwright link objects."""
-    base = urlparse(page_url)
+async def _extract_page_html(page) -> str:
+    """Extract the most complete rendered HTML we can get from the page."""
+    candidates: list[str] = []
+    try:
+        full_html = await page.content()
+        if full_html:
+            candidates.append(full_html)
+    except Exception:
+        pass
+
+    for selector in [
+        "main",
+        "article",
+        '[role="main"]',
+        "#content",
+        ".content",
+        "body",
+    ]:
+        try:
+            el = await page.query_selector(selector)
+            if el:
+                html = await el.inner_html()
+                if html:
+                    candidates.append(html)
+        except Exception:
+            continue
+
+    if not candidates:
+        return ""
+    return max(candidates, key=len)
+
+
+def _extract_links(page_url: str, link_elements: list[dict]) -> list[tuple[str, bool]]:
+    """Extract and normalize hrefs from Playwright link objects.
+
+    Returns pairs of (normalized_url, is_anchor_link).
+    """
     links = []
     for el in link_elements:
         href = el.get("href", "") or ""
         href = href.strip()
         if not href or href.startswith(("#", "mailto:", "javascript:")):
             continue
-        # Make absolute
-        if href.startswith("/"):
-            href = f"{base.scheme}://{base.netloc}{href}"
-        elif not href.startswith("http"):
-            continue
-        links.append(_normalize_url(href))
+        absolute_url = urljoin(page_url, href)
+        normalized_url = _normalize_url(absolute_url)
+        is_anchor_link = "#" in absolute_url and normalized_url == _normalize_url(page_url)
+        links.append((normalized_url, is_anchor_link))
     return links
 
 
@@ -160,6 +198,7 @@ async def crawl_site_headful(site: dict, headless: bool = False) -> None:
     allow_patterns = crawl_cfg.get("allow_patterns", [])
     deny_patterns = crawl_cfg.get("deny_patterns", [])
     block_images = crawl_cfg.get("block_images", False)
+    ignore_anchor_links = crawl_cfg.get("ignore_anchor_links", True)
     index_file = site["index_file"]
     session_file = site.get("session_file")
 
@@ -233,23 +272,8 @@ async def crawl_site_headful(site: dict, headless: bool = False) -> None:
                 # Extract title
                 title = await page.title() or url
 
-                # Extract main content HTML — prefer main/article, fall back to body
-                html = ""
-                for selector in [
-                    "main",
-                    "article",
-                    '[role="main"]',
-                    "#content",
-                    ".content",
-                    "body",
-                ]:
-                    try:
-                        el = await page.query_selector(selector)
-                        if el:
-                            html = await el.inner_html()
-                            break
-                    except Exception:
-                        continue
+                # Extract the most complete rendered HTML we can find.
+                html = await _extract_page_html(page)
 
                 content_md = _html_to_markdown(html) if html else ""
 
@@ -264,7 +288,9 @@ async def crawl_site_headful(site: dict, headless: bool = False) -> None:
                         anchors = await page.eval_on_selector_all(
                             "a[href]", "els => els.map(e => ({ href: e.href }))"
                         )
-                        for href in _extract_links(current_url, anchors):
+                        for href, is_anchor_link in _extract_links(current_url, anchors):
+                            if ignore_anchor_links and is_anchor_link:
+                                continue
                             if (
                                 href not in visited
                                 and _is_page_url(href)
