@@ -26,6 +26,8 @@ AI Client    (GitHub Copilot, Claude Desktop, etc.)
 
 ### 1. Install dependencies
 
+#### Windows
+
 ```powershell
 python -m venv .venv
 .venv\Scripts\Activate.ps1
@@ -33,11 +35,29 @@ pip install -r requirements.txt
 playwright install chromium
 ```
 
+#### Linux / macOS
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+playwright install chromium
+```
+
 ### 2. Configure environment
+
+#### Windows
 
 ```powershell
 cp .env.example .env
 # Edit .env — set proxy, MCP_SERVER_NAME, and per-site credentials
+```
+
+#### Linux / macOS
+
+```bash
+cp .env.example .env
+# Edit .env - set proxy, MCP_SERVER_NAME, and per-site credentials
 ```
 
 ### 3. Configure sites
@@ -63,6 +83,8 @@ sites:
 
 ### 4. Authenticate (one-time per site)
 
+#### Windows
+
 ```powershell
 # List configured sites
 .venv\Scripts\python auth_cli.py --list
@@ -74,9 +96,24 @@ sites:
 .venv\Scripts\python auth_cli.py --site "My Docs" --force
 ```
 
+#### Linux / macOS
+
+```bash
+# List configured sites
+.venv/bin/python auth_cli.py --list
+
+# Authenticate - opens a browser window, log in manually, press Enter
+.venv/bin/python auth_cli.py --site "My Docs"
+
+# Force re-authentication (if session expired)
+.venv/bin/python auth_cli.py --site "My Docs" --force
+```
+
 Session is saved to `storage/<site>.json` and reused until it expires.
 
 ### 5. Crawl and index
+
+#### Windows
 
 ```powershell
 # Crawl a site (headful browser by default)
@@ -89,9 +126,23 @@ Session is saved to `storage/<site>.json` and reused until it expires.
 .venv\Scripts\python crawl_cli.py --list
 ```
 
+#### Linux / macOS
+
+```bash
+# Crawl a site (headful browser by default)
+.venv/bin/python crawl_cli.py --site "My Docs"
+
+# Force re-auth before crawling
+.venv/bin/python crawl_cli.py --site "My Docs" --force-auth
+
+# List all configured sites
+.venv/bin/python crawl_cli.py --list
+```
+
 ### 6. Connect to your AI client
 
 #### GitHub Copilot / VS Code (`.vscode/mcp.json`)
+##### Windows
 ```json
 {
   "servers": {
@@ -107,7 +158,24 @@ Session is saved to `storage/<site>.json` and reused until it expires.
 }
 ```
 
+##### Linux / macOS
+```json
+{
+  "servers": {
+    "docs-mcp": {
+      "type": "stdio",
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "args": ["-m", "src.main"],
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      }
+    }
+  }
+}
+```
+
 #### Claude Desktop (`claude_desktop_config.json`)
+##### Windows
 ```json
 {
   "mcpServers": {
@@ -116,6 +184,21 @@ Session is saved to `storage/<site>.json` and reused until it expires.
       "args": ["-m", "src.main"],
       "env": {
         "PYTHONPATH": "C:/path/to/your/project"
+      }
+    }
+  }
+}
+```
+
+##### Linux / macOS
+```json
+{
+  "mcpServers": {
+    "docs-mcp": {
+      "command": "/path/to/your/project/.venv/bin/python",
+      "args": ["-m", "src.main"],
+      "env": {
+        "PYTHONPATH": "/path/to/your/project"
       }
     }
   }
