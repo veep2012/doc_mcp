@@ -27,6 +27,8 @@ cp config/sites.yaml.example config/sites.yaml
 
 3. Edit `config/sites.yaml` and `.env` for your site, credentials, and paths.
 
+   The current authentication flow is validated for `headful` login only. The `email_code` and `password_only` auth types are not tested thoroughly and are not recommended for production use.
+
 4. Authenticate the site:
 
 ```bash
