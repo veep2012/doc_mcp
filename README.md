@@ -85,7 +85,19 @@ cp .env.example .env
 
 ### 3. Configure sites
 
-Edit `config/sites.yaml` to add your documentation sites:
+#### Windows
+
+```powershell
+cp config\sites.yaml.example config\sites.yaml
+# Edit config\sites.yaml to add your documentation sites
+```
+
+#### Linux / macOS
+
+```bash
+cp config/sites.yaml.example config/sites.yaml
+# Edit config/sites.yaml to add your documentation sites
+```
 
 ```yaml
 sites:
