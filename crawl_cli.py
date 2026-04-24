@@ -11,22 +11,22 @@ Usage:
     python crawl_cli.py --site "LD documentation" --headless
     python crawl_cli.py --list
 """
+
 import argparse
 import asyncio
 import re
 import sys
-import time
 from fnmatch import fnmatch
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 
 from dotenv import load_dotenv
 
-load_dotenv()
-
-from src.config.loader import get_sites
 from src.auth.session import authenticate
+from src.config.loader import get_sites
 from src.index.store import init_db, upsert_page
+
+load_dotenv()
 
 
 # ---------------------------------------------------------------------------
@@ -34,16 +34,21 @@ from src.index.store import init_db, upsert_page
 # ---------------------------------------------------------------------------
 try:
     from markdownify import markdownify as md_convert
+
     HAS_MARKDOWNIFY = True
 except ImportError:
     HAS_MARKDOWNIFY = False
-    print("[crawl] Warning: markdownify not installed. Falling back to plain text extraction.", file=sys.stderr)
+    print(
+        "[crawl] Warning: markdownify not installed. Falling back to plain text extraction.",
+        file=sys.stderr,
+    )
     print("[crawl] Install with: pip install markdownify", file=sys.stderr)
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _normalize_url(url: str) -> str:
     """Strip fragments, query strings; normalize scheme/host to lowercase."""
@@ -55,10 +60,30 @@ def _normalize_url(url: str) -> str:
 
 
 _STATIC_EXTENSIONS = {
-    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico", ".bmp",
-    ".pdf", ".zip", ".tar", ".gz", ".mp4", ".mp3", ".avi", ".mov",
-    ".woff", ".woff2", ".ttf", ".eot", ".otf",
-    ".css", ".js", ".map",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".webp",
+    ".svg",
+    ".ico",
+    ".bmp",
+    ".pdf",
+    ".zip",
+    ".tar",
+    ".gz",
+    ".mp4",
+    ".mp3",
+    ".avi",
+    ".mov",
+    ".woff",
+    ".woff2",
+    ".ttf",
+    ".eot",
+    ".otf",
+    ".css",
+    ".js",
+    ".map",
 }
 
 
@@ -69,7 +94,9 @@ def _is_page_url(url: str) -> bool:
     return ext not in _STATIC_EXTENSIONS
 
 
-def _is_allowed(url: str, start_url: str, allow_patterns: list[str], deny_patterns: list[str]) -> bool:
+def _is_allowed(
+    url: str, start_url: str, allow_patterns: list[str], deny_patterns: list[str]
+) -> bool:
     """Return True if url should be crawled."""
     ps = urlparse(start_url)
     pu = urlparse(url)
@@ -116,6 +143,7 @@ def _extract_links(page_url: str, link_elements: list[dict]) -> list[str]:
 # ---------------------------------------------------------------------------
 # Core headful crawler
 # ---------------------------------------------------------------------------
+
 
 async def crawl_site_headful(site: dict, headless: bool = False) -> None:
     """
@@ -167,13 +195,15 @@ async def crawl_site_headful(site: dict, headless: bool = False) -> None:
         # Block images, fonts, and media to speed up crawling
         if block_images:
             blocked = {"image", "media", "font"}
+
             async def _block_resources(route, request):
                 if request.resource_type in blocked:
                     await route.abort()
                 else:
                     await route.continue_()
+
             await context.route("**/*", _block_resources)
-            print(f"[crawl] Resource blocking: images/fonts/media/css disabled")
+            print("[crawl] Resource blocking: images/fonts/media/css disabled")
 
         page = await context.new_page()
 
@@ -196,8 +226,8 @@ async def crawl_site_headful(site: dict, headless: bool = False) -> None:
 
                 # Detect redirect to login page
                 if any(ind in current_url for ind in login_indicators):
-                    print(f"[crawl]   ✗ Redirected to login — session may be expired. Stopping.")
-                    print(f"[crawl]   Run: python auth_cli.py --site \"{name}\" --force")
+                    print("[crawl]   ✗ Redirected to login — session may be expired. Stopping.")
+                    print(f'[crawl]   Run: python auth_cli.py --site "{name}" --force')
                     break
 
                 # Extract title
@@ -205,7 +235,14 @@ async def crawl_site_headful(site: dict, headless: bool = False) -> None:
 
                 # Extract main content HTML — prefer main/article, fall back to body
                 html = ""
-                for selector in ["main", "article", '[role="main"]', "#content", ".content", "body"]:
+                for selector in [
+                    "main",
+                    "article",
+                    '[role="main"]',
+                    "#content",
+                    ".content",
+                    "body",
+                ]:
                     try:
                         el = await page.query_selector(selector)
                         if el:
@@ -225,11 +262,14 @@ async def crawl_site_headful(site: dict, headless: bool = False) -> None:
                 if depth < max_depth:
                     try:
                         anchors = await page.eval_on_selector_all(
-                            "a[href]",
-                            "els => els.map(e => ({ href: e.href }))"
+                            "a[href]", "els => els.map(e => ({ href: e.href }))"
                         )
                         for href in _extract_links(current_url, anchors):
-                            if href not in visited and _is_page_url(href) and _is_allowed(href, start_url, allow_patterns, deny_patterns):
+                            if (
+                                href not in visited
+                                and _is_page_url(href)
+                                and _is_allowed(href, start_url, allow_patterns, deny_patterns)
+                            ):
                                 queue.append((href, depth + 1))
                     except Exception as e:
                         print(f"[crawl]   ✗ Link extraction error: {e}")
@@ -246,13 +286,20 @@ async def crawl_site_headful(site: dict, headless: bool = False) -> None:
 # Entry point
 # ---------------------------------------------------------------------------
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="Headful browser crawler — authenticates and indexes a documentation site."
     )
     parser.add_argument("--site", type=str, help="Name of the site to crawl (as in sites.yaml)")
-    parser.add_argument("--force-auth", action="store_true", help="Force re-authentication before crawling")
-    parser.add_argument("--headless", action="store_true", help="Run browser in headless mode (may trigger anti-bot)")
+    parser.add_argument(
+        "--force-auth", action="store_true", help="Force re-authentication before crawling"
+    )
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        help="Run browser in headless mode (may trigger anti-bot)",
+    )
     parser.add_argument("--list", action="store_true", help="List all configured sites")
     args = parser.parse_args()
 

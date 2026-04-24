@@ -8,12 +8,11 @@ Tools:
   - list_pages    : list all indexed pages for a site
   - get_sites     : list all configured sites
 """
+
 from mcp.server.fastmcp import FastMCP
 
 from src.config.loader import get_sites as _get_sites
-from src.index.store import (
-    search_pages, get_page, list_pages as _list_pages, count_pages
-)
+from src.index.store import search_pages, get_page, list_pages as _list_pages, count_pages
 import os
 
 mcp = FastMCP(os.getenv("MCP_SERVER_NAME", "docs-mcp"))

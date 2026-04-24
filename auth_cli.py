@@ -7,21 +7,26 @@ Usage:
     python auth_cli.py --site "Example Docs" --force
     python auth_cli.py --list
 """
+
 import argparse
 import asyncio
 
 from dotenv import load_dotenv
 
-load_dotenv()
-
-from src.config.loader import get_sites
 from src.auth.session import authenticate
+from src.config.loader import get_sites
+
+load_dotenv()
 
 
 def main():
     parser = argparse.ArgumentParser(description="Authenticate to a documentation site.")
-    parser.add_argument("--site", type=str, help="Name of the site to authenticate (as in sites.yaml)")
-    parser.add_argument("--force", action="store_true", help="Force re-authentication even if session is valid")
+    parser.add_argument(
+        "--site", type=str, help="Name of the site to authenticate (as in sites.yaml)"
+    )
+    parser.add_argument(
+        "--force", action="store_true", help="Force re-authentication even if session is valid"
+    )
     parser.add_argument("--list", action="store_true", help="List all configured sites")
     args = parser.parse_args()
 
@@ -45,7 +50,7 @@ def main():
         return
 
     asyncio.run(authenticate(site, force=args.force))
-    print(f"\n[auth] Done. You can now start the MCP server.")
+    print("\n[auth] Done. You can now start the MCP server.")
 
 
 if __name__ == "__main__":

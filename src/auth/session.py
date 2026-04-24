@@ -4,6 +4,7 @@ Session manager — handles Playwright authentication and session persistence.
 Supports one auth mode:
   - headful: visible browser, user interacts fully (types email, password, OTP)
 """
+
 import asyncio
 import json
 import time
@@ -49,7 +50,9 @@ async def is_session_valid(url: str, session_file: str) -> bool:
     now = time.time()
     for cookie in session.get("cookies", []):
         if cookie.get("expires", -1) > 0 and cookie["expires"] < now:
-            print(f"[auth] Cookie expired: {cookie['name']} (expired {int(now - cookie['expires'])}s ago)")
+            print(
+                f"[auth] Cookie expired: {cookie['name']} (expired {int(now - cookie['expires'])}s ago)"
+            )
             return False
 
     async with async_playwright() as p:
@@ -57,7 +60,7 @@ async def is_session_valid(url: str, session_file: str) -> bool:
         context = await browser.new_context(storage_state=session_file)
         page = await context.new_page()
         try:
-            response = await page.goto(url, wait_until="networkidle", timeout=30000)
+            await page.goto(url, wait_until="networkidle", timeout=30000)
             current_url = page.url
             # If redirected to a login page, session is invalid
             login_indicators = ["login", "signin", "sign-in", "auth", "sso"]
@@ -110,7 +113,7 @@ async def authenticate(site: dict, force: bool = False) -> None:
         print(f"[auth] Checking existing session for: {site['name']}...")
         valid = await is_session_valid(check_url, session_file)
         if valid:
-            print(f"[auth] Session is valid, skipping re-authentication.")
+            print("[auth] Session is valid, skipping re-authentication.")
             return
         print("[auth] Session expired or invalid, re-authenticating...")
 

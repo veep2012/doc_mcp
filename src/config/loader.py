@@ -1,6 +1,7 @@
 """
 Config loader — reads config/sites.yaml and resolves ${ENV_VAR} references from .env
 """
+
 import os
 import re
 from pathlib import Path
@@ -16,6 +17,7 @@ load_dotenv(Path(__file__).parents[2] / ".env")
 def _resolve_env_vars(value: Any) -> Any:
     """Recursively resolve ${VAR_NAME} placeholders from environment variables."""
     if isinstance(value, str):
+
         def replacer(match):
             var_name = match.group(1)
             resolved = os.environ.get(var_name)
@@ -23,6 +25,7 @@ def _resolve_env_vars(value: Any) -> Any:
                 # Return empty string for unset optional vars instead of crashing
                 return ""
             return resolved
+
         return re.sub(r"\$\{([^}]+)\}", replacer, value)
     elif isinstance(value, dict):
         return {k: _resolve_env_vars(v) for k, v in value.items()}
