@@ -1,0 +1,4 @@
+interface:
+  display_name: "Backend Doc Sync"
+  short_description: "Require docs updates for backend Python changes"
+  default_prompt: "Use $backend-doc-sync whenever backend Python code changes to keep documentation synchronized in the same change."

@@ -25,5 +25,11 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 
-if __name__ == "__main__":
+
+def main() -> None:
+    """Run the MCP server in stdio mode."""
     mcp.run(transport="stdio")
+
+
+if __name__ == "__main__":
+    main()

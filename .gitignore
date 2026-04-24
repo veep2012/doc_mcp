@@ -1,6 +1,12 @@
 # Virtual environment
 .venv/
 
+# Packaging outputs
+dist/
+build/
+*.whl
+*.egg-info/
+
 # Environment variables (contains sensitive proxy/credentials)
 .env
 

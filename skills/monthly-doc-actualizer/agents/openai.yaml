@@ -1,0 +1,4 @@
+interface:
+  display_name: "Monthly Doc Actualizer"
+  short_description: "Daily check + monthly documentation refresh trigger"
+  default_prompt: "Use $monthly-doc-actualizer to run a daily due check and perform a full documentation actualization when 30+ days have passed."

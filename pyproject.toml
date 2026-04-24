@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "doc-mcp"
+version = "0.1.0"
+description = "Documentation MCP server with Playwright-based authentication and crawling"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "playwright>=1.43.0",
+  "markdownify>=0.12.0",
+  "mcp>=1.0.0",
+  "PyYAML>=6.0.1",
+  "python-dotenv>=1.0.0",
+]
+
+[project.scripts]
+docmcp-server = "src.main:main"
+docmcp-auth = "auth_cli:main"
+docmcp-crawl = "crawl_cli:main"
+
+[tool.setuptools]
+include-package-data = true
+py-modules = ["auth_cli", "crawl_cli"]
+
+[tool.setuptools.packages.find]
+include = ["src*"]
