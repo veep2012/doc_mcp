@@ -16,6 +16,7 @@ import argparse
 import asyncio
 import re
 import sys
+from collections import deque
 from fnmatch import fnmatch
 from pathlib import Path
 from urllib.parse import urljoin, urlparse, urlunparse
@@ -214,7 +215,8 @@ async def crawl_site_headful(site: dict, headless: bool = False) -> None:
     login_indicators = ["login", "signin", "sign-in", "/auth", "/sso"]
 
     visited: set[str] = set()
-    queue: list[tuple[str, int]] = [(_normalize_url(start_url), 0)]
+    queued: set[str] = {_normalize_url(start_url)}
+    queue: deque[tuple[str, int]] = deque([(_normalize_url(start_url), 0)])
     page_count = 0
 
     async with async_playwright() as p:
@@ -249,60 +251,79 @@ async def crawl_site_headful(site: dict, headless: bool = False) -> None:
         page = await context.new_page()
 
         try:
+            stop_crawl = False
             while queue:
-                url, depth = queue.pop(0)
-                if url in visited:
-                    continue
-                visited.add(url)
+                depth = queue[0][1]
+                level_total = sum(1 for _, item_depth in queue if item_depth == depth)
+                level_number = depth + 1
+                total_levels = max_depth + 1
 
-                print(f"[crawl] [{depth}/{max_depth}] {url}")
+                for index_in_level in range(1, level_total + 1):
+                    url, item_depth = queue.popleft()
+                    if item_depth != depth:
+                        queue.appendleft((url, item_depth))
+                        break
+                    queued.discard(url)
+                    if url in visited:
+                        continue
+                    visited.add(url)
 
-                try:
-                    await page.goto(url, wait_until="networkidle", timeout=60000)
-                except Exception as e:
-                    print(f"[crawl]   ✗ Navigation error: {e}")
-                    continue
+                    print(
+                        f"[crawl] [{index_in_level} of {level_total} level {level_number}/{total_levels}] {url}"
+                    )
 
-                current_url = _normalize_url(page.url)
-
-                # Detect redirect to login page
-                if any(ind in current_url for ind in login_indicators):
-                    print("[crawl]   ✗ Redirected to login — session may be expired. Stopping.")
-                    print(f'[crawl]   Run: python auth_cli.py --site "{name}" --force')
-                    break
-
-                # Extract title
-                title = await page.title() or url
-
-                # Extract the most complete rendered HTML we can find.
-                html = await _extract_page_html(page)
-
-                content_md = _html_to_markdown(html) if html else ""
-
-                # Save to index
-                upsert_page(index_file, current_url, title, content_md)
-                page_count += 1
-                print(f"[crawl]   ✓ Indexed: {title[:70]}")
-
-                # Discover links for next depth
-                if depth < max_depth:
                     try:
-                        anchors = await page.eval_on_selector_all(
-                            "a[href]", "els => els.map(e => ({ href: e.href }))"
-                        )
-                        for href, is_anchor_link in _extract_links(current_url, anchors):
-                            if ignore_anchor_links and is_anchor_link:
-                                continue
-                            if (
-                                href not in visited
-                                and _is_page_url(href)
-                                and _is_allowed(href, start_url, allow_patterns, deny_patterns)
-                            ):
-                                queue.append((href, depth + 1))
+                        await page.goto(url, wait_until="networkidle", timeout=60000)
                     except Exception as e:
-                        print(f"[crawl]   ✗ Link extraction error: {e}")
+                        print(f"[crawl]   ✗ Navigation error: {e}")
+                        continue
 
-                await asyncio.sleep(delay_seconds)
+                    current_url = _normalize_url(page.url)
+
+                    # Detect redirect to login page
+                    if any(ind in current_url for ind in login_indicators):
+                        print("[crawl]   ✗ Redirected to login — session may be expired. Stopping.")
+                        print(f'[crawl]   Run: python auth_cli.py --site "{name}" --force')
+                        stop_crawl = True
+                        break
+
+                    # Extract title
+                    title = await page.title() or url
+
+                    # Extract the most complete rendered HTML we can find.
+                    html = await _extract_page_html(page)
+
+                    content_md = _html_to_markdown(html) if html else ""
+
+                    # Save to index
+                    upsert_page(index_file, current_url, title, content_md)
+                    page_count += 1
+                    print(f"[crawl]   ✓ Indexed: {title[:70]}")
+
+                    # Discover links for next depth
+                    if depth < max_depth:
+                        try:
+                            anchors = await page.eval_on_selector_all(
+                                "a[href]", "els => els.map(e => ({ href: e.href }))"
+                            )
+                            for href, is_anchor_link in _extract_links(current_url, anchors):
+                                if ignore_anchor_links and is_anchor_link:
+                                    continue
+                                if (
+                                    href not in visited
+                                    and href not in queued
+                                    and _is_page_url(href)
+                                    and _is_allowed(href, start_url, allow_patterns, deny_patterns)
+                                ):
+                                    queue.append((href, depth + 1))
+                                    queued.add(href)
+                        except Exception as e:
+                            print(f"[crawl]   ✗ Link extraction error: {e}")
+
+                    await asyncio.sleep(delay_seconds)
+
+                if stop_crawl:
+                    break
 
         finally:
             await browser.close()
