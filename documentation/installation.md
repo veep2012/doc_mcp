@@ -92,6 +92,32 @@ docmcp-crawl --help
 docmcp-server
 ```
 
+### Build And Install A Wheel On Another Environment
+If you want to package `doc-mcp` in one environment and install it in another, build a wheel and copy it across:
+
+1. Build the wheel from the repository root:
+
+```bash
+python -m pip install build
+python -m build --wheel
+```
+
+2. Copy the generated `.whl` file from `dist/` to the target environment.
+
+3. Install the wheel on the target machine:
+
+```bash
+python -m pip install /path/to/doc_mcp-*.whl
+```
+
+4. Run the installed console commands:
+
+```bash
+docmcp-auth --help
+docmcp-crawl --help
+docmcp-server
+```
+
 ## Edge Cases
 - If `make` is not available, use the manual setup commands.
 - If the virtual environment is not active, the CLI commands will use whatever Python is on `PATH`.

@@ -54,6 +54,33 @@ If you want the `docmcp-auth`, `docmcp-crawl`, and `docmcp-server` console comma
 pip install -e .
 ```
 
+## Install On Another Environment
+
+If you want to build a distributable wheel in one environment and install it in another:
+
+1. Build the wheel from the project root:
+
+```bash
+python -m pip install build
+python -m build --wheel
+```
+
+2. Copy the generated file from `dist/` to the target environment.
+
+3. Install the wheel on the target machine:
+
+```bash
+python -m pip install /path/to/doc_mcp-*.whl
+```
+
+4. Use the installed console commands:
+
+```bash
+docmcp-auth --help
+docmcp-crawl --help
+docmcp-server
+```
+
 ## What To Edit
 
 - `config/sites.yaml` defines each documentation site.
