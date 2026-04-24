@@ -112,6 +112,7 @@ sites:
       delay_seconds: 1.0
       block_images: true
       ignore_anchor_links: true
+      ignore_https_errors: false
       allow_patterns: []
       deny_patterns: []
     index_file: "index/my_docs.db"
@@ -340,6 +341,7 @@ docs-mcp/
 | `crawl.delay_seconds` | Delay between page requests |
 | `crawl.block_images` | Skip image/font/media requests (faster crawl) |
 | `crawl.ignore_anchor_links` | Skip links that only change `#fragment` on the same page |
+| `crawl.ignore_https_errors` | Ignore TLS certificate errors for that site |
 | `crawl.allow_patterns` | Glob patterns — only crawl matching URLs |
 | `crawl.deny_patterns` | Glob patterns — skip matching URLs |
 | `index_file` | SQLite DB path for this site's index |

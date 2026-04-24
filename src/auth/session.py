@@ -37,7 +37,7 @@ def load_session(session_file: str) -> dict | None:
     return None
 
 
-async def is_session_valid(url: str, session_file: str) -> bool:
+async def is_session_valid(url: str, session_file: str, ignore_https_errors: bool = False) -> bool:
     """
     Check if the saved session is still valid.
     First does a fast cookie expiry check, then verifies by navigating to the site.
@@ -57,7 +57,9 @@ async def is_session_valid(url: str, session_file: str) -> bool:
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
-        context = await browser.new_context(storage_state=session_file)
+        context = await browser.new_context(
+            storage_state=session_file, ignore_https_errors=ignore_https_errors
+        )
         page = await context.new_page()
         try:
             await page.goto(url, wait_until="networkidle", timeout=30000)
@@ -80,13 +82,14 @@ async def authenticate_headful(site: dict) -> None:
     """
     url = site["url"]
     session_file = site["session_file"]
+    ignore_https_errors = site.get("crawl", {}).get("ignore_https_errors", False)
 
     print(f"\n[auth] Opening browser for: {url}")
     print("[auth] Please log in manually in the browser window.")
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=False)
-        context = await browser.new_context()
+        context = await browser.new_context(ignore_https_errors=ignore_https_errors)
         page = await context.new_page()
         await page.goto(url)
 
@@ -110,8 +113,9 @@ async def authenticate(site: dict, force: bool = False) -> None:
     # Check if existing session is still valid — use start_url (protected page) if available
     if not force and session_file:
         check_url = site.get("crawl", {}).get("start_url", site["url"])
+        ignore_https_errors = site.get("crawl", {}).get("ignore_https_errors", False)
         print(f"[auth] Checking existing session for: {site['name']}...")
-        valid = await is_session_valid(check_url, session_file)
+        valid = await is_session_valid(check_url, session_file, ignore_https_errors)
         if valid:
             print("[auth] Session is valid, skipping re-authentication.")
             return

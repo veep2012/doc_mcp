@@ -18,6 +18,7 @@ sites:
       respect_robots_txt: true
       block_images: true            # skip image/font/media requests to speed up crawling
       ignore_anchor_links: true     # skip links that only differ by #fragment
+      ignore_https_errors: false    # set true for sites with bad/mismatched TLS certs
       allow_patterns: []            # e.g. ["https://docs.example.com/documentation/*"]
       deny_patterns: []             # e.g. ["*/changelog/*", "*/print/*"]
     index_file: "index/my_private_docs.db"
@@ -36,6 +37,7 @@ sites:
       respect_robots_txt: true
       block_images: true
       ignore_anchor_links: true
+      ignore_https_errors: false
       allow_patterns: []
       deny_patterns: ["https://public-docs.example.com/auth/*"]
     index_file: "index/my_public_docs.db"

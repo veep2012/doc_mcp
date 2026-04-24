@@ -199,6 +199,7 @@ async def crawl_site_headful(site: dict, headless: bool = False) -> None:
     deny_patterns = crawl_cfg.get("deny_patterns", [])
     block_images = crawl_cfg.get("block_images", False)
     ignore_anchor_links = crawl_cfg.get("ignore_anchor_links", True)
+    ignore_https_errors = crawl_cfg.get("ignore_https_errors", False)
     index_file = site["index_file"]
     session_file = site.get("session_file")
 
@@ -228,6 +229,7 @@ async def crawl_site_headful(site: dict, headless: bool = False) -> None:
 
         context = await browser.new_context(
             viewport={"width": 1280, "height": 900},
+            ignore_https_errors=ignore_https_errors,
             **context_kwargs,
         )
 
