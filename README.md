@@ -24,7 +24,30 @@ AI Client    (GitHub Copilot, Claude Desktop, etc.)
 
 ## Quick Start
 
+### Prerequisites
+
+- Python 3.11
+- Make / GNU Make, optional but strongly recommended
+  - Linux and macOS: install through your package manager if it is not already available
+  - Windows: install a GNU Make distribution such as Chocolatey, winget, or MSYS2
+- Optional developer tooling:
+  - `pip-audit` for `make audit`
+
 ### 1. Install dependencies
+
+#### With Make
+
+```bash
+make local-venv
+```
+
+The target creates the venv, installs project and dev dependencies, and installs the Chromium browser used by Playwright.
+Activate the environment in your own terminal before running the CLI:
+
+- Windows PowerShell: `.venv\Scripts\Activate.ps1`
+- Linux / macOS: `source .venv/bin/activate`
+
+#### Manual setup
 
 #### Windows
 
@@ -110,6 +133,30 @@ sites:
 ```
 
 Session is saved to `storage/<site>.json` and reused until it expires.
+
+### 4. Audit dependencies
+
+If you installed the dev dependencies with `make local-venv`, run:
+
+```bash
+make audit
+```
+
+If you set up the environment manually, install the dev dependency first:
+
+```bash
+pip install -r requirements-dev.txt
+```
+
+Manual fallback:
+
+```bash
+# Linux / macOS
+.venv/bin/python -m pip_audit -r requirements.txt
+
+# Windows
+.venv\Scripts\python.exe -m pip_audit -r requirements.txt
+```
 
 ### 5. Crawl and index
 

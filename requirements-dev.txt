@@ -1,0 +1,2 @@
+# Dependency auditing
+pip-audit>=2.7,<3
