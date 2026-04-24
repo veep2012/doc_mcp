@@ -1,5 +1,4 @@
 OS := $(shell uname -s 2>/dev/null || echo Windows_NT)
-CODEX_BUNDLED_PYTHON ?= /Users/alekseikrutskikh/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3
 
 .DEFAULT_GOAL := help
 
@@ -34,14 +33,9 @@ endif
 
 .PHONY: wheel
 wheel: ## Build a distributable wheel into dist/
-ifneq (,$(wildcard .venv))
-	@if $(VENV_PY) -c "import setuptools" >/dev/null 2>&1; then \
-		$(VENV_PY) -m pip wheel . -w dist --no-deps --no-build-isolation; \
-	elif [ -x "$(CODEX_BUNDLED_PYTHON)" ]; then \
-		$(CODEX_BUNDLED_PYTHON) -m pip wheel . -w dist --no-deps --no-build-isolation; \
-	else \
-		$(PYTHON_BIN) -m pip wheel . -w dist --no-deps; \
+	@if [ ! -x "$(VENV_PY)" ]; then \
+		echo "Create .venv first with 'make local-venv'"; \
+		exit 1; \
 	fi
-else
-	$(PYTHON_BIN) -m pip wheel . -w dist --no-deps
-endif
+	$(VENV_PY) -m pip install -r requirements-dev.txt
+	$(VENV_PY) -m build --wheel
