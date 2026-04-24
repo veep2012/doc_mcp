@@ -33,10 +33,11 @@ def get_sites() -> str:
     for site in sites:
         try:
             n = count_pages(site["index_file"])
-        except Exception:
-            n = 0
+            status = f"{n} pages indexed"
+        except Exception as exc:
+            status = f"ERROR: {type(exc).__name__}: {exc}"
         auth = "🔒 Auth required" if site.get("auth_required") else "🌐 Public"
-        lines.append(f"- **{site['name']}** ({auth}) — {n} pages indexed")
+        lines.append(f"- **{site['name']}** ({auth}) — {status}")
         lines.append(f"  URL: {site['url']}")
     return "\n".join(lines)
 
