@@ -17,13 +17,14 @@ dependencies = [
 ]
 
 [project.scripts]
-docmcp-server = "src.main:main"
-docmcp-auth = "auth_cli:main"
-docmcp-crawl = "crawl_cli:main"
+docmcp-server = "docmcp.main:main"
+docmcp-auth = "docmcp.auth_cli:main"
+docmcp-crawl = "docmcp.crawl_cli:main"
 
 [tool.setuptools]
 include-package-data = true
-py-modules = ["auth_cli", "crawl_cli"]
+package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
-include = ["src*"]
+where = ["src"]
+include = ["docmcp*"]

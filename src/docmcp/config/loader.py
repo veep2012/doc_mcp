@@ -10,8 +10,17 @@ from typing import Any
 import yaml
 from dotenv import load_dotenv
 
-# Load .env from project root
-load_dotenv(Path(__file__).parents[2] / ".env")
+
+def _runtime_root() -> Path:
+    """Return the workspace/runtime root used for relative config and data paths."""
+    configured_root = os.environ.get("DOC_MCP_HOME")
+    if configured_root:
+        return Path(configured_root).expanduser()
+    return Path.cwd()
+
+
+# Load .env from the runtime workspace, not from the installed package directory.
+load_dotenv(_runtime_root() / ".env")
 
 
 def _resolve_env_vars(value: Any) -> Any:
@@ -41,7 +50,7 @@ def load_config(config_path: str | None = None) -> dict:
 
     path = Path(config_path)
     if not path.is_absolute():
-        path = Path(__file__).parents[2] / path
+        path = _runtime_root() / path
 
     if not path.exists():
         raise FileNotFoundError(f"Config file not found: {path}")

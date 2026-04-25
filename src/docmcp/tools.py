@@ -11,9 +11,10 @@ Tools:
 
 from mcp.server.fastmcp import FastMCP
 
-from src.config.loader import get_sites as _get_sites
-from src.index.store import search_pages, get_page, list_pages as _list_pages, count_pages
 import os
+
+from .config.loader import get_sites as _get_sites
+from .index_store import count_pages, get_page, list_pages as _list_pages, search_pages
 
 mcp = FastMCP(os.getenv("MCP_SERVER_NAME", "docs-mcp"))
 
