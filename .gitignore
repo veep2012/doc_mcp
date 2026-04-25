@@ -12,7 +12,7 @@ build/
 
 # Storage and index (runtime data)
 storage/
-index/
+/index/
 
 # Site config contains real URLs and credentials — use sites.yaml.example as template
 config/sites.yaml
