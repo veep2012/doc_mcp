@@ -246,7 +246,7 @@ async def crawl_site_headful(site: dict, headless: bool = False) -> None:
                     await route.continue_()
 
             await context.route("**/*", _block_resources)
-            print("[crawl] Resource blocking: images/fonts/media/css disabled")
+            print("[crawl] Resource blocking: images/fonts/media disabled")
 
         page = await context.new_page()
 
