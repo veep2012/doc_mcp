@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-04-24
-- Version: v1.0
+- Last Updated: 2026-04-25
+- Version: v1.1
 
 ## Change Log
+- 2026-04-25 | v1.1 | Added VS Code GitHub Copilot MCP setup instructions.
 - 2026-04-24 | v1.0 | Reformatted the MCP server reference and clarified stdio startup, tools, and client wiring.
 
 ## Purpose
@@ -55,6 +56,103 @@ Example values:
 - Command: `.venv/bin/python`
 - Args: `-m src.main`
 - Env: `PYTHONPATH=/path/to/doc_mcp`
+
+### VS Code With GitHub Copilot
+Use this setup when GitHub Copilot Chat runs in Agent mode and should call the local documentation MCP tools.
+
+1. Install and sign in to the GitHub Copilot extension in VS Code.
+2. Copy the built wheel into the VS Code destination directory, create a local virtual environment, and install the wheel:
+
+```bash
+mkdir -p dist
+cp /path/to/doc_mcp-*.whl dist/
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install dist/doc_mcp-*.whl
+```
+
+On Windows PowerShell, create and activate the environment with `python -m venv .venv` and `.venv\Scripts\Activate.ps1`.
+
+3. Create the runtime directories and put the site configuration in the destination workspace:
+
+```bash
+mkdir -p config storage index
+cp /path/to/sites.yaml config/sites.yaml
+```
+
+Use paths in `config/sites.yaml` that resolve inside the destination workspace. For example:
+
+```yaml
+sites:
+  - name: "My Docs"
+    url: "https://docs.example.com"
+    auth_required: true
+    session_file: "${DOC_MCP_HOME}/storage/my_docs.json"
+    crawl:
+      start_url: "https://docs.example.com/docs"
+      max_depth: 5
+      delay_seconds: 1.0
+      block_images: true
+      ignore_anchor_links: true
+      ignore_https_errors: false
+      allow_patterns: []
+      deny_patterns: []
+    index_file: "${DOC_MCP_HOME}/index/my_docs.db"
+```
+
+The VS Code MCP server receives `CONFIG_FILE` and `DOC_MCP_HOME` from `.vscode/mcp.json` in step 5.
+
+4. Run fast local checks:
+
+```bash
+docmcp-auth --help
+docmcp-crawl --help
+docmcp-server
+```
+
+When `docmcp-server` starts successfully, stop it with `Ctrl+C` in the same terminal.
+
+5. Create `.vscode/mcp.json` in the destination workspace root:
+
+```json
+{
+  "servers": {
+    "docs-mcp": {
+      "type": "stdio",
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "args": ["-m", "src.main"],
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}",
+        "CONFIG_FILE": "${workspaceFolder}/config/sites.yaml",
+        "DOC_MCP_HOME": "${workspaceFolder}",
+        "MCP_SERVER_NAME": "docs-mcp"
+      }
+    }
+  }
+}
+```
+
+On Windows, use `${workspaceFolder}\\.venv\\Scripts\\python.exe` as the command.
+
+6. In VS Code, open the Command Palette with `Cmd+Shift+P` on macOS or `Ctrl+Shift+P` on Windows/Linux, then run `MCP: List Servers`.
+7. Select `docs-mcp`, start it if needed, and trust the server when prompted.
+8. Open GitHub Copilot Chat with `Ctrl+Cmd+I` on macOS or `Ctrl+Alt+I` on Windows/Linux, switch to Agent mode, and ask it to list available MCP tools or call `get_sites`. If the shortcut is not mapped, open Copilot Chat from the VS Code activity bar or Command Palette.
+
+After the MCP connection works, authenticate and crawl the target site:
+
+```bash
+export CONFIG_FILE="$PWD/config/sites.yaml"
+export DOC_MCP_HOME="$PWD"
+docmcp-auth --site "My Docs"
+docmcp-crawl --site "My Docs"
+```
+
+On Windows PowerShell, set those values with `$env:CONFIG_FILE="$PWD\config\sites.yaml"` and `$env:DOC_MCP_HOME="$PWD"` before running `docmcp-auth` or `docmcp-crawl`.
+
+Then ask Copilot Agent mode a documentation query that can use `search_docs` or `fetch_page`.
+
+If the server does not appear, run `MCP: Open Workspace Folder MCP Configuration` and confirm that `.vscode/mcp.json` is valid JSON.
 
 ### Server Name
 - The server name defaults to `docs-mcp`.
