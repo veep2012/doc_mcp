@@ -1,6 +1,7 @@
 OS := $(shell uname -s 2>/dev/null || echo Windows_NT)
 
 .DEFAULT_GOAL := help
+CONTAINER_BIN ?= podman
 
 ifeq ($(OS),Windows_NT)
 PYTHON_BIN ?= python
@@ -39,3 +40,16 @@ wheel: ## Build a distributable wheel into dist/
 	fi
 	$(VENV_PY) -m pip install -r requirements-dev.txt
 	$(VENV_PY) -m build --wheel
+
+.PHONY: test-unit
+test-unit: ## Run unit tests (default pytest selection)
+	$(VENV_PY) -m pytest -m "not smoke"
+
+.PHONY: test-smoke
+test-smoke: ## Run smoke tests only
+	CONTAINER_BIN=$(CONTAINER_BIN) $(VENV_PY) -m pytest -m smoke
+
+.PHONY: test
+test: ## Run unit tests, then smoke tests if unit tests pass
+	@$(MAKE) test-unit
+	@$(MAKE) test-smoke CONTAINER_BIN=$(CONTAINER_BIN)

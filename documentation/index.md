@@ -28,6 +28,7 @@ Provide the entry point for the repository documentation set and link to the ope
 - [Quick Start](installation.md)
 - [Configuration](configuration.md)
 - [Authentication](authentication.md)
+- [Testing](testing.md)
 - [Crawling and Indexing](crawling.md)
 - [MCP Server](mcp-server.md)
 - [Operations](operations.md)

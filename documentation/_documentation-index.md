@@ -28,6 +28,7 @@ Provide a single entry point for all files in `documentation/` and make it easy 
 - `installation.md` - Setup and first-run instructions.
 - `configuration.md` - Environment, site, and runtime configuration reference.
 - `authentication.md` - Authentication session flow and Playwright login process.
+- `testing.md` - Local pytest, unit test, and smoke test workflow reference.
 - `crawling.md` - Crawler behavior, indexing flow, and crawl tuning.
 - `mcp-server.md` - MCP server entry points and client connection details.
 - `operations.md` - Operational workflow, maintenance, and runtime notes.

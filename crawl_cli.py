@@ -120,7 +120,10 @@ def _html_to_markdown(html: str) -> str:
     # into visible garbage in the indexed document.
     html = re.sub(r"<!--.*?-->", " ", html, flags=re.S)
     html = re.sub(
-        r"<(script|style|noscript|template|head)\b.*?>.*?</\1>", " ", html, flags=re.S | re.I
+        r"<(script|style|noscript|template|head|nav|footer)\b.*?>.*?</\1>",
+        " ",
+        html,
+        flags=re.S | re.I,
     )
     if HAS_MARKDOWNIFY:
         return md_convert(html, heading_style="ATX", strip=["script", "style", "nav", "footer"])
