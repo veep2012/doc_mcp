@@ -3,9 +3,9 @@ Authentication CLI — run this script to authenticate to a documentation site
 and save the session before starting the MCP server.
 
 Usage:
-    python auth_cli.py --site "Example Docs"
-    python auth_cli.py --site "Example Docs" --force
-    python auth_cli.py --list
+    docmcp-auth --site "Example Docs"
+    docmcp-auth --site "Example Docs" --force
+    docmcp-auth --list
 """
 
 import argparse
