@@ -82,7 +82,7 @@ def search_pages(index_file: str, query: str, limit: int = 10) -> list[dict]:
             FROM pages_fts
             JOIN pages p ON pages_fts.rowid = p.id
             WHERE pages_fts MATCH ?
-            ORDER BY rank
+            ORDER BY bm25(pages_fts)
             LIMIT ?
         """,
             (query, limit),
