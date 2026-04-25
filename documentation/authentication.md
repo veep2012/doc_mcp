@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-04-24
-- Version: v1.0
+- Last Updated: 2026-04-25
+- Version: v1.1
 
 ## Change Log
+- 2026-04-25 | v1.1 | Updated commands and references for installed docmcp-auth package entry point.
 - 2026-04-24 | v1.0 | Reformatted the authentication guide and documented the current headful session flow.
 
 ## Purpose
@@ -26,17 +27,17 @@ Describe how `doc-mcp` authenticates to a documentation site, validates stored s
 ### Commands
 - List configured sites:
 ```bash
-python auth_cli.py --list
+docmcp-auth --list
 ```
 
 - Authenticate a site:
 ```bash
-python auth_cli.py --site "My Docs"
+docmcp-auth --site "My Docs"
 ```
 
 - Force re-authentication:
 ```bash
-python auth_cli.py --site "My Docs" --force
+docmcp-auth --site "My Docs" --force
 ```
 
 ### Session Flow
@@ -65,5 +66,6 @@ python auth_cli.py --site "My Docs" --force
 
 ## References
 - [auth_cli.py](../auth_cli.py)
-- [src/auth/session.py](../src/auth/session.py)
+- [src/docmcp/auth_cli.py](../src/docmcp/auth_cli.py)
+- [src/docmcp/auth/session.py](../src/docmcp/auth/session.py)
 - [config/sites.yaml](../config/sites.yaml)

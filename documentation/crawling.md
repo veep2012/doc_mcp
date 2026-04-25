@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-04-24
-- Version: v1.0
+- Last Updated: 2026-04-25
+- Version: v1.1
 
 ## Change Log
+- 2026-04-25 | v1.1 | Updated commands and references for installed docmcp-crawl package entry point and moved index store.
 - 2026-04-24 | v1.0 | Reformatted the crawl guide and documented the current Playwright and SQLite flow.
 
 ## Purpose
@@ -26,22 +27,22 @@ Describe how the crawler walks a site, extracts Markdown content, and stores the
 ### Commands
 - List configured sites:
 ```bash
-python crawl_cli.py --list
+docmcp-crawl --list
 ```
 
 - Crawl a site:
 ```bash
-python crawl_cli.py --site "My Docs"
+docmcp-crawl --site "My Docs"
 ```
 
 - Force re-authentication before crawling:
 ```bash
-python crawl_cli.py --site "My Docs" --force-auth
+docmcp-crawl --site "My Docs" --force-auth
 ```
 
 - Run the browser headless:
 ```bash
-python crawl_cli.py --site "My Docs" --headless
+docmcp-crawl --site "My Docs" --headless
 ```
 
 ### Crawl Behavior
@@ -84,5 +85,6 @@ python crawl_cli.py --site "My Docs" --headless
 
 ## References
 - [crawl_cli.py](../crawl_cli.py)
-- [src/index/store.py](../src/index/store.py)
+- [src/docmcp/crawl_cli.py](../src/docmcp/crawl_cli.py)
+- [src/docmcp/index_store.py](../src/docmcp/index_store.py)
 - [requirements.txt](../requirements.txt)

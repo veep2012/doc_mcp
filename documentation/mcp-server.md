@@ -6,9 +6,10 @@
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
 - Last Updated: 2026-04-25
-- Version: v1.1
+- Version: v1.2
 
 ## Change Log
+- 2026-04-25 | v1.2 | Updated VS Code setup to use the stable wheel-installed docmcp-server entry point and workspace runtime env values.
 - 2026-04-25 | v1.1 | Added VS Code GitHub Copilot MCP setup instructions.
 - 2026-04-24 | v1.0 | Reformatted the MCP server reference and clarified stdio startup, tools, and client wiring.
 
@@ -26,13 +27,13 @@ Describe the stdio MCP server entry point, the tools it exposes, and the client 
 ## Design / Behavior
 ### Start The Server
 ```bash
-python -m src.main
+docmcp-server
 ```
 
-Or:
+Source-tree compatibility wrapper:
 
 ```bash
-docmcp-server
+python -m src.main
 ```
 
 ### Available Tools
@@ -141,16 +142,13 @@ On Windows, use `${workspaceFolder}\\.venv\\Scripts\\docmcp-server.exe` as the c
 After the MCP connection works, authenticate and crawl the target site:
 
 ```bash
+export CONFIG_FILE="$PWD/config/sites.yaml"
+export DOC_MCP_HOME="$PWD"
 docmcp-auth --site "My Docs"
 docmcp-crawl --site "My Docs"
 ```
 
-Run these commands from the destination workspace root and set the same runtime paths in the terminal:
-
-```bash
-export CONFIG_FILE="$PWD/config/sites.yaml"
-export DOC_MCP_HOME="$PWD"
-```
+Run these commands from the destination workspace root.
 
 On Windows PowerShell, use `$env:CONFIG_FILE="$PWD\config\sites.yaml"` and `$env:DOC_MCP_HOME="$PWD"`.
 
@@ -165,10 +163,12 @@ If `get_sites` fails with a path under `.venv/lib/.../site-packages/config/sites
 - It can be overridden with `MCP_SERVER_NAME`.
 
 ## Edge Cases
-- If the client does not launch the repository interpreter, the server may not find local package imports.
+- If the client launches an old wheel, `docmcp-server` may still reference `src.main`; rebuild and reinstall the wheel.
+- If `CONFIG_FILE` is not passed to the VS Code MCP process, the server may look for `config/sites.yaml` relative to the process working directory.
 - If `MCP_SERVER_NAME` changes between crawl and query workflows, the client-visible name also changes.
 
 ## References
-- [src/main.py](../src/main.py)
+- [src/docmcp/main.py](../src/docmcp/main.py)
 - [src/docmcp/tools.py](../src/docmcp/tools.py)
+- [src/docmcp/config/loader.py](../src/docmcp/config/loader.py)
 - [pyproject.toml](../pyproject.toml)

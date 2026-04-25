@@ -6,10 +6,11 @@
 - Reviewers: Repository maintainers
 - Created: 2026-04-25
 - Last Updated: 2026-04-25
-- Version: v0.1
+- Version: v0.2
 - Related Tickets: https://github.com/veep2012/doc_mcp/issues/1
 
 ## Change Log
+- 2026-04-25 | v0.2 | Updated implementation references after package entry point and index store move.
 - 2026-04-25 | v0.1 | Initial staged implementation plan for semantic, keyword, and hybrid search over an external vector index.
 
 ## Purpose
@@ -269,4 +270,4 @@ semantic_search_docs(site_name: str, query: str, limit: int)
 - [documentation/mcp-server.md](./mcp-server.md)
 - [documentation/crawling.md](./crawling.md)
 - [src/docmcp/tools.py](../src/docmcp/tools.py)
-- [src/index/store.py](../src/index/store.py)
+- [src/docmcp/index_store.py](../src/docmcp/index_store.py)

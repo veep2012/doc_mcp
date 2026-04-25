@@ -4,11 +4,12 @@
 
 ## Quick Start
 
-1. Create the environment:
+1. Create and activate the environment, then install the project commands:
 
 ```bash
 make local-venv
 source .venv/bin/activate
+pip install -e .
 ```
 
 On Windows PowerShell:
@@ -16,7 +17,10 @@ On Windows PowerShell:
 ```powershell
 make local-venv
 .venv\Scripts\Activate.ps1
+pip install -e .
 ```
+
+`make local-venv` creates and populates `.venv`, but activation still has to be run in your current shell.
 
 2. Create local configuration files:
 
@@ -32,26 +36,20 @@ cp config/sites.yaml.example config/sites.yaml
 4. Authenticate the site:
 
 ```bash
-python auth_cli.py --list
-python auth_cli.py --site "My Docs"
+docmcp-auth --list
+docmcp-auth --site "My Docs"
 ```
 
 5. Crawl and index the site:
 
 ```bash
-python crawl_cli.py --site "My Docs"
+docmcp-crawl --site "My Docs"
 ```
 
 6. Start the MCP server:
 
 ```bash
-python -m src.main
-```
-
-If you want the `docmcp-auth`, `docmcp-crawl`, and `docmcp-server` console commands, install the project in editable mode:
-
-```bash
-pip install -e .
+docmcp-server
 ```
 
 ## Install On Another Environment
