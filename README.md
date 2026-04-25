@@ -71,9 +71,21 @@ python -m build --wheel
 python -m pip install /path/to/doc_mcp-*.whl
 ```
 
-4. Use the installed console commands:
+4. Create or copy runtime files in a workspace directory:
 
 ```bash
+mkdir -p config storage index
+cp /path/to/sites.yaml config/sites.yaml
+cp /path/to/.env .env
+```
+
+Relative `CONFIG_FILE`, `session_file`, and `index_file` values are resolved from `DOC_MCP_HOME`, or from the current working directory when `DOC_MCP_HOME` is not set.
+
+5. Use the installed console commands:
+
+```bash
+export DOC_MCP_HOME="$PWD"
+export CONFIG_FILE="config/sites.yaml"
 docmcp-auth --help
 docmcp-crawl --help
 docmcp-server

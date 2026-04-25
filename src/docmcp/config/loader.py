@@ -19,6 +19,39 @@ def _runtime_root() -> Path:
     return Path.cwd()
 
 
+_RUNTIME_PATH_KEYS = frozenset({"session_file", "index_file"})
+
+
+def _resolve_runtime_path(value: Any, root: Path) -> Any:
+    """Resolve a configured file path from the runtime root when it is relative."""
+    if not isinstance(value, str) or not value:
+        return value
+
+    path = Path(value).expanduser()
+    if path.is_absolute():
+        return str(path)
+    return str(root / path)
+
+
+def _resolve_runtime_paths(config: Any, root: Path) -> Any:
+    """Resolve known runtime file paths inside the loaded site configuration."""
+    if not isinstance(config, dict):
+        return config
+
+    sites = config.get("sites")
+    if not isinstance(sites, list):
+        return config
+
+    for site in sites:
+        if not isinstance(site, dict):
+            continue
+        for key in _RUNTIME_PATH_KEYS:
+            if key in site:
+                site[key] = _resolve_runtime_path(site[key], root)
+
+    return config
+
+
 # Load .env from the runtime workspace, not from the installed package directory.
 load_dotenv(_runtime_root() / ".env")
 
@@ -45,12 +78,13 @@ def _resolve_env_vars(value: Any) -> Any:
 
 def load_config(config_path: str | None = None) -> dict:
     """Load and return the sites configuration with env vars resolved."""
+    root = _runtime_root()
     if config_path is None:
         config_path = os.environ.get("CONFIG_FILE", "config/sites.yaml")
 
     path = Path(config_path)
     if not path.is_absolute():
-        path = _runtime_root() / path
+        path = root / path
 
     if not path.exists():
         raise FileNotFoundError(f"Config file not found: {path}")
@@ -58,7 +92,7 @@ def load_config(config_path: str | None = None) -> dict:
     with open(path, "r", encoding="utf-8") as f:
         raw = yaml.safe_load(f)
 
-    return _resolve_env_vars(raw)
+    return _resolve_runtime_paths(_resolve_env_vars(raw), root)
 
 
 def get_sites(config_path: str | None = None) -> list[dict]:

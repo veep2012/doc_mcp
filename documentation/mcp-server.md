@@ -83,14 +83,14 @@ mkdir -p config storage index
 cp /path/to/sites.yaml config/sites.yaml
 ```
 
-Use paths in `config/sites.yaml` that resolve inside the destination workspace. For example:
+Use relative runtime paths in `config/sites.yaml`; they resolve from `DOC_MCP_HOME` when the MCP client starts the server. For example:
 
 ```yaml
 sites:
   - name: "My Docs"
     url: "https://docs.example.com"
     auth_required: true
-    session_file: "${DOC_MCP_HOME}/storage/my_docs.json"
+    session_file: "storage/my_docs.json"
     crawl:
       start_url: "https://docs.example.com/docs"
       max_depth: 5
@@ -100,7 +100,7 @@ sites:
       ignore_https_errors: false
       allow_patterns: []
       deny_patterns: []
-    index_file: "${DOC_MCP_HOME}/index/my_docs.db"
+    index_file: "index/my_docs.db"
 ```
 
 The VS Code MCP server receives `CONFIG_FILE` and `DOC_MCP_HOME` from `.vscode/mcp.json` in step 5.
