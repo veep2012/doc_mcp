@@ -283,7 +283,7 @@ async def crawl_site_headful(site: dict, headless: bool = False) -> None:
                     # Detect redirect to login page
                     if any(ind in current_url for ind in login_indicators):
                         print("[crawl]   ✗ Redirected to login — session may be expired. Stopping.")
-                        print(f'[crawl]   Run: python auth_cli.py --site "{name}" --force')
+                        print(f'[crawl]   Run: docmcp-auth --site "{name}" --force')
                         stop_crawl = True
                         break
 
