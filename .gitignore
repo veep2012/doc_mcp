@@ -25,3 +25,6 @@ __pycache__/
 
 # VS Code
 .vscode/
+
+# macOS metadata
+.DS_Store
