@@ -10,11 +10,12 @@ Usage:
 
 import argparse
 import asyncio
+import sys
 
 from dotenv import load_dotenv
 
 from .auth.session import authenticate
-from .config.loader import get_sites
+from .config.loader import ConfigError, get_sites
 
 load_dotenv()
 
@@ -30,19 +31,23 @@ def main():
     parser.add_argument("--list", action="store_true", help="List all configured sites")
     args = parser.parse_args()
 
-    if args.list:
+    if not args.list and not args.site:
+        parser.print_help()
+        return
+
+    try:
         sites = get_sites()
+    except ConfigError as exc:
+        print(f"[docmcp-auth] Configuration error:\n{exc}", file=sys.stderr)
+        sys.exit(1)
+
+    if args.list:
         print("\nConfigured sites:")
         for site in sites:
             auth = "auth required" if site.get("auth_required") else "public"
             print(f"  - {site['name']} ({auth}) [{site.get('auth_mode', 'n/a')}] — {site['url']}")
         return
 
-    if not args.site:
-        parser.print_help()
-        return
-
-    sites = get_sites()
     site = next((s for s in sites if s["name"].lower() == args.site.lower()), None)
 
     if not site:

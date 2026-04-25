@@ -59,6 +59,11 @@ List the most common failure modes for `doc-mcp` and the first corrective step f
 - Set `CONFIG_FILE` and `DOC_MCP_HOME` in `.vscode/mcp.json`.
 - Restart the `docs-mcp` server from `MCP: List Servers` after saving `.vscode/mcp.json`.
 
+### Server Fails During Startup Configuration
+- Missing `config/sites.yaml`, an empty `sites:` list, or missing `storage/` and `index/` directories now stop `docmcp-server` before it accepts MCP traffic.
+- Create the runtime workspace with `mkdir -p config storage index`, put `sites.yaml` under `config/`, and pass `DOC_MCP_HOME` plus `CONFIG_FILE` through the MCP client environment.
+- For VS Code, check the `docs-mcp` output from `MCP: List Servers` to see the exact startup configuration error.
+
 ## Edge Cases
 - If a site uses a non-standard login redirect, the session validity check may classify it as expired.
 - If the crawler returns partial pages, the site may require a different content container or a manual browser review.

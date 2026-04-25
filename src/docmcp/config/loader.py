@@ -11,6 +11,10 @@ import yaml
 from dotenv import load_dotenv
 
 
+class ConfigError(RuntimeError):
+    """Raised when runtime configuration is missing or invalid."""
+
+
 def _runtime_root() -> Path:
     """Return the workspace/runtime root used for relative config and data paths."""
     configured_root = os.environ.get("DOC_MCP_HOME")
@@ -19,6 +23,8 @@ def _runtime_root() -> Path:
     return Path.cwd()
 
 
+# Only rewrite file-backed runtime outputs here. Nested crawl fields are URLs,
+# glob patterns, or scalar options in the current schema, not local paths.
 _RUNTIME_PATH_KEYS = frozenset({"session_file", "index_file"})
 
 
@@ -50,6 +56,59 @@ def _resolve_runtime_paths(config: Any, root: Path) -> Any:
                 site[key] = _resolve_runtime_path(site[key], root)
 
     return config
+
+
+def _format_config_path_hint(path: Path, root: Path) -> str:
+    return (
+        "Configuration file not found.\n"
+        f"  Expected: {path}\n"
+        f"  Runtime root: {root}\n\n"
+        "Create the runtime workspace files, or point the process at them:\n"
+        "  mkdir -p config storage index\n"
+        "  cp /path/to/sites.yaml config/sites.yaml\n"
+        "  export DOC_MCP_HOME=/path/to/workspace\n"
+        "  export CONFIG_FILE=config/sites.yaml\n\n"
+        "For VS Code MCP, set DOC_MCP_HOME and CONFIG_FILE in .vscode/mcp.json."
+    )
+
+
+def _validate_sites(config: Any) -> list[dict]:
+    if not isinstance(config, dict):
+        raise ConfigError(
+            "Configuration file must contain a YAML mapping with a non-empty 'sites' list."
+        )
+
+    sites = config.get("sites")
+    if not isinstance(sites, list) or not sites:
+        raise ConfigError(
+            "Configuration has no sites.\n"
+            "Add at least one site entry under 'sites:' in config/sites.yaml."
+        )
+
+    return sites
+
+
+def _validate_runtime_directories(sites: list[dict]) -> None:
+    missing_dirs: set[Path] = set()
+    for site in sites:
+        if not isinstance(site, dict):
+            continue
+        for key in _RUNTIME_PATH_KEYS:
+            value = site.get(key)
+            if not isinstance(value, str) or not value:
+                continue
+            parent = Path(value).parent
+            if not parent.exists():
+                missing_dirs.add(parent)
+
+    if missing_dirs:
+        formatted = "\n".join(f"  - {path}" for path in sorted(missing_dirs))
+        raise ConfigError(
+            "Runtime directories are missing.\n"
+            f"{formatted}\n\n"
+            "Create them before starting the installed MCP server, for example:\n"
+            "  mkdir -p config storage index"
+        )
 
 
 # Load .env from the runtime workspace, not from the installed package directory.
@@ -87,7 +146,7 @@ def load_config(config_path: str | None = None) -> dict:
         path = root / path
 
     if not path.exists():
-        raise FileNotFoundError(f"Config file not found: {path}")
+        raise ConfigError(_format_config_path_hint(path, root))
 
     with open(path, "r", encoding="utf-8") as f:
         raw = yaml.safe_load(f)
@@ -95,10 +154,19 @@ def load_config(config_path: str | None = None) -> dict:
     return _resolve_runtime_paths(_resolve_env_vars(raw), root)
 
 
+def validate_config(require_runtime_dirs: bool = False) -> dict:
+    """Load config and raise a friendly error for common startup problems."""
+    config = load_config()
+    sites = _validate_sites(config)
+    if require_runtime_dirs:
+        _validate_runtime_directories(sites)
+    return config
+
+
 def get_sites(config_path: str | None = None) -> list[dict]:
     """Return the list of site configurations."""
     config = load_config(config_path)
-    return config.get("sites", [])
+    return _validate_sites(config)
 
 
 def get_site_by_name(name: str, config_path: str | None = None) -> dict | None:

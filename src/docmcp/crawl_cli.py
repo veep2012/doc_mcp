@@ -24,7 +24,7 @@ from urllib.parse import urljoin, urlparse, urlunparse
 from dotenv import load_dotenv
 
 from .auth.session import authenticate
-from .config.loader import get_sites
+from .config.loader import ConfigError, get_sites
 from .index_store import init_db, upsert_page
 
 load_dotenv()
@@ -352,19 +352,23 @@ def main():
     parser.add_argument("--list", action="store_true", help="List all configured sites")
     args = parser.parse_args()
 
-    if args.list:
+    if not args.list and not args.site:
+        parser.print_help()
+        return
+
+    try:
         sites = get_sites()
+    except ConfigError as exc:
+        print(f"[docmcp-crawl] Configuration error:\n{exc}", file=sys.stderr)
+        sys.exit(1)
+
+    if args.list:
         print("\nConfigured sites:")
         for s in sites:
             auth = "auth required" if s.get("auth_required") else "public"
             print(f"  - {s['name']} ({auth}) — {s['url']}")
         return
 
-    if not args.site:
-        parser.print_help()
-        return
-
-    sites = get_sites()
     site = next((s for s in sites if s["name"].lower() == args.site.lower()), None)
     if not site:
         print(f"[crawl] Site '{args.site}' not found. Use --list to see available sites.")

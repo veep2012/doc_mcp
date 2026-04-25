@@ -8,6 +8,7 @@ import sys
 
 from dotenv import load_dotenv
 
+from .config.loader import ConfigError, validate_config
 from .tools import mcp
 
 
@@ -27,6 +28,12 @@ def main() -> None:
         level=getattr(logging, os.environ.get("MCP_LOG_LEVEL", "INFO")),
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
+    try:
+        validate_config(require_runtime_dirs=True)
+    except ConfigError as exc:
+        print(f"[docmcp-server] Startup configuration error:\n{exc}", file=sys.stderr)
+        sys.exit(1)
+
     mcp.run(transport="stdio")
 
 
