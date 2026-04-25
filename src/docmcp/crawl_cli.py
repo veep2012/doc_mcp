@@ -6,10 +6,10 @@ This bypasses crawl4ai entirely, avoiding anti-bot detection issues on SPAs.
 Markdown conversion is done via markdownify on the inner page HTML.
 
 Usage:
-    python crawl_cli.py --site "LD documentation"
-    python crawl_cli.py --site "LD documentation" --force-auth
-    python crawl_cli.py --site "LD documentation" --headless
-    python crawl_cli.py --list
+    docmcp-crawl --site "LD documentation"
+    docmcp-crawl --site "LD documentation" --force-auth
+    docmcp-crawl --site "LD documentation" --headless
+    docmcp-crawl --list
 """
 
 import argparse
