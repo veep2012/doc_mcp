@@ -15,7 +15,7 @@ help: ## Show available make targets
 	@awk 'BEGIN {FS = ":.*## "}; /^[a-zA-Z0-9_.-]+:.*## / {printf "%-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 .PHONY: local-venv
-local-venv: ## Create a local Python venv and install project dependencies
+local-venv: ## Create local Python venv and install dependencies; activate it separately
 ifeq ($(OS),Windows_NT)
 	$(PYTHON_BIN) -m venv .venv
 	powershell -NoProfile -ExecutionPolicy Bypass -Command "& { . .venv\Scripts\Activate.ps1; python -m pip install --upgrade pip; pip install -r requirements.txt -r requirements-dev.txt; playwright install chromium }"

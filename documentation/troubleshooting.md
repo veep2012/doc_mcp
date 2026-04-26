@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-04-24
-- Version: v1.0
+- Last Updated: 2026-04-25
+- Version: v1.1
 
 ## Change Log
+- 2026-04-25 | v1.1 | Updated troubleshooting notes for the package entry point and VS Code MCP configuration.
 - 2026-04-24 | v1.0 | Reformatted the troubleshooting guide and grouped the common failures into standard sections.
 
 ## Purpose
@@ -50,8 +51,19 @@ List the most common failure modes for `doc-mcp` and the first corrective step f
 - Install dependencies through `make local-venv` or `pip install -r requirements.txt`.
 
 ### Windows Console Output Looks Broken
-- `src/main.py` reconfigures stdout and stderr to UTF-8.
+- `src/docmcp/main.py` reconfigures stdout and stderr to UTF-8.
 - If a terminal still renders poorly, use a modern terminal emulator and ensure the virtual environment is active.
+
+### VS Code MCP Looks In `site-packages/config/sites.yaml`
+- The VS Code MCP process did not receive `CONFIG_FILE`.
+- Set `CONFIG_FILE` and `DOC_MCP_HOME` in `.vscode/mcp.json`.
+- Restart the `docs-mcp` server from `MCP: List Servers` after saving `.vscode/mcp.json`.
+
+### Server Fails During Startup Configuration
+- Missing `config/sites.yaml` or an empty `sites:` list stops `docmcp-server` before it accepts MCP traffic.
+- Create the runtime workspace with `mkdir -p config storage index`, put `sites.yaml` under `config/`, and pass `DOC_MCP_HOME` plus `CONFIG_FILE` through the MCP client environment.
+- Site-specific output directories are created when that site is authenticated, crawled, or queried, so one unused site's paths do not block server startup.
+- For VS Code, check the `docs-mcp` output from `MCP: List Servers` to see the exact startup configuration error.
 
 ## Edge Cases
 - If a site uses a non-standard login redirect, the session validity check may classify it as expired.
@@ -62,4 +74,4 @@ List the most common failure modes for `doc-mcp` and the first corrective step f
 - [authentication.md](authentication.md)
 - [crawling.md](crawling.md)
 - [mcp-server.md](mcp-server.md)
-- [src/main.py](../src/main.py)
+- [src/docmcp/main.py](../src/docmcp/main.py)

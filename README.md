@@ -4,11 +4,12 @@
 
 ## Quick Start
 
-1. Create the environment:
+1. Create and activate the environment, then install the project commands:
 
 ```bash
 make local-venv
 source .venv/bin/activate
+python -m pip install -e .
 ```
 
 On Windows PowerShell:
@@ -16,7 +17,10 @@ On Windows PowerShell:
 ```powershell
 make local-venv
 .venv\Scripts\Activate.ps1
+python -m pip install -e .
 ```
+
+`make local-venv` creates and populates `.venv`, but activation still has to be run in your current shell.
 
 2. Create local configuration files:
 
@@ -32,26 +36,20 @@ cp config/sites.yaml.example config/sites.yaml
 4. Authenticate the site:
 
 ```bash
-python auth_cli.py --list
-python auth_cli.py --site "My Docs"
+docmcp-auth --list
+docmcp-auth --site "My Docs"
 ```
 
 5. Crawl and index the site:
 
 ```bash
-python crawl_cli.py --site "My Docs"
+docmcp-crawl --site "My Docs"
 ```
 
 6. Start the MCP server:
 
 ```bash
-python -m src.main
-```
-
-If you want the `docmcp-auth`, `docmcp-crawl`, and `docmcp-server` console commands, install the project in editable mode:
-
-```bash
-pip install -e .
+docmcp-server
 ```
 
 ## Install On Another Environment
@@ -73,9 +71,21 @@ python -m build --wheel
 python -m pip install /path/to/doc_mcp-*.whl
 ```
 
-4. Use the installed console commands:
+4. Create or copy runtime files in a workspace directory:
 
 ```bash
+mkdir -p config storage index
+cp /path/to/sites.yaml config/sites.yaml
+cp /path/to/.env .env
+```
+
+Relative `CONFIG_FILE`, `session_file`, and `index_file` values are resolved from `DOC_MCP_HOME`, or from the current working directory when `DOC_MCP_HOME` is not set.
+
+5. Use the installed console commands:
+
+```bash
+export DOC_MCP_HOME="$PWD"
+export CONFIG_FILE="config/sites.yaml"
 docmcp-auth --help
 docmcp-crawl --help
 docmcp-server
@@ -91,3 +101,9 @@ docmcp-server
 ## Detailed Docs
 
 The full documentation lives in [`documentation/`](documentation/index.md).
+
+## License
+
+`doc-mcp` is open-source software released under the MIT License. You may use,
+copy, modify, distribute, sublicense, and sell copies of the software without
+restriction, subject to the license notice terms in [LICENSE](LICENSE).

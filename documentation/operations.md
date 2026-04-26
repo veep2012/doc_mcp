@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-04-24
-- Version: v1.0
+- Last Updated: 2026-04-25
+- Version: v1.1
 
 ## Change Log
+- 2026-04-25 | v1.1 | Updated implementation references for package entry points.
 - 2026-04-24 | v1.0 | Reformatted the operations guide and kept the normal workflow, recovery, and logging steps.
 
 ## Purpose
@@ -61,4 +62,4 @@ MCP_LOG_LEVEL=DEBUG docmcp-server
 - [config/sites.yaml](../config/sites.yaml)
 - [auth_cli.py](../auth_cli.py)
 - [crawl_cli.py](../crawl_cli.py)
-- [src/main.py](../src/main.py)
+- [src/docmcp/main.py](../src/docmcp/main.py)

@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-04-24
-- Version: v1.0
+- Last Updated: 2026-04-25
+- Version: v1.1
 
 ## Change Log
+- 2026-04-25 | v1.1 | Updated setup and verification commands for the package entry points and explicit virtual environment activation.
 - 2026-04-24 | v1.0 | Reformatted the setup guide to the documentation standard and kept the install paths and verification commands.
 
 ## Purpose
@@ -34,9 +35,9 @@ Provide the shortest path to a working local environment for `doc-mcp`, includin
 make local-venv
 ```
 
-This creates `.venv`, installs project dependencies, installs dev dependencies, and downloads Chromium for Playwright.
+This creates `.venv`, installs project dependencies, installs dev dependencies, and downloads Chromium for Playwright. The `make` target does not activate the virtual environment in your current shell.
 
-Activate the virtual environment before running commands:
+Activate the virtual environment before running project commands:
 
 ```bash
 source .venv/bin/activate
@@ -76,7 +77,7 @@ pip install -e .
 ```
 
 ### Verify The Environment
-Without editable install:
+Source-tree compatibility wrappers:
 
 ```bash
 python auth_cli.py --help
@@ -84,7 +85,7 @@ python crawl_cli.py --help
 python -m src.main
 ```
 
-With editable install:
+Installed package commands:
 
 ```bash
 docmcp-auth --help
@@ -130,3 +131,6 @@ docmcp-server
 - [requirements-dev.txt](../requirements-dev.txt)
 - [auth_cli.py](../auth_cli.py)
 - [crawl_cli.py](../crawl_cli.py)
+- [src/docmcp/main.py](../src/docmcp/main.py)
+- [src/docmcp/auth_cli.py](../src/docmcp/auth_cli.py)
+- [src/docmcp/crawl_cli.py](../src/docmcp/crawl_cli.py)

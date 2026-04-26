@@ -5,10 +5,12 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-04-24
-- Version: v1.0
+- Last Updated: 2026-04-26
+- Version: v1.2
 
 ## Change Log
+- 2026-04-26 | v1.2 | Added the manual test scenarios document to the documentation navigation.
+- 2026-04-25 | v1.1 | Added semantic search implementation stages to the documentation navigation.
 - 2026-04-24 | v1.0 | Reformatted the landing page to the repository documentation standard and refreshed navigation links.
 
 ## Purpose
@@ -30,6 +32,8 @@ Provide the entry point for the repository documentation set and link to the ope
 - [Authentication](authentication.md)
 - [Crawling and Indexing](crawling.md)
 - [MCP Server](mcp-server.md)
+- [Manual Test Scenarios](manual-test-scenarios.md)
+- [Semantic Search Implementation Stages](semantic_search_implementation_stages.md)
 - [Operations](operations.md)
 - [Troubleshooting](troubleshooting.md)
 
