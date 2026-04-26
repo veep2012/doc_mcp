@@ -9,7 +9,7 @@
 ```bash
 make local-venv
 source .venv/bin/activate
-pip install -e .
+python -m pip install -e .
 ```
 
 On Windows PowerShell:
@@ -17,7 +17,7 @@ On Windows PowerShell:
 ```powershell
 make local-venv
 .venv\Scripts\Activate.ps1
-pip install -e .
+python -m pip install -e .
 ```
 
 `make local-venv` creates and populates `.venv`, but activation still has to be run in your current shell.
@@ -101,3 +101,9 @@ docmcp-server
 ## Detailed Docs
 
 The full documentation lives in [`documentation/`](documentation/index.md).
+
+## License
+
+`doc-mcp` is open-source software released under the MIT License. You may use,
+copy, modify, distribute, sublicense, and sell copies of the software without
+restriction, subject to the license notice terms in [LICENSE](LICENSE).

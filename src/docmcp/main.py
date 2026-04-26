@@ -9,7 +9,6 @@ import sys
 from dotenv import load_dotenv
 
 from .config.loader import ConfigError, validate_config
-from .tools import mcp
 
 
 def _configure_stdio() -> None:
@@ -29,10 +28,12 @@ def main() -> None:
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
     try:
-        validate_config(require_runtime_dirs=True)
+        validate_config()
     except ConfigError as exc:
         print(f"[docmcp-server] Startup configuration error:\n{exc}", file=sys.stderr)
         sys.exit(1)
+
+    from .tools import mcp
 
     mcp.run(transport="stdio")
 

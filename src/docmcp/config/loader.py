@@ -88,29 +88,6 @@ def _validate_sites(config: Any) -> list[dict]:
     return sites
 
 
-def _validate_runtime_directories(sites: list[dict]) -> None:
-    missing_dirs: set[Path] = set()
-    for site in sites:
-        if not isinstance(site, dict):
-            continue
-        for key in _RUNTIME_PATH_KEYS:
-            value = site.get(key)
-            if not isinstance(value, str) or not value:
-                continue
-            parent = Path(value).parent
-            if not parent.exists():
-                missing_dirs.add(parent)
-
-    if missing_dirs:
-        formatted = "\n".join(f"  - {path}" for path in sorted(missing_dirs))
-        raise ConfigError(
-            "Runtime directories are missing.\n"
-            f"{formatted}\n\n"
-            "Create them before starting the installed MCP server, for example:\n"
-            "  mkdir -p config storage index"
-        )
-
-
 # Load .env from the runtime workspace, not from the installed package directory.
 load_dotenv(_runtime_root() / ".env")
 
@@ -154,12 +131,10 @@ def load_config(config_path: str | None = None) -> dict:
     return _resolve_runtime_paths(_resolve_env_vars(raw), root)
 
 
-def validate_config(require_runtime_dirs: bool = False) -> dict:
+def validate_config() -> dict:
     """Load config and raise a friendly error for common startup problems."""
     config = load_config()
-    sites = _validate_sites(config)
-    if require_runtime_dirs:
-        _validate_runtime_directories(sites)
+    _validate_sites(config)
     return config
 
 

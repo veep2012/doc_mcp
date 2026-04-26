@@ -60,8 +60,9 @@ List the most common failure modes for `doc-mcp` and the first corrective step f
 - Restart the `docs-mcp` server from `MCP: List Servers` after saving `.vscode/mcp.json`.
 
 ### Server Fails During Startup Configuration
-- Missing `config/sites.yaml`, an empty `sites:` list, or missing `storage/` and `index/` directories now stop `docmcp-server` before it accepts MCP traffic.
+- Missing `config/sites.yaml` or an empty `sites:` list stops `docmcp-server` before it accepts MCP traffic.
 - Create the runtime workspace with `mkdir -p config storage index`, put `sites.yaml` under `config/`, and pass `DOC_MCP_HOME` plus `CONFIG_FILE` through the MCP client environment.
+- Site-specific output directories are created when that site is authenticated, crawled, or queried, so one unused site's paths do not block server startup.
 - For VS Code, check the `docs-mcp` output from `MCP: List Servers` to see the exact startup configuration error.
 
 ## Edge Cases

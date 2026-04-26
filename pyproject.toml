@@ -8,6 +8,14 @@ version = "0.1.0"
 description = "Documentation MCP server with Playwright-based authentication and crawling"
 readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
+classifiers = [
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Topic :: Documentation",
+  "Topic :: Internet :: WWW/HTTP :: Indexing/Search",
+]
 dependencies = [
   "playwright>=1.43.0",
   "markdownify>=0.12.0",
