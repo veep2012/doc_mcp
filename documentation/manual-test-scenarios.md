@@ -9,9 +9,7 @@
 - Version: v0.3
 
 ## Change Log
-- 2026-04-26 | v0.3 | Reordered scenarios so development environment tests run before installed runtime environment tests and normalized required sections.
-- 2026-04-26 | v0.2 | Split manual test command paths for source-tree development and installed wheel environments.
-- 2026-04-26 | v0.1 | Added manual verification scenarios for setup, authentication, crawling, indexing, and MCP server startup.
+- 2026-04-26 | v0.3 | Added manual verification scenarios with separate development and installed-wheel runtime flows.
 
 ## Purpose
 Provide a repeatable manual test checklist for validating that `doc-mcp` can be installed, configured, authenticated, crawled, queried, and connected to an MCP client.
