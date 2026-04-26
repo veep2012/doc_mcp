@@ -10,8 +10,7 @@
 - Related Tickets: https://github.com/veep2012/doc_mcp/issues/1
 
 ## Change Log
-- 2026-04-25 | v0.2 | Updated implementation references after package entry point and index store move.
-- 2026-04-25 | v0.1 | Initial staged implementation plan for semantic, keyword, and hybrid search over an external vector index.
+- 2026-04-25 | v0.2 | Added the staged semantic, keyword, and hybrid search plan and updated implementation references for package entry points.
 
 ## Purpose
 Split the semantic search epic into implementation stages that can be delivered and validated independently while keeping the MCP server read-only and stateless.

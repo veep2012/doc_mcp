@@ -9,8 +9,7 @@
 - Version: v1.2
 
 ## Change Log
-- 2026-04-25 | v1.2 | Updated VS Code setup to use the stable wheel-installed docmcp-server entry point and workspace runtime env values.
-- 2026-04-25 | v1.1 | Added VS Code GitHub Copilot MCP setup instructions.
+- 2026-04-25 | v1.2 | Added VS Code GitHub Copilot MCP setup instructions with the stable wheel-installed docmcp-server entry point and workspace runtime env values.
 - 2026-04-24 | v1.0 | Reformatted the MCP server reference and clarified stdio startup, tools, and client wiring.
 
 ## Purpose
