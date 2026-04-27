@@ -29,10 +29,10 @@ If `make` is not available, create the environment directly:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements-dev.txt
-playwright install chromium
-python -m pip install -e .
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install -r requirements-dev.txt
+.venv/bin/python -m playwright install chromium
+.venv/bin/python -m pip install -e .
 ```
 
 On Windows PowerShell without `make`:
@@ -40,10 +40,10 @@ On Windows PowerShell without `make`:
 ```powershell
 python -m venv .venv
 .venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -r requirements-dev.txt
-playwright install chromium
-python -m pip install -e .
+.venv\Scripts\python.exe -m pip install --upgrade pip
+.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.venv\Scripts\python.exe -m playwright install chromium
+.venv\Scripts\python.exe -m pip install -e .
 ```
 
 2. Create local configuration files:

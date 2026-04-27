@@ -6,10 +6,10 @@
 - Reviewers: Repository maintainers
 - Created: 2026-04-26
 - Last Updated: 2026-04-27
-- Version: v0.5
+- Version: v0.7
 
 ## Change Log
-- 2026-04-27 | v0.5 | Clarified development environment setup with and without Make and updated dependency installation through requirements-dev.txt.
+- 2026-04-27 | v0.7 | Clarified development setup with and without Make and updated dependency and Playwright installation to run through the explicit virtual environment Python.
 - 2026-04-26 | v0.3 | Added manual verification scenarios with separate development and installed-wheel runtime flows.
 
 ## Purpose
@@ -69,15 +69,15 @@ Run this block first when validating the repository checkout directly.
      - macOS/Linux:
        - `python3 -m venv .venv`
        - `source .venv/bin/activate`
-       - `python -m pip install --upgrade pip`
-       - `python -m pip install -r requirements-dev.txt`
-       - `playwright install chromium`
+       - `.venv/bin/python -m pip install --upgrade pip`
+       - `.venv/bin/python -m pip install -r requirements-dev.txt`
+       - `.venv/bin/python -m playwright install chromium`
      - Windows PowerShell:
        - `python -m venv .venv`
        - `.venv\Scripts\Activate.ps1`
-       - `python -m pip install --upgrade pip`
-       - `python -m pip install -r requirements-dev.txt`
-       - `playwright install chromium`
+       - `.venv\Scripts\python.exe -m pip install --upgrade pip`
+       - `.venv\Scripts\python.exe -m pip install -r requirements-dev.txt`
+       - `.venv\Scripts\python.exe -m playwright install chromium`
   3. If `make local-venv` was used, activate the virtual environment with `source .venv/bin/activate`.
   4. Run `python auth_cli.py --help`.
   5. Run `python crawl_cli.py --help`.
@@ -137,8 +137,12 @@ Run this block after the development environment passes, using a separate runtim
      - Windows PowerShell:
        - `python -m venv .venv`
        - `.venv\Scripts\Activate.ps1`
-  4. Install the built wheel with `python -m pip install /path/to/doc_mcp-*.whl`.
-  5. Install Chromium with `playwright install chromium`.
+  4. Install the built wheel:
+     - macOS/Linux: `.venv/bin/python -m pip install /path/to/doc_mcp-*.whl`
+     - Windows PowerShell: `.venv\Scripts\python.exe -m pip install /path/to/doc_mcp-*.whl`
+  5. Install Chromium:
+     - macOS/Linux: `.venv/bin/python -m playwright install chromium`
+     - Windows PowerShell: `.venv\Scripts\python.exe -m playwright install chromium`
   6. Run `docmcp-auth --help`.
   7. Run `docmcp-crawl --help`.
   8. Run `command -v docmcp-server` to verify the server console script is installed.

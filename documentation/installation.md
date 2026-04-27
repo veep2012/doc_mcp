@@ -6,10 +6,10 @@
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
 - Last Updated: 2026-04-27
-- Version: v1.3
+- Version: v1.5
 
 ## Change Log
-- 2026-04-27 | v1.3 | Clarified that Make is optional and updated development setup to install runtime dependencies through requirements-dev.txt.
+- 2026-04-27 | v1.5 | Clarified optional Make setup and updated dependency and Playwright installation to run through the explicit virtual environment Python.
 - 2026-04-25 | v1.1 | Updated setup and verification commands for the package entry points and explicit virtual environment activation.
 - 2026-04-24 | v1.0 | Reformatted the setup guide to the documentation standard and kept the install paths and verification commands.
 
@@ -60,10 +60,10 @@ pip install -e .
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements-dev.txt
-playwright install chromium
-python -m pip install -e .
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install -r requirements-dev.txt
+.venv/bin/python -m playwright install chromium
+.venv/bin/python -m pip install -e .
 ```
 
 On Windows:
@@ -71,10 +71,10 @@ On Windows:
 ```powershell
 python -m venv .venv
 .venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -r requirements-dev.txt
-playwright install chromium
-python -m pip install -e .
+.venv\Scripts\python.exe -m pip install --upgrade pip
+.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.venv\Scripts\python.exe -m playwright install chromium
+.venv\Scripts\python.exe -m pip install -e .
 ```
 
 ### Verify The Environment
@@ -92,6 +92,14 @@ Installed package commands:
 docmcp-auth --help
 docmcp-crawl --help
 docmcp-server
+```
+
+On Windows, do not rely on a standalone `playwright` file being visible in
+`.venv\Scripts`. Verify Playwright through the virtual environment Python:
+
+```powershell
+.venv\Scripts\python.exe -m pip show playwright
+.venv\Scripts\python.exe -m playwright --version
 ```
 
 ### Build And Install A Wheel On Another Environment
@@ -124,6 +132,7 @@ docmcp-server
 - If `make` is not available, use the manual setup commands.
 - If the virtual environment is not active, the CLI commands will use whatever Python is on `PATH`.
 - If Chromium is missing, Playwright-based auth and crawl commands will fail before the first site run.
+- If `.venv\Scripts\python.exe -m playwright --version` fails with `No module named playwright`, reinstall dependencies with `.venv\Scripts\python.exe -m pip install -r requirements-dev.txt`.
 
 ## References
 - [README.md](../README.md)
