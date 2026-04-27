@@ -6,10 +6,10 @@
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
 - Last Updated: 2026-04-27
-- Version: v1.5
+- Version: v1.6
 
 ## Change Log
-- 2026-04-27 | v1.5 | Clarified optional Make setup and updated dependency and Playwright installation to run through the explicit virtual environment Python.
+- 2026-04-27 | v1.6 | Clarified optional Make setup, Playwright installation, and optional editable install for source-tree development.
 - 2026-04-25 | v1.1 | Updated setup and verification commands for the package entry points and explicit virtual environment activation.
 - 2026-04-24 | v1.0 | Reformatted the setup guide to the documentation standard and kept the install paths and verification commands.
 
@@ -50,7 +50,7 @@ On Windows PowerShell:
 .venv\Scripts\Activate.ps1
 ```
 
-If you want the `docmcp-auth`, `docmcp-crawl`, and `docmcp-server` console commands, install the project itself in editable mode:
+The source-tree wrappers work without installing the package itself. If you want the `docmcp-auth`, `docmcp-crawl`, and `docmcp-server` console commands, install the project in editable mode:
 
 ```bash
 pip install -e .
@@ -63,7 +63,6 @@ source .venv/bin/activate
 .venv/bin/python -m pip install --upgrade pip
 .venv/bin/python -m pip install -r requirements-dev.txt
 .venv/bin/python -m playwright install chromium
-.venv/bin/python -m pip install -e .
 ```
 
 On Windows:
@@ -74,7 +73,12 @@ python -m venv .venv
 .venv\Scripts\python.exe -m pip install --upgrade pip
 .venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 .venv\Scripts\python.exe -m playwright install chromium
-.venv\Scripts\python.exe -m pip install -e .
+```
+
+Editable install remains optional for source-tree development. Use it only when you need the package console commands:
+
+```bash
+python -m pip install -e .
 ```
 
 ### Verify The Environment
