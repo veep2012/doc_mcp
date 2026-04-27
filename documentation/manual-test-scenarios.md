@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-26
-- Last Updated: 2026-04-26
-- Version: v0.3
+- Last Updated: 2026-04-27
+- Version: v0.4
 
 ## Change Log
+- 2026-04-27 | v0.4 | Clarified development environment setup with and without Make.
 - 2026-04-26 | v0.3 | Added manual verification scenarios with separate development and installed-wheel runtime flows.
 
 ## Purpose
@@ -63,11 +64,24 @@ Run this block first when validating the repository checkout directly.
 
 ### MT-001A: Create Development Source-Tree Environment
 - Steps:
-  1. Run `make local-venv`.
-  2. Activate the virtual environment with `source .venv/bin/activate`.
-  3. Run `python auth_cli.py --help`.
-  4. Run `python crawl_cli.py --help`.
-  5. Run `python -c "import src.docmcp.main"` to verify the server module imports.
+  1. If `make` is available, run `make local-venv`.
+  2. If `make` is not available, create the environment directly:
+     - macOS/Linux:
+       - `python3 -m venv .venv`
+       - `source .venv/bin/activate`
+       - `python -m pip install --upgrade pip`
+       - `python -m pip install -r requirements.txt -r requirements-dev.txt`
+       - `playwright install chromium`
+     - Windows PowerShell:
+       - `python -m venv .venv`
+       - `.venv\Scripts\Activate.ps1`
+       - `python -m pip install --upgrade pip`
+       - `python -m pip install -r requirements.txt -r requirements-dev.txt`
+       - `playwright install chromium`
+  3. If `make local-venv` was used, activate the virtual environment with `source .venv/bin/activate`.
+  4. Run `python auth_cli.py --help`.
+  5. Run `python crawl_cli.py --help`.
+  6. Run `python -c "import src.docmcp.main"` to verify the server module imports.
 - Expected result:
   - The virtual environment is created.
   - Chromium is installed by Playwright.

@@ -4,7 +4,9 @@
 
 ## Quick Start
 
-1. Create and activate the environment, then install the project commands:
+1. Create and activate the environment, then install the project commands.
+
+If `make` is available:
 
 ```bash
 make local-venv
@@ -21,6 +23,28 @@ python -m pip install -e .
 ```
 
 `make local-venv` creates and populates `.venv`, but activation still has to be run in your current shell.
+
+If `make` is not available, create the environment directly:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt -r requirements-dev.txt
+playwright install chromium
+python -m pip install -e .
+```
+
+On Windows PowerShell without `make`:
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt -r requirements-dev.txt
+playwright install chromium
+python -m pip install -e .
+```
 
 2. Create local configuration files:
 
