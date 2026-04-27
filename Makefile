@@ -38,4 +38,5 @@ wheel: ## Build a distributable wheel into dist/
 		exit 1; \
 	fi
 	$(VENV_PY) -m pip install -r requirements-dev.txt
-	$(VENV_PY) -m build --wheel
+	$(VENV_PY) -c "import shutil; shutil.rmtree('build', ignore_errors=True)"
+	$(VENV_PY) -m build --wheel --no-isolation
