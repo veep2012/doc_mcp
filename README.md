@@ -30,7 +30,7 @@ If `make` is not available, create the environment directly:
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt -r requirements-dev.txt
+python -m pip install -r requirements-dev.txt
 playwright install chromium
 python -m pip install -e .
 ```
@@ -41,7 +41,7 @@ On Windows PowerShell without `make`:
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt -r requirements-dev.txt
+python -m pip install -r requirements-dev.txt
 playwright install chromium
 python -m pip install -e .
 ```

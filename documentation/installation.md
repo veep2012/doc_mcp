@@ -6,10 +6,10 @@
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
 - Last Updated: 2026-04-27
-- Version: v1.2
+- Version: v1.3
 
 ## Change Log
-- 2026-04-27 | v1.2 | Clarified that Make is optional and documented direct Python virtual environment setup.
+- 2026-04-27 | v1.3 | Clarified that Make is optional and updated development setup to install runtime dependencies through requirements-dev.txt.
 - 2026-04-25 | v1.1 | Updated setup and verification commands for the package entry points and explicit virtual environment activation.
 - 2026-04-24 | v1.0 | Reformatted the setup guide to the documentation standard and kept the install paths and verification commands.
 
@@ -61,7 +61,7 @@ pip install -e .
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt -r requirements-dev.txt
+python -m pip install -r requirements-dev.txt
 playwright install chromium
 python -m pip install -e .
 ```
@@ -72,7 +72,7 @@ On Windows:
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt -r requirements-dev.txt
+python -m pip install -r requirements-dev.txt
 playwright install chromium
 python -m pip install -e .
 ```

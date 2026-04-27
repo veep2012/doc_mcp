@@ -48,7 +48,7 @@ List the most common failure modes for `doc-mcp` and the first corrective step f
 
 ### Missing Markdown Conversion
 - If `markdownify` is not installed, the crawler falls back to plain text extraction.
-- Install dependencies through `make local-venv` or `pip install -r requirements.txt`.
+- Install development dependencies through `make local-venv` or `python -m pip install -r requirements-dev.txt`.
 
 ### Windows Console Output Looks Broken
 - `src/docmcp/main.py` reconfigures stdout and stderr to UTF-8.

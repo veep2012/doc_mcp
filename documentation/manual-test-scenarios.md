@@ -6,10 +6,10 @@
 - Reviewers: Repository maintainers
 - Created: 2026-04-26
 - Last Updated: 2026-04-27
-- Version: v0.4
+- Version: v0.5
 
 ## Change Log
-- 2026-04-27 | v0.4 | Clarified development environment setup with and without Make.
+- 2026-04-27 | v0.5 | Clarified development environment setup with and without Make and updated dependency installation through requirements-dev.txt.
 - 2026-04-26 | v0.3 | Added manual verification scenarios with separate development and installed-wheel runtime flows.
 
 ## Purpose
@@ -70,13 +70,13 @@ Run this block first when validating the repository checkout directly.
        - `python3 -m venv .venv`
        - `source .venv/bin/activate`
        - `python -m pip install --upgrade pip`
-       - `python -m pip install -r requirements.txt -r requirements-dev.txt`
+       - `python -m pip install -r requirements-dev.txt`
        - `playwright install chromium`
      - Windows PowerShell:
        - `python -m venv .venv`
        - `.venv\Scripts\Activate.ps1`
        - `python -m pip install --upgrade pip`
-       - `python -m pip install -r requirements.txt -r requirements-dev.txt`
+       - `python -m pip install -r requirements-dev.txt`
        - `playwright install chromium`
   3. If `make local-venv` was used, activate the virtual environment with `source .venv/bin/activate`.
   4. Run `python auth_cli.py --help`.

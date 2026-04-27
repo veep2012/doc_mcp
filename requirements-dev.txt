@@ -1,3 +1,5 @@
+-r requirements.txt
+
 # Dependency auditing
 build>=1.2,<2
 pip-audit>=2.7,<3
