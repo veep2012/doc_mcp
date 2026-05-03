@@ -39,7 +39,7 @@ python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install --upgrade pip
 pip install -r requirements-dev.txt
-playwright install chromium
+python -m playwright install chromium
 ```
 
 The development checkout can run through source-tree wrappers, so editable
