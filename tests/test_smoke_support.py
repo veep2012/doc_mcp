@@ -22,7 +22,10 @@ def test_make_test_dry_run_lists_unit_before_smoke():
         text=True,
     )
 
-    venv_python = ".venv\\Scripts\\python.exe" if os.name == "nt" else ".venv/bin/python"
+    venv_dir = os.environ.get("DOC_MCP_VENV", ".venv")
+    venv_python = (
+        f"{venv_dir}\\Scripts\\python.exe" if os.name == "nt" else f"{venv_dir}/bin/python"
+    )
 
     unit_pos = result.stdout.index(f"{venv_python} -m pytest")
     smoke_pos = result.stdout.index(

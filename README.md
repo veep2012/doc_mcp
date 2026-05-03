@@ -22,23 +22,28 @@ make local-venv
 
 `make local-venv` creates and populates `.venv`, but activation still has to be run in your current shell.
 
+If you want a different virtual environment directory, set `DOC_MCP_VENV` before following the setup commands and substitute that path consistently in your shell.
+
 If `make` is not available, create the environment directly:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements-dev.txt
+VENV_DIR="${DOC_MCP_VENV:-.venv}"
+python3 -m venv "$VENV_DIR"
+source "$VENV_DIR/bin/activate"
+python -m pip install --upgrade pip
+python -m pip install -r requirements-dev.txt
 python -m playwright install chromium
 ```
 
 On Windows PowerShell without `make`:
 
 ```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install --upgrade pip
-pip install -r requirements-dev.txt
+$VenvDir = $env:DOC_MCP_VENV
+if (-not $VenvDir) { $VenvDir = ".venv" }
+python -m venv $VenvDir
+& "$VenvDir\Scripts\Activate.ps1"
+python -m pip install --upgrade pip
+python -m pip install -r requirements-dev.txt
 python -m playwright install chromium
 ```
 

@@ -49,12 +49,12 @@ python -m src.main
 
 ### Client Setup
 - The server is designed for MCP clients that connect over stdio, such as VS Code / Copilot or Claude Desktop.
-- The client command should point to the installed `docmcp-server` console script inside `.venv`.
+- The client command should point to the installed `docmcp-server` console script inside the active environment.
 - `CONFIG_FILE` should point to the workspace `config/sites.yaml`.
 - `DOC_MCP_HOME` should point to the workspace root used for runtime files.
 
 Example values:
-- Command: `.venv/bin/docmcp-server`
+- Command: `docmcp-server`
 - Env: `CONFIG_FILE=/path/to/doc_mcp/config/sites.yaml`
 - Env: `DOC_MCP_HOME=/path/to/doc_mcp`
 
@@ -69,8 +69,8 @@ mkdir -p dist
 cp /path/to/doc_mcp-*.whl dist/
 python3 -m venv .venv
 source .venv/bin/activate
-pip install --upgrade pip
-pip install dist/doc_mcp-*.whl
+python -m pip install --upgrade pip
+python -m pip install dist/doc_mcp-*.whl
 ```
 
 On Windows PowerShell, create and activate the environment with `python -m venv .venv` and `.venv\Scripts\Activate.ps1`.
@@ -114,14 +114,15 @@ docmcp-server
 
 When `docmcp-server` starts successfully, stop it with `Ctrl+C` in the same terminal.
 
-5. Create `.vscode/mcp.json` in the destination workspace root:
+5. Create `.vscode/mcp.json` in the destination workspace root. If you use a
+different virtual environment directory, update the `command` path to match:
 
 ```json
 {
   "servers": {
     "docs-mcp": {
       "type": "stdio",
-      "command": "${workspaceFolder}/.venv/bin/docmcp-server",
+      "command": "${workspaceFolder}/${env:DOC_MCP_VENV}/bin/docmcp-server",
       "env": {
         "CONFIG_FILE": "${workspaceFolder}/config/sites.yaml",
         "DOC_MCP_HOME": "${workspaceFolder}",
@@ -132,7 +133,7 @@ When `docmcp-server` starts successfully, stop it with `Ctrl+C` in the same term
 }
 ```
 
-On Windows, use `${workspaceFolder}\\.venv\\Scripts\\docmcp-server.exe` as the command.
+On Windows, use `${workspaceFolder}\\${env:DOC_MCP_VENV}\\Scripts\\docmcp-server.exe` as the command.
 
 6. In VS Code, open the Command Palette with `Cmd+Shift+P` on macOS or `Ctrl+Shift+P` on Windows/Linux, then run `MCP: List Servers`.
 7. Select `docs-mcp`, restart it after every `.vscode/mcp.json` change, and trust the server when prompted.
