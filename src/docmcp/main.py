@@ -32,12 +32,10 @@ def _log_startup_configuration(config: dict) -> None:
         crawl_cfg = site.get("crawl", {})
         start_url = crawl_cfg.get("start_url", site.get("url", ""))
         logger.info(
-            "Site=%s url=%s start_url=%s index_file=%s session_file=%s auth_required=%s",
+            "Site=%s url=%s start_url=%s auth_required=%s",
             site.get("name", "<unnamed>"),
             site.get("url", ""),
             start_url,
-            site.get("index_file", ""),
-            site.get("session_file", ""),
             site.get("auth_required", False),
         )
 
