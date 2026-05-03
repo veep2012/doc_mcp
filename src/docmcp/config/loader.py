@@ -90,7 +90,7 @@ def _validate_sites(config: Any) -> list[dict]:
 
 def _load_runtime_env(root: Path) -> None:
     """Load .env from the current runtime workspace when it exists."""
-    load_dotenv(root / ".env")
+    load_dotenv(root / ".env", override=True)
 
 
 def _resolve_env_vars(value: Any) -> Any:
