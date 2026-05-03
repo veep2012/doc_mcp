@@ -24,6 +24,8 @@ def test_mcp_tools_return_site_pages_search_and_fetch(monkeypatch, tmp_path):
     sites_output = tools.get_sites()
     assert "Example Docs" in sites_output
     assert "2 pages indexed" in sites_output
+    assert "Index:" not in sites_output
+    assert "Session:" not in sites_output
 
     list_output = tools.list_pages("Example Docs")
     assert "Guide" in list_output

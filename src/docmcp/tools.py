@@ -40,9 +40,6 @@ def get_sites() -> str:
         auth = "🔒 Auth required" if site.get("auth_required") else "🌐 Public"
         lines.append(f"- **{site['name']}** ({auth}) — {status}")
         lines.append(f"  URL: {site['url']}")
-        lines.append(f"  Index: {site['index_file']}")
-        if site.get("session_file"):
-            lines.append(f"  Session: {site['session_file']}")
     return "\n".join(lines)
 
 
