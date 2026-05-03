@@ -18,7 +18,7 @@ help: ## Show available make targets
 local-venv: ## Create local Python venv and install dependencies; activate it separately
 ifeq ($(OS),Windows_NT)
 	$(PYTHON_BIN) -m venv .venv
-	powershell -NoProfile -ExecutionPolicy Bypass -Command "& { .venv\Scripts\python.exe -m pip install --upgrade pip; .venv\Scripts\python.exe -m pip install -r requirements-dev.txt; .venv\Scripts\python.exe -m playwright install chromium }"
+	powershell -NoProfile -ExecutionPolicy Bypass -Command "& { $(VENV_PY) -m pip install --upgrade pip; $(VENV_PY) -m pip install -r requirements-dev.txt; $(VENV_PY) -m playwright install chromium }"
 else
 	$(PYTHON_BIN) -m venv .venv && $(VENV_PY) -m pip install --upgrade pip && $(VENV_PY) -m pip install -r requirements-dev.txt && $(VENV_PY) -m playwright install chromium
 endif
