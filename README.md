@@ -29,7 +29,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements-dev.txt
-playwright install chromium
+python -m playwright install chromium
 ```
 
 On Windows PowerShell without `make`:
