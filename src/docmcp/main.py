@@ -5,6 +5,7 @@ MCP server entry point for installed console scripts.
 import logging
 import os
 import sys
+from pathlib import Path
 
 from dotenv import load_dotenv
 
@@ -19,6 +20,28 @@ def _configure_stdio() -> None:
         sys.stderr.reconfigure(encoding="utf-8")
 
 
+def _log_startup_configuration(config: dict) -> None:
+    """Emit the resolved runtime configuration to stderr for smoke/debug visibility."""
+    logger = logging.getLogger("docmcp.startup")
+    runtime_root = Path(os.environ.get("DOC_MCP_HOME", Path.cwd())).expanduser()
+    config_file = os.environ.get("CONFIG_FILE", "config/sites.yaml")
+    logger.info("DOC_MCP_HOME=%s", runtime_root)
+    logger.info("CONFIG_FILE=%s", config_file)
+
+    for site in config.get("sites", []):
+        crawl_cfg = site.get("crawl", {})
+        start_url = crawl_cfg.get("start_url", site.get("url", ""))
+        logger.info(
+            "Site=%s url=%s start_url=%s index_file=%s session_file=%s auth_required=%s",
+            site.get("name", "<unnamed>"),
+            site.get("url", ""),
+            start_url,
+            site.get("index_file", ""),
+            site.get("session_file", ""),
+            site.get("auth_required", False),
+        )
+
+
 def main() -> None:
     """Run the MCP server in stdio mode."""
     _configure_stdio()
@@ -28,10 +51,12 @@ def main() -> None:
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
     try:
-        validate_config()
+        config = validate_config()
     except ConfigError as exc:
         print(f"[docmcp-server] Startup configuration error:\n{exc}", file=sys.stderr)
         sys.exit(1)
+
+    _log_startup_configuration(config)
 
     from .tools import mcp
 

@@ -43,4 +43,6 @@ def test_mcp_tools_report_unknown_site(monkeypatch):
 
     assert tools.list_pages("Missing Docs") == "Site 'Missing Docs' not found."
     assert tools.search_docs("Missing Docs", "query") == "Site 'Missing Docs' not found."
-    assert tools.fetch_page("Missing Docs", "https://example.test") == "Site 'Missing Docs' not found."
+    assert (
+        tools.fetch_page("Missing Docs", "https://example.test") == "Site 'Missing Docs' not found."
+    )

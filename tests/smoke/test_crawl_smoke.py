@@ -1,19 +1,25 @@
 import textwrap
 import sys
-from pathlib import Path
 
 import pytest
 
 from docmcp.index_store import count_pages, list_pages
-from tests.smoke.support import running_static_site, run_checked, smoke_env
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
+from tests.conftest import REPO_ROOT
+from tests.smoke.support import (
+    print_smoke_context,
+    run_checked,
+    running_static_site,
+    smoke_artifact_root,
+    smoke_env,
+    smoke_log_file,
+)
 
 
 @pytest.mark.smoke
 @pytest.mark.crawl_smoke
-def test_crawl_cli_indexes_containerized_static_site(tmp_path):
-    site_root = tmp_path / "site"
+def test_crawl_cli_indexes_containerized_static_site():
+    runtime_root = smoke_artifact_root("crawl")
+    site_root = runtime_root / "site"
     (site_root / "docs").mkdir(parents=True)
     (site_root / "index.html").write_text(
         "<!doctype html><html><head><title>Home</title></head><body><main><h1>Home</h1><p>Welcome.</p>"
@@ -25,11 +31,6 @@ def test_crawl_cli_indexes_containerized_static_site(tmp_path):
         '<a href="/index.html">Home</a></main></body></html>',
         encoding="utf-8",
     )
-
-    runtime_root = tmp_path / "runtime"
-    (runtime_root / "config").mkdir(parents=True)
-    (runtime_root / "storage").mkdir()
-    (runtime_root / "index").mkdir()
 
     with running_static_site(site_root) as base_url:
         (runtime_root / "config" / "sites.yaml").write_text(
@@ -57,12 +58,25 @@ def test_crawl_cli_indexes_containerized_static_site(tmp_path):
             encoding="utf-8",
         )
 
+        print_smoke_context(
+            "crawl smoke",
+            [
+                ("site", "Smoke Docs"),
+                ("start_url", base_url),
+                ("runtime_root", str(runtime_root)),
+                ("index_file", str(runtime_root / "index" / "smoke.db")),
+                ("log_file", str(smoke_log_file(runtime_root, "crawl.log"))),
+            ],
+        )
+
         run_checked(
             [sys.executable, "crawl_cli.py", "--site", "Smoke Docs", "--headless"],
             cwd=REPO_ROOT,
             env=smoke_env(runtime_root),
             timeout=180,
             description="Running crawl smoke test",
+            log_path=smoke_log_file(runtime_root, "crawl.log"),
+            echo_output=True,
         )
 
     index_file = runtime_root / "index" / "smoke.db"

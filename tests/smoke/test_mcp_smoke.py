@@ -3,16 +3,18 @@ import textwrap
 import pytest
 
 from docmcp.index_store import init_db, upsert_page
-from tests.smoke.support import call_search_docs
+from tests.smoke.support import (
+    call_search_docs,
+    print_smoke_context,
+    smoke_artifact_root,
+    smoke_log_file,
+)
 
 
 @pytest.mark.smoke
 @pytest.mark.mcp_smoke
-async def test_mcp_stdio_search_docs_uses_prepared_index(tmp_path):
-    runtime_root = tmp_path / "runtime"
-    (runtime_root / "config").mkdir(parents=True)
-    (runtime_root / "storage").mkdir()
-    (runtime_root / "index").mkdir()
+async def test_mcp_stdio_search_docs_uses_prepared_index():
+    runtime_root = smoke_artifact_root("mcp")
 
     index_file = runtime_root / "index" / "prepared.db"
     init_db(str(index_file))
@@ -33,7 +35,23 @@ async def test_mcp_stdio_search_docs_uses_prepared_index(tmp_path):
         encoding="utf-8",
     )
 
-    response = await call_search_docs(runtime_root, "Prepared Docs", "Alpha")
+    print_smoke_context(
+        "mcp smoke",
+        [
+            ("site", "Prepared Docs"),
+            ("runtime_root", str(runtime_root)),
+            ("index_file", str(index_file)),
+            ("log_file", str(smoke_log_file(runtime_root, "mcp.log"))),
+        ],
+    )
+
+    with smoke_log_file(runtime_root, "mcp.log").open("w", encoding="utf-8") as mcp_log:
+        response = await call_search_docs(
+            runtime_root,
+            "Prepared Docs",
+            "Alpha",
+            errlog=mcp_log,
+        )
 
     assert "Search results for 'Alpha' in 'Prepared Docs'" in response
     assert "Guide" in response

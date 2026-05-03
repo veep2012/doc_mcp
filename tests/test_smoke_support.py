@@ -23,7 +23,9 @@ def test_make_test_dry_run_lists_unit_before_smoke():
     )
 
     unit_pos = result.stdout.index(".venv/bin/python -m pytest")
-    smoke_pos = result.stdout.index("CONTAINER_BIN=podman .venv/bin/python -m pytest -o addopts= -m smoke")
+    smoke_pos = result.stdout.index(
+        "CONTAINER_BIN=podman .venv/bin/python -m pytest -o addopts= -m smoke"
+    )
     assert unit_pos < smoke_pos
 
 

@@ -5,10 +5,12 @@ import shutil
 import subprocess
 import sys
 import time
+import tempfile
 import urllib.error
 import urllib.request
 from contextlib import contextmanager
 from pathlib import Path
+from typing import TextIO
 
 import pytest
 from mcp import ClientSession
@@ -37,9 +39,11 @@ def run_checked(
     env: dict[str, str] | None = None,
     timeout: int = 120,
     description: str,
+    log_path: Path | None = None,
+    echo_output: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     try:
-        return subprocess.run(
+        result = subprocess.run(
             args,
             cwd=cwd,
             env=env,
@@ -48,17 +52,74 @@ def run_checked(
             capture_output=True,
             text=True,
         )
-    except subprocess.TimeoutExpired as exc:
+        _write_smoke_log(log_path, args, result.stdout, result.stderr)
+        if echo_output:
+            _echo_process_output(result.stdout, result.stderr)
+        return result
+    except subprocess.TimeoutExpired:
         pytest.fail(
             f"{description} timed out after {timeout} seconds.\n"
             f"Command: {' '.join(args)}\n"
             "If you are using Podman, verify rootless networking works or retry with CONTAINER_BIN=docker."
         )
     except subprocess.CalledProcessError as exc:
+        _write_smoke_log(log_path, args, exc.stdout, exc.stderr)
+        if echo_output:
+            _echo_process_output(exc.stdout, exc.stderr)
         pytest.fail(
             f"{description} failed with exit code {exc.returncode}.\n"
             f"STDOUT:\n{exc.stdout}\nSTDERR:\n{exc.stderr}"
         )
+
+
+def _write_smoke_log(
+    log_path: Path | None, args: list[str], stdout: str | None, stderr: str | None
+) -> None:
+    if log_path is None:
+        return
+
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path.write_text(
+        "\n".join(
+            [
+                f"$ {' '.join(args)}",
+                "",
+                "STDOUT:",
+                stdout or "",
+                "",
+                "STDERR:",
+                stderr or "",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
+def _echo_process_output(stdout: str | None, stderr: str | None) -> None:
+    if stdout:
+        print(stdout, end="" if stdout.endswith("\n") else "\n")
+    if stderr:
+        print(stderr, end="" if stderr.endswith("\n") else "\n", file=sys.stderr)
+
+
+def smoke_artifact_root(test_name: str) -> Path:
+    root = REPO_ROOT / ".local" / "smoke"
+    root.mkdir(parents=True, exist_ok=True)
+    artifact_root = Path(tempfile.mkdtemp(prefix=f"{test_name}-", dir=root))
+    for child in ("config", "storage", "index", "logs"):
+        (artifact_root / child).mkdir(parents=True, exist_ok=True)
+    return artifact_root
+
+
+def smoke_log_file(runtime_root: Path, filename: str) -> Path:
+    return runtime_root / "logs" / filename
+
+
+def print_smoke_context(title: str, lines: list[tuple[str, str]]) -> None:
+    print(f"[smoke] {title}")
+    for label, value in lines:
+        print(f"[smoke]   {label:<12} {value}")
 
 
 def smoke_env(runtime_root: Path) -> dict[str, str]:
@@ -67,7 +128,7 @@ def smoke_env(runtime_root: Path) -> dict[str, str]:
         "DOC_MCP_HOME": str(runtime_root),
         "CONFIG_FILE": "config/sites.yaml",
         "PYTHONPATH": str(REPO_ROOT / "src"),
-        "MCP_LOG_LEVEL": "ERROR",
+        "MCP_LOG_LEVEL": "INFO",
     }
 
 
@@ -127,7 +188,13 @@ def running_static_site(site_root: Path):
         )
 
 
-async def call_search_docs(runtime_root: Path, site_name: str, query: str) -> str:
+async def call_search_docs(
+    runtime_root: Path,
+    site_name: str,
+    query: str,
+    *,
+    errlog: TextIO | None = None,
+) -> str:
     server = StdioServerParameters(
         command=sys.executable,
         args=["-m", "src.main"],
@@ -135,8 +202,10 @@ async def call_search_docs(runtime_root: Path, site_name: str, query: str) -> st
         env=smoke_env(runtime_root),
     )
 
-    async with stdio_client(server) as streams:
+    async with stdio_client(server, errlog=errlog or sys.stderr) as streams:
         async with ClientSession(*streams) as session:
             await session.initialize()
-            result = await session.call_tool("search_docs", {"site_name": site_name, "query": query})
+            result = await session.call_tool(
+                "search_docs", {"site_name": site_name, "query": query}
+            )
             return result.content[0].text

@@ -29,8 +29,12 @@ def test_is_allowed_enforces_host_path_allow_and_deny_rules():
     assert not _is_allowed(
         "https://example.test/docs/private/secret", start_url, allow_patterns, deny_patterns
     )
-    assert not _is_allowed("https://other.test/docs/guide", start_url, allow_patterns, deny_patterns)
-    assert not _is_allowed("https://example.test/blog/post", start_url, allow_patterns, deny_patterns)
+    assert not _is_allowed(
+        "https://other.test/docs/guide", start_url, allow_patterns, deny_patterns
+    )
+    assert not _is_allowed(
+        "https://example.test/blog/post", start_url, allow_patterns, deny_patterns
+    )
 
 
 def test_extract_links_marks_anchors_and_skips_non_http_targets():
