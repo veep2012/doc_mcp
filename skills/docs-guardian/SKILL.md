@@ -27,6 +27,13 @@ Choose one:
 - Read `documentation/_naming_convention.md`.
 - Read `documentation/_documentation-index.md`.
 
+### Step 2b: Reference existing docs before drafting new story content
+- When creating or updating a story, issue, or implementation brief, identify only the repository docs that describe the area being developed.
+- Read the relevant existing docs first and cite them in the story text instead of restating requirements from memory.
+- Prefer an explicit "Pre-Development Reading" or equivalent section that lists only the docs needed for that scope before implementation begins.
+- Do not require unrelated documentation links; keep the reference list scoped to the feature, workflow, or subsystem under development.
+- If the story touches setup, runtime behavior, troubleshooting, or test flow, include the current canonical docs for those areas in the reference list.
+
 ### Step 3: Validate required structure
 For each target file in `documentation/`:
 - Confirm required sections from standards exist.
