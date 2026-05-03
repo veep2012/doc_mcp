@@ -22,9 +22,11 @@ def test_make_test_dry_run_lists_unit_before_smoke():
         text=True,
     )
 
-    unit_pos = result.stdout.index(".venv/bin/python -m pytest")
+    venv_python = ".venv\\Scripts\\python.exe" if os.name == "nt" else ".venv/bin/python"
+
+    unit_pos = result.stdout.index(f"{venv_python} -m pytest")
     smoke_pos = result.stdout.index(
-        "CONTAINER_BIN=podman .venv/bin/python -m pytest -o addopts= -m smoke"
+        f"CONTAINER_BIN=podman {venv_python} -m pytest -o addopts= -m smoke"
     )
     assert unit_pos < smoke_pos
 
