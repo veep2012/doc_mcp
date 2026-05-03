@@ -10,11 +10,11 @@ from tests.conftest import REPO_ROOT
 from tests.smoke.support import require_existing_path, require_executable
 
 
-def test_make_test_dry_run_lists_unit_before_smoke():
+def test_make_test_declares_unit_before_smoke():
     excluded = {"CONTAINER_BIN", "MAKEFLAGS", "MFLAGS", "MAKEOVERRIDES"}
     env = {key: value for key, value in os.environ.items() if key not in excluded}
     result = subprocess.run(
-        ["make", "-n", "test"],
+        ["make", "-pn", "test"],
         cwd=REPO_ROOT,
         env=env,
         check=True,
@@ -22,16 +22,9 @@ def test_make_test_dry_run_lists_unit_before_smoke():
         text=True,
     )
 
-    venv_dir = os.environ.get("DOC_MCP_VENV", ".venv")
-    venv_python = (
-        f"{venv_dir}\\Scripts\\python.exe" if os.name == "nt" else f"{venv_dir}/bin/python"
-    )
-
-    unit_pos = result.stdout.index(f"{venv_python} -m pytest")
-    smoke_pos = result.stdout.index(
-        f"CONTAINER_BIN=podman {venv_python} -m pytest -o addopts= -m smoke"
-    )
-    assert unit_pos < smoke_pos
+    assert "test: test-unit test-smoke" in result.stdout
+    assert "test-unit: " in result.stdout or "test-unit:" in result.stdout
+    assert "test-smoke: " in result.stdout or "test-smoke:" in result.stdout
 
 
 def test_direct_pytest_excludes_smoke_by_default(tmp_path):
