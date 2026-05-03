@@ -37,6 +37,56 @@ def test_load_config_resolves_runtime_paths_and_env(monkeypatch, tmp_path):
     assert get_site_by_name("Example Docs") == site
 
 
+def test_load_config_clears_previous_runtime_env_when_workspace_changes(monkeypatch, tmp_path):
+    runtime_a = tmp_path / "runtime-a"
+    runtime_b = tmp_path / "runtime-b"
+
+    (runtime_a / "config").mkdir(parents=True)
+    (runtime_b / "config").mkdir(parents=True)
+
+    (runtime_a / ".env").write_text("DOCS_URL=https://workspace-a.test/docs\n", encoding="utf-8")
+    (runtime_a / "config" / "sites.yaml").write_text(
+        textwrap.dedent(
+            """
+            sites:
+              - name: "Workspace A"
+                url: "${DOCS_URL}"
+                auth_required: false
+                session_file: "storage/a.json"
+                index_file: "index/a.db"
+            """
+        ).strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    (runtime_b / "config" / "sites.yaml").write_text(
+        textwrap.dedent(
+            """
+            sites:
+              - name: "Workspace B"
+                url: "${DOCS_URL}"
+                auth_required: false
+                session_file: "storage/b.json"
+                index_file: "index/b.db"
+            """
+        ).strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.delenv("DOCS_URL", raising=False)
+    monkeypatch.setenv("DOC_MCP_HOME", str(runtime_a))
+    monkeypatch.delenv("CONFIG_FILE", raising=False)
+
+    first = load_config()
+    assert first["sites"][0]["url"] == "https://workspace-a.test/docs"
+
+    monkeypatch.setenv("DOC_MCP_HOME", str(runtime_b))
+    second = load_config()
+    assert second["sites"][0]["url"] == ""
+
+
 def test_load_config_missing_file_raises_friendly_error(monkeypatch, tmp_path):
     runtime_root = tmp_path / "runtime"
     runtime_root.mkdir()

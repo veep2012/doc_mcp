@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 
 
 class ConfigError(RuntimeError):
@@ -26,6 +26,7 @@ def _runtime_root() -> Path:
 # Only rewrite file-backed runtime outputs here. Nested crawl fields are URLs,
 # glob patterns, or scalar options in the current schema, not local paths.
 _RUNTIME_PATH_KEYS = frozenset({"session_file", "index_file"})
+_LOADED_RUNTIME_ENV_KEYS: set[str] = set()
 
 
 def _resolve_runtime_path(value: Any, root: Path) -> Any:
@@ -90,7 +91,19 @@ def _validate_sites(config: Any) -> list[dict]:
 
 def _load_runtime_env(root: Path) -> None:
     """Load .env from the current runtime workspace when it exists."""
-    load_dotenv(root / ".env", override=True)
+    global _LOADED_RUNTIME_ENV_KEYS
+
+    env_path = root / ".env"
+    current_env = dotenv_values(env_path) if env_path.exists() else {}
+    current_keys = {key for key in current_env if key}
+
+    # Remove values that came from a previous runtime workspace so they do not
+    # leak into ${...} substitution when DOC_MCP_HOME changes at runtime.
+    for key in _LOADED_RUNTIME_ENV_KEYS - current_keys:
+        os.environ.pop(key, None)
+
+    load_dotenv(env_path, override=True)
+    _LOADED_RUNTIME_ENV_KEYS = current_keys
 
 
 def _resolve_env_vars(value: Any) -> Any:
