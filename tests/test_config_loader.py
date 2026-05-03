@@ -1,3 +1,4 @@
+import os
 import textwrap
 
 import pytest
@@ -35,9 +36,10 @@ def test_load_config_resolves_runtime_paths_and_env(monkeypatch, tmp_path):
     assert site["session_file"] == str(runtime_root / "storage" / "example.json")
     assert site["index_file"] == str(runtime_root / "index" / "example.db")
     assert get_site_by_name("Example Docs") == site
+    assert "DOCS_URL" not in os.environ
 
 
-def test_load_config_clears_previous_runtime_env_when_workspace_changes(monkeypatch, tmp_path):
+def test_load_config_does_not_mutate_process_env_between_workspace_loads(monkeypatch, tmp_path):
     runtime_a = tmp_path / "runtime-a"
     runtime_b = tmp_path / "runtime-b"
 
@@ -81,10 +83,12 @@ def test_load_config_clears_previous_runtime_env_when_workspace_changes(monkeypa
 
     first = load_config()
     assert first["sites"][0]["url"] == "https://workspace-a.test/docs"
+    assert "DOCS_URL" not in os.environ
 
     monkeypatch.setenv("DOC_MCP_HOME", str(runtime_b))
     second = load_config()
     assert second["sites"][0]["url"] == ""
+    assert "DOCS_URL" not in os.environ
 
 
 def test_load_config_missing_file_raises_friendly_error(monkeypatch, tmp_path):
