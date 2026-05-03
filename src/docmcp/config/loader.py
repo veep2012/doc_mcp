@@ -88,8 +88,9 @@ def _validate_sites(config: Any) -> list[dict]:
     return sites
 
 
-# Load .env from the runtime workspace, not from the installed package directory.
-load_dotenv(_runtime_root() / ".env")
+def _load_runtime_env(root: Path) -> None:
+    """Load .env from the current runtime workspace when it exists."""
+    load_dotenv(root / ".env")
 
 
 def _resolve_env_vars(value: Any) -> Any:
@@ -115,6 +116,7 @@ def _resolve_env_vars(value: Any) -> Any:
 def load_config(config_path: str | None = None) -> dict:
     """Load and return the sites configuration with env vars resolved."""
     root = _runtime_root()
+    _load_runtime_env(root)
     if config_path is None:
         config_path = os.environ.get("CONFIG_FILE", "config/sites.yaml")
 
@@ -125,8 +127,11 @@ def load_config(config_path: str | None = None) -> dict:
     if not path.exists():
         raise ConfigError(_format_config_path_hint(path, root))
 
-    with open(path, "r", encoding="utf-8") as f:
-        raw = yaml.safe_load(f)
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            raw = yaml.safe_load(f)
+    except yaml.YAMLError as exc:
+        raise ConfigError(f"Configuration file is not valid YAML: {path}\n{exc}") from exc
 
     return _resolve_runtime_paths(_resolve_env_vars(raw), root)
 

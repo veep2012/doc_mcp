@@ -5,11 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-26
-- Last Updated: 2026-04-27
-- Version: v0.7
+- Last Updated: 2026-05-03
+- Version: v0.8
 
 ## Change Log
-- 2026-04-27 | v0.7 | Clarified development setup with and without Make and updated dependency and Playwright installation to run through the explicit virtual environment Python.
+- 2026-05-03 | v0.8 | Linked the automated pytest scenario document and clarified that this manual checklist remains the source coverage baseline.
 - 2026-04-26 | v0.3 | Added manual verification scenarios with separate development and installed-wheel runtime flows.
 
 ## Purpose
@@ -30,6 +30,8 @@ Provide a repeatable manual test checklist for validating that `doc-mcp` can be 
 
 ## Design / Behavior
 The checklist separates source-tree development checks from installed-wheel runtime checks, then validates shared authentication, crawling, server startup, MCP client configuration, search, fetch, and failure-mode behavior.
+
+The manual scenarios remain the source coverage checklist for the repository. Automated coverage derived from this checklist is tracked separately in [documentation/test_scenarios/testing_framework_test_scenarios.md](test_scenarios/testing_framework_test_scenarios.md).
 
 ## Audience
 - Repository maintainers

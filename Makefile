@@ -9,6 +9,7 @@ else
 PYTHON_BIN ?= python3
 VENV_PY := .venv/bin/python
 endif
+CONTAINER_BIN ?= podman
 
 .PHONY: help
 help: ## Show available make targets
@@ -40,3 +41,22 @@ wheel: ## Build a distributable wheel into dist/
 	$(VENV_PY) -m pip install -r requirements-dev.txt
 	$(VENV_PY) -c "import shutil; shutil.rmtree('build', ignore_errors=True)"
 	$(VENV_PY) -m build --wheel --no-isolation
+
+.PHONY: test-unit
+test-unit: ## Run unit tests (default pytest selection excludes smoke tests)
+	@if [ ! -x "$(VENV_PY)" ]; then \
+		echo "Create .venv first with 'make local-venv'"; \
+		exit 1; \
+	fi
+	$(VENV_PY) -m pytest
+
+.PHONY: test-smoke
+test-smoke: ## Run smoke tests with the selected container runtime
+	@if [ ! -x "$(VENV_PY)" ]; then \
+		echo "Create .venv first with 'make local-venv'"; \
+		exit 1; \
+	fi
+	CONTAINER_BIN=$(CONTAINER_BIN) $(VENV_PY) -m pytest -o addopts= -m smoke
+
+.PHONY: test
+test: test-unit test-smoke ## Run unit tests first, then smoke tests

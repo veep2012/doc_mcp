@@ -33,6 +33,7 @@ Provide the entry point for the repository documentation set and link to the ope
 - [Crawling and Indexing](crawling.md)
 - [MCP Server](mcp-server.md)
 - [Manual Test Scenarios](manual-test-scenarios.md)
+- [Testing Framework Test Scenarios](test_scenarios/testing_framework_test_scenarios.md)
 - [Semantic Search Implementation Stages](semantic_search_implementation_stages.md)
 - [Operations](operations.md)
 - [Troubleshooting](troubleshooting.md)

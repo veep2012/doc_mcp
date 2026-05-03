@@ -3,5 +3,7 @@
 # Dependency auditing
 build>=1.2,<2
 pip-audit>=2.7,<3
+pytest>=9.0.3,<10
+pytest-asyncio>=1.3.0,<2
 setuptools>=68
 wheel>=0.42
