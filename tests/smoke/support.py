@@ -6,6 +6,7 @@ import subprocess
 import sys
 import time
 import tempfile
+import atexit
 import urllib.error
 import urllib.request
 from contextlib import contextmanager
@@ -17,6 +18,16 @@ from mcp import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 
 from tests.conftest import REPO_ROOT
+
+_SMOKE_ARTIFACT_DIRS: list[tempfile.TemporaryDirectory[str]] = []
+
+
+def _cleanup_smoke_artifacts() -> None:
+    while _SMOKE_ARTIFACT_DIRS:
+        _SMOKE_ARTIFACT_DIRS.pop().cleanup()
+
+
+atexit.register(_cleanup_smoke_artifacts)
 
 
 def require_executable(command: str, guidance: str) -> str:
@@ -56,7 +67,10 @@ def run_checked(
         if echo_output:
             _echo_process_output(result.stdout, result.stderr)
         return result
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as exc:
+        _write_smoke_log(log_path, args, exc.stdout, exc.stderr)
+        if echo_output:
+            _echo_process_output(exc.stdout, exc.stderr)
         pytest.fail(
             f"{description} timed out after {timeout} seconds.\n"
             f"Command: {' '.join(args)}\n"
@@ -106,7 +120,9 @@ def _echo_process_output(stdout: str | None, stderr: str | None) -> None:
 def smoke_artifact_root(test_name: str) -> Path:
     root = REPO_ROOT / ".local" / "smoke"
     root.mkdir(parents=True, exist_ok=True)
-    artifact_root = Path(tempfile.mkdtemp(prefix=f"{test_name}-", dir=root))
+    artifact_dir = tempfile.TemporaryDirectory(prefix=f"{test_name}-", dir=root)
+    _SMOKE_ARTIFACT_DIRS.append(artifact_dir)
+    artifact_root = Path(artifact_dir.name)
     for child in ("config", "storage", "index", "logs"):
         (artifact_root / child).mkdir(parents=True, exist_ok=True)
     return artifact_root
