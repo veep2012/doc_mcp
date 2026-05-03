@@ -33,6 +33,7 @@ Provide a single entry point for all files in `documentation/` and make it easy 
 - `crawling.md` - Crawler behavior, indexing flow, and crawl tuning.
 - `mcp-server.md` - MCP server entry points and client connection details.
 - `manual-test-scenarios.md` - Manual QA checklist for setup, authentication, crawling, indexing, and MCP client smoke tests.
+- `test_scenarios/testing_framework_test_scenarios.md` - Automated pytest and smoke scenario catalog for the repository test framework.
 - `semantic_search_implementation_stages.md` - Staged implementation plan for external vector index semantic and hybrid search.
 - `operations.md` - Operational workflow, maintenance, and runtime notes.
 - `troubleshooting.md` - Common failure modes and recovery steps.

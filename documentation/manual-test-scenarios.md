@@ -5,11 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-26
-- Last Updated: 2026-04-27
-- Version: v0.7
+- Last Updated: 2026-05-03
+- Version: v0.8
 
 ## Change Log
-- 2026-04-27 | v0.7 | Clarified development setup with and without Make and updated dependency and Playwright installation to run through the explicit virtual environment Python.
+- 2026-05-03 | v0.8 | Linked the automated pytest scenario document and clarified that this manual checklist remains the source coverage baseline.
 - 2026-04-26 | v0.3 | Added manual verification scenarios with separate development and installed-wheel runtime flows.
 
 ## Purpose
@@ -31,6 +31,8 @@ Provide a repeatable manual test checklist for validating that `doc-mcp` can be 
 ## Design / Behavior
 The checklist separates source-tree development checks from installed-wheel runtime checks, then validates shared authentication, crawling, server startup, MCP client configuration, search, fetch, and failure-mode behavior.
 
+The manual scenarios remain the source coverage checklist for the repository. Automated coverage derived from this checklist is tracked separately in [documentation/test_scenarios/testing_framework_test_scenarios.md](test_scenarios/testing_framework_test_scenarios.md).
+
 ## Audience
 - Repository maintainers
 - QA reviewers
@@ -42,6 +44,7 @@ The checklist separates source-tree development checks from installed-wheel runt
 - A test documentation site is available.
 - The tester can log in to the test site manually if authentication is required.
 - The tester can edit local files under `.env`, `config/`, `storage/`, and `index/`.
+- If you want a virtual environment directory other than `.venv`, set `DOC_MCP_VENV` and use that directory consistently when creating and activating the environment.
 
 ## Test Data
 - Site name: `My Docs`
@@ -69,15 +72,15 @@ Run this block first when validating the repository checkout directly.
      - macOS/Linux:
        - `python3 -m venv .venv`
        - `source .venv/bin/activate`
-       - `.venv/bin/python -m pip install --upgrade pip`
-       - `.venv/bin/python -m pip install -r requirements-dev.txt`
-       - `.venv/bin/python -m playwright install chromium`
+       - `python -m pip install --upgrade pip`
+       - `python -m pip install -r requirements-dev.txt`
+       - `python -m playwright install chromium`
      - Windows PowerShell:
        - `python -m venv .venv`
        - `.venv\Scripts\Activate.ps1`
-       - `.venv\Scripts\python.exe -m pip install --upgrade pip`
-       - `.venv\Scripts\python.exe -m pip install -r requirements-dev.txt`
-       - `.venv\Scripts\python.exe -m playwright install chromium`
+       - `python -m pip install --upgrade pip`
+       - `python -m pip install -r requirements-dev.txt`
+       - `python -m playwright install chromium`
   3. If `make local-venv` was used, activate the virtual environment:
      - macOS/Linux: `source .venv/bin/activate`
      - Windows PowerShell: `.venv\Scripts\Activate.ps1`
@@ -140,11 +143,11 @@ Run this block after the development environment passes, using a separate runtim
        - `python -m venv .venv`
        - `.venv\Scripts\Activate.ps1`
   4. Install the built wheel:
-     - macOS/Linux: `.venv/bin/python -m pip install /path/to/doc_mcp-*.whl`
-     - Windows PowerShell: `.venv\Scripts\python.exe -m pip install /path/to/doc_mcp-*.whl`
+     - macOS/Linux: `python -m pip install /path/to/doc_mcp-*.whl`
+     - Windows PowerShell: `python -m pip install /path/to/doc_mcp-*.whl`
   5. Install Chromium:
-     - macOS/Linux: `.venv/bin/python -m playwright install chromium`
-     - Windows PowerShell: `.venv\Scripts\python.exe -m playwright install chromium`
+     - macOS/Linux: `python -m playwright install chromium`
+     - Windows PowerShell: `python -m playwright install chromium`
   6. Run `docmcp-auth --help`.
   7. Run `docmcp-crawl --help`.
   8. Run `command -v docmcp-server` to verify the server console script is installed.
@@ -287,7 +290,7 @@ Run these scenarios after either `MT-003A` or `MT-003B`, using the command set f
 ### MT-011: Verify VS Code MCP Configuration
 - Steps:
   1. Create or update `.vscode/mcp.json` with the documented `docs-mcp` server config.
-  2. Development source tree: ensure `command` points to `${workspaceFolder}/.venv/bin/python` and `args` includes `-m` and `src.main`.
+  2. Development source tree: ensure `command` points to the active environment's `python` executable and `args` includes `-m` and `src.main`.
   3. Installed wheel: ensure `command` points to the installed `docmcp-server` executable.
   4. Ensure `.vscode/mcp.json` sets `CONFIG_FILE`, `DOC_MCP_HOME`, and `MCP_SERVER_NAME` in `servers.docs-mcp.env`.
   5. In VS Code, run `MCP: List Servers`.

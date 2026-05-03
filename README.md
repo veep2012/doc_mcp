@@ -22,23 +22,28 @@ make local-venv
 
 `make local-venv` creates and populates `.venv`, but activation still has to be run in your current shell.
 
+If you want a different virtual environment directory, set `DOC_MCP_VENV` before following the setup commands and substitute that path consistently in your shell.
+
 If `make` is not available, create the environment directly:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements-dev.txt
+VENV_DIR="${DOC_MCP_VENV:-.venv}"
+python3 -m venv "$VENV_DIR"
+source "$VENV_DIR/bin/activate"
+python -m pip install --upgrade pip
+python -m pip install -r requirements-dev.txt
 python -m playwright install chromium
 ```
 
 On Windows PowerShell without `make`:
 
 ```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install --upgrade pip
-pip install -r requirements-dev.txt
+$VenvDir = $env:DOC_MCP_VENV
+if (-not $VenvDir) { $VenvDir = ".venv" }
+python -m venv $VenvDir
+& "$VenvDir\Scripts\Activate.ps1"
+python -m pip install --upgrade pip
+python -m pip install -r requirements-dev.txt
 python -m playwright install chromium
 ```
 
@@ -87,6 +92,23 @@ python crawl_cli.py --site "My Docs"
 ```bash
 python -m src.main
 ```
+
+## Smoke Tests
+
+The repository includes smoke tests that exercise crawl and MCP behavior end to end. They have a few explicit prerequisites:
+
+- Podman or Docker must be installed and reachable as a container runtime.
+- Playwright Chromium must be installed in the active Python environment.
+- The environment must allow container networking and bind/mapped ports.
+
+Common limitations:
+
+- Rootless Podman can fail in CI or locked-down environments if user namespaces or port forwarding are restricted.
+- Docker may work where Podman does not, and vice versa.
+- If no container runtime is available, smoke tests should be skipped rather than expected to pass.
+- If Chromium is missing, Playwright-based auth, crawl, and smoke paths will fail before the first site run.
+
+When a container runtime is available, smoke failures should include a helpful message that points to `CONTAINER_BIN=docker` as an alternative when Podman is the default and rootless networking is the problem.
 
 ## Install On Another Environment
 

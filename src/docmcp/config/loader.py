@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 
 
 class ConfigError(RuntimeError):
@@ -88,17 +88,26 @@ def _validate_sites(config: Any) -> list[dict]:
     return sites
 
 
-# Load .env from the runtime workspace, not from the installed package directory.
-load_dotenv(_runtime_root() / ".env")
+def _runtime_env(root: Path) -> dict[str, str]:
+    """Return a private env mapping for the active runtime workspace."""
+    merged_env = dict(os.environ)
+    env_path = root / ".env"
+    if env_path.exists():
+        # Workspace .env values should take precedence for config resolution, but
+        # they stay local to this mapping instead of mutating process state.
+        for key, value in dotenv_values(env_path).items():
+            if key and value is not None:
+                merged_env[key] = value
+    return merged_env
 
 
-def _resolve_env_vars(value: Any) -> Any:
-    """Recursively resolve ${VAR_NAME} placeholders from environment variables."""
+def _resolve_env_vars(value: Any, env: dict[str, str]) -> Any:
+    """Recursively resolve ${VAR_NAME} placeholders from a provided env mapping."""
     if isinstance(value, str):
 
         def replacer(match):
             var_name = match.group(1)
-            resolved = os.environ.get(var_name)
+            resolved = env.get(var_name)
             if resolved is None:
                 # Return empty string for unset optional vars instead of crashing
                 return ""
@@ -106,15 +115,16 @@ def _resolve_env_vars(value: Any) -> Any:
 
         return re.sub(r"\$\{([^}]+)\}", replacer, value)
     elif isinstance(value, dict):
-        return {k: _resolve_env_vars(v) for k, v in value.items()}
+        return {k: _resolve_env_vars(v, env) for k, v in value.items()}
     elif isinstance(value, list):
-        return [_resolve_env_vars(i) for i in value]
+        return [_resolve_env_vars(i, env) for i in value]
     return value
 
 
 def load_config(config_path: str | None = None) -> dict:
     """Load and return the sites configuration with env vars resolved."""
     root = _runtime_root()
+    runtime_env = _runtime_env(root)
     if config_path is None:
         config_path = os.environ.get("CONFIG_FILE", "config/sites.yaml")
 
@@ -125,10 +135,13 @@ def load_config(config_path: str | None = None) -> dict:
     if not path.exists():
         raise ConfigError(_format_config_path_hint(path, root))
 
-    with open(path, "r", encoding="utf-8") as f:
-        raw = yaml.safe_load(f)
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            raw = yaml.safe_load(f)
+    except yaml.YAMLError as exc:
+        raise ConfigError(f"Configuration file is not valid YAML: {path}\n{exc}") from exc
 
-    return _resolve_runtime_paths(_resolve_env_vars(raw), root)
+    return _resolve_runtime_paths(_resolve_env_vars(raw, runtime_env), root)
 
 
 def validate_config() -> dict:

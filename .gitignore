@@ -28,3 +28,6 @@ __pycache__/
 
 # macOS metadata
 .DS_Store
+
+# Local smoke-test and scratch artifacts
+.local/

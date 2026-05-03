@@ -52,11 +52,11 @@ List the most common failure modes for `doc-mcp` and the first corrective step f
 - Install development dependencies through `make local-venv` or `python -m pip install -r requirements-dev.txt`.
 
 ### Windows Playwright Module Is Missing
-- A standalone `playwright` script may not be visible in `.venv\Scripts`; use the virtual environment Python instead.
-- Verify the package with `.venv\Scripts\python.exe -m pip show playwright`.
-- Verify the CLI module with `.venv\Scripts\python.exe -m playwright --version`.
-- If verification fails with `No module named playwright`, reinstall dependencies with `.venv\Scripts\python.exe -m pip install -r requirements-dev.txt`.
-- Install Chromium with `.venv\Scripts\python.exe -m playwright install chromium`.
+- A standalone `playwright` script may not be visible in the active environment; use `python -m ...` instead.
+- Verify the package with `python -m pip show playwright`.
+- Verify the CLI module with `python -m playwright --version`.
+- If verification fails with `No module named playwright`, reinstall dependencies with `python -m pip install -r requirements-dev.txt`.
+- Install Chromium with `python -m playwright install chromium`.
 
 ### Windows Console Output Looks Broken
 - `src/docmcp/main.py` reconfigures stdout and stderr to UTF-8.

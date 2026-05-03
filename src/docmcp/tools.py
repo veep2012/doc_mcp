@@ -56,7 +56,8 @@ def list_pages(site_name: str) -> str:
     pages = _list_pages(site["index_file"])
     if not pages:
         return f"No pages indexed for '{site_name}'. Run docmcp-crawl first."
-    lines = [f"## Pages in '{site_name}' ({len(pages)} total)\n"]
+    lines = [f"## Pages in '{site_name}' ({len(pages)} total)"]
+    lines.append(f"Index: {site['index_file']}\n")
     for p in pages:
         lines.append(f"- [{p['title']}]({p['url']})  _(last crawled: {p['last_crawled']})_")
     return "\n".join(lines)
