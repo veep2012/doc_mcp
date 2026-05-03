@@ -4,12 +4,13 @@
 
 ## Quick Start
 
-1. Create and activate the environment, then install the project commands:
+1. Create and activate the development environment.
+
+If `make` is available:
 
 ```bash
 make local-venv
 source .venv/bin/activate
-python -m pip install -e .
 ```
 
 On Windows PowerShell:
@@ -17,16 +18,51 @@ On Windows PowerShell:
 ```powershell
 make local-venv
 .venv\Scripts\Activate.ps1
-python -m pip install -e .
 ```
 
 `make local-venv` creates and populates `.venv`, but activation still has to be run in your current shell.
+
+If `make` is not available, create the environment directly:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements-dev.txt
+python -m playwright install chromium
+```
+
+On Windows PowerShell without `make`:
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install --upgrade pip
+pip install -r requirements-dev.txt
+python -m playwright install chromium
+```
+
+The development checkout can run through source-tree wrappers, so editable
+install is not required. If you want the `docmcp-auth`, `docmcp-crawl`, and
+`docmcp-server` console commands in this environment, run this after activating
+`.venv`:
+
+```bash
+python -m pip install -e .
+```
 
 2. Create local configuration files:
 
 ```bash
 cp .env.example .env
 cp config/sites.yaml.example config/sites.yaml
+```
+
+On Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+Copy-Item config\sites.yaml.example config\sites.yaml
 ```
 
 3. Edit `config/sites.yaml` and `.env` for your site, credentials, and paths.
@@ -36,20 +72,20 @@ cp config/sites.yaml.example config/sites.yaml
 4. Authenticate the site:
 
 ```bash
-docmcp-auth --list
-docmcp-auth --site "My Docs"
+python auth_cli.py --list
+python auth_cli.py --site "My Docs"
 ```
 
 5. Crawl and index the site:
 
 ```bash
-docmcp-crawl --site "My Docs"
+python crawl_cli.py --site "My Docs"
 ```
 
 6. Start the MCP server:
 
 ```bash
-docmcp-server
+python -m src.main
 ```
 
 ## Install On Another Environment

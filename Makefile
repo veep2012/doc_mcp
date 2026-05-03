@@ -18,9 +18,9 @@ help: ## Show available make targets
 local-venv: ## Create local Python venv and install dependencies; activate it separately
 ifeq ($(OS),Windows_NT)
 	$(PYTHON_BIN) -m venv .venv
-	powershell -NoProfile -ExecutionPolicy Bypass -Command "& { . .venv\Scripts\Activate.ps1; python -m pip install --upgrade pip; pip install -r requirements.txt -r requirements-dev.txt; playwright install chromium }"
+	powershell -NoProfile -ExecutionPolicy Bypass -Command "& { $(VENV_PY) -m pip install --upgrade pip; $(VENV_PY) -m pip install -r requirements-dev.txt; $(VENV_PY) -m playwright install chromium }"
 else
-	$(PYTHON_BIN) -m venv .venv && . .venv/bin/activate && python -m pip install --upgrade pip && pip install -r requirements.txt -r requirements-dev.txt && playwright install chromium
+	$(PYTHON_BIN) -m venv .venv && $(VENV_PY) -m pip install --upgrade pip && $(VENV_PY) -m pip install -r requirements-dev.txt && $(VENV_PY) -m playwright install chromium
 endif
 
 .PHONY: audit
@@ -38,4 +38,5 @@ wheel: ## Build a distributable wheel into dist/
 		exit 1; \
 	fi
 	$(VENV_PY) -m pip install -r requirements-dev.txt
-	$(VENV_PY) -m build --wheel
+	$(VENV_PY) -c "import shutil; shutil.rmtree('build', ignore_errors=True)"
+	$(VENV_PY) -m build --wheel --no-isolation

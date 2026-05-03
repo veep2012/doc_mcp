@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-04-25
-- Version: v1.1
+- Last Updated: 2026-04-27
+- Version: v1.2
 
 ## Change Log
+- 2026-04-27 | v1.2 | Added Windows Playwright module verification and recovery steps.
 - 2026-04-25 | v1.1 | Updated troubleshooting notes for the package entry point and VS Code MCP configuration.
 - 2026-04-24 | v1.0 | Reformatted the troubleshooting guide and grouped the common failures into standard sections.
 
@@ -48,7 +49,14 @@ List the most common failure modes for `doc-mcp` and the first corrective step f
 
 ### Missing Markdown Conversion
 - If `markdownify` is not installed, the crawler falls back to plain text extraction.
-- Install dependencies through `make local-venv` or `pip install -r requirements.txt`.
+- Install development dependencies through `make local-venv` or `python -m pip install -r requirements-dev.txt`.
+
+### Windows Playwright Module Is Missing
+- A standalone `playwright` script may not be visible in `.venv\Scripts`; use the virtual environment Python instead.
+- Verify the package with `.venv\Scripts\python.exe -m pip show playwright`.
+- Verify the CLI module with `.venv\Scripts\python.exe -m playwright --version`.
+- If verification fails with `No module named playwright`, reinstall dependencies with `.venv\Scripts\python.exe -m pip install -r requirements-dev.txt`.
+- Install Chromium with `.venv\Scripts\python.exe -m playwright install chromium`.
 
 ### Windows Console Output Looks Broken
 - `src/docmcp/main.py` reconfigures stdout and stderr to UTF-8.
