@@ -78,7 +78,9 @@ Run this block first when validating the repository checkout directly.
        - `.venv\Scripts\python.exe -m pip install --upgrade pip`
        - `.venv\Scripts\python.exe -m pip install -r requirements-dev.txt`
        - `.venv\Scripts\python.exe -m playwright install chromium`
-  3. If `make local-venv` was used, activate the virtual environment with `source .venv/bin/activate`.
+  3. If `make local-venv` was used, activate the virtual environment:
+     - macOS/Linux: `source .venv/bin/activate`
+     - Windows PowerShell: `.venv\Scripts\Activate.ps1`
   4. Run `python auth_cli.py --help`.
   5. Run `python crawl_cli.py --help`.
   6. Run `python -c "import src.docmcp.main"` to verify the server module imports.
