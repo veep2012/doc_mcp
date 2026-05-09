@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-04-25
-- Version: v1.2
+- Last Updated: 2026-05-09
+- Version: v1.3
 
 ## Change Log
+- 2026-05-09 | v1.3 | Documented the experimental `0.99.0` JSON response contract for `search_docs`.
 - 2026-04-25 | v1.2 | Added VS Code GitHub Copilot MCP setup instructions with the stable wheel-installed docmcp-server entry point and workspace runtime env values.
 - 2026-04-24 | v1.0 | Reformatted the MCP server reference and clarified stdio startup, tools, and client wiring.
 
@@ -44,8 +45,40 @@ python -m src.main
 ### Tool Behavior
 - `get_sites` lists each configured site and counts pages in its SQLite index.
 - `list_pages` returns indexed page titles, URLs, and last crawled timestamps.
-- `search_docs` runs SQLite FTS5 keyword search and returns snippets.
+- `search_docs` runs SQLite FTS5 keyword search and returns the experimental `0.99.0` canonical JSON response contract.
 - `fetch_page` returns the full Markdown content for a single indexed page.
+
+### Experimental Search Contract (`0.99.0`)
+`search_docs(site_name, query, limit=10)` currently returns a JSON string with this
+shape:
+
+```json
+{
+  "mode": "keyword",
+  "vector_hits": 0,
+  "keyword_hits": 2,
+  "results": [
+    {
+      "text": "Result snippet or chunk text",
+      "page_url": "https://docs.example.com/page",
+      "title": "Page title",
+      "score": 0.87,
+      "source": "keyword"
+    }
+  ]
+}
+```
+
+If no keyword results are available, the tool still returns valid JSON:
+
+```json
+{
+  "mode": "keyword",
+  "vector_hits": 0,
+  "keyword_hits": 0,
+  "results": []
+}
+```
 
 ### Client Setup
 - The server is designed for MCP clients that connect over stdio, such as VS Code / Copilot or Claude Desktop.

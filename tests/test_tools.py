@@ -1,3 +1,5 @@
+import json
+
 import docmcp.tools as tools
 from docmcp.index_store import init_db, upsert_page
 
@@ -31,9 +33,20 @@ def test_mcp_tools_return_site_pages_search_and_fetch(monkeypatch, tmp_path):
     assert "Guide" in list_output
     assert "Install" in list_output
 
-    search_output = tools.search_docs("Example Docs", "Alpha")
-    assert "Search results for 'Alpha'" in search_output
-    assert "Guide" in search_output
+    search_output = json.loads(tools.search_docs("Example Docs", "Alpha"))
+    assert search_output["mode"] == "keyword"
+    assert search_output["vector_hits"] == 0
+    assert search_output["keyword_hits"] == 1
+    assert search_output["results"] == [
+        {
+            "text": "[Alpha] beta",
+            "page_url": "https://example.test/guide",
+            "title": "Guide",
+            "score": search_output["results"][0]["score"],
+            "source": "keyword",
+        }
+    ]
+    assert isinstance(search_output["results"][0]["score"], float)
 
     fetch_output = tools.fetch_page("Example Docs", "https://example.test/guide")
     assert fetch_output.startswith("# Guide")
@@ -48,3 +61,34 @@ def test_mcp_tools_report_unknown_site(monkeypatch):
     assert (
         tools.fetch_page("Missing Docs", "https://example.test") == "Site 'Missing Docs' not found."
     )
+
+
+def test_search_docs_returns_empty_json_for_empty_or_missing_indexes(monkeypatch, tmp_path):
+    empty_index_file = tmp_path / "empty.db"
+    init_db(str(empty_index_file))
+
+    missing_index_file = tmp_path / "missing" / "docs.db"
+
+    monkeypatch.setattr(
+        tools,
+        "_get_sites",
+        lambda: [
+            {
+                "name": "Empty Docs",
+                "url": "https://empty.example.test",
+                "auth_required": False,
+                "index_file": str(empty_index_file),
+            },
+            {
+                "name": "Missing Docs",
+                "url": "https://missing.example.test",
+                "auth_required": False,
+                "index_file": str(missing_index_file),
+            },
+        ],
+    )
+
+    expected = {"mode": "keyword", "vector_hits": 0, "keyword_hits": 0, "results": []}
+
+    assert json.loads(tools.search_docs("Empty Docs", "Alpha")) == expected
+    assert json.loads(tools.search_docs("Missing Docs", "Alpha")) == expected

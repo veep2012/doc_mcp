@@ -78,16 +78,20 @@ def search_pages(index_file: str, query: str, limit: int = 10) -> list[dict]:
         rows = conn.execute(
             """
             SELECT p.url, p.title, p.last_crawled,
-                   snippet(pages_fts, 1, '[', ']', '...', 20) AS excerpt
+                   snippet(pages_fts, 1, '[', ']', '...', 20) AS excerpt,
+                   bm25(pages_fts) AS rank
             FROM pages_fts
             JOIN pages p ON pages_fts.rowid = p.id
             WHERE pages_fts MATCH ?
-            ORDER BY bm25(pages_fts)
+            ORDER BY rank
             LIMIT ?
         """,
             (query, limit),
         ).fetchall()
-    return [{"url": r[0], "title": r[1], "last_crawled": r[2], "excerpt": r[3]} for r in rows]
+    return [
+        {"url": r[0], "title": r[1], "last_crawled": r[2], "excerpt": r[3], "rank": r[4]}
+        for r in rows
+    ]
 
 
 def get_page(index_file: str, url: str) -> dict | None:

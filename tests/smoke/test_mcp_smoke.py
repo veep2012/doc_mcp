@@ -1,3 +1,4 @@
+import json
 import textwrap
 
 import pytest
@@ -53,5 +54,10 @@ async def test_mcp_stdio_search_docs_uses_prepared_index():
             errlog=mcp_log,
         )
 
-    assert "Search results for 'Alpha' in 'Prepared Docs'" in response
-    assert "Guide" in response
+    payload = json.loads(response)
+    assert payload["mode"] == "keyword"
+    assert payload["vector_hits"] == 0
+    assert payload["keyword_hits"] == 1
+    assert payload["results"][0]["title"] == "Guide"
+    assert payload["results"][0]["page_url"] == "https://example.test/guide"
+    assert payload["results"][0]["source"] == "keyword"

@@ -5,11 +5,12 @@
 - Owner: Repository maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-25
-- Last Updated: 2026-04-25
-- Version: v0.2
+- Last Updated: 2026-05-09
+- Version: v0.99.0
 - Related Tickets: https://github.com/veep2012/doc_mcp/issues/1
 
 ## Change Log
+- 2026-05-09 | v0.99.0 | Finalized the Stage 1 keyword search response contract, canonical JSON schema, examples, and experimental release status.
 - 2026-04-25 | v0.2 | Added the staged semantic, keyword, and hybrid search plan and updated implementation references for package entry points.
 
 ## Purpose
@@ -66,6 +67,10 @@ The main architectural constraint is that MCP must not own indexing. Chunking, e
 ### Stage 1: Define Search Contracts
 Goal: Establish the stable result schema before adding vector behavior.
 
+Stage 1 is the experimental `0.99.0` contract-definition release. In this stage,
+`search_docs(site_name, query, limit=10)` changes from Markdown output to a JSON
+string that matches the canonical schema below.
+
 Deliverables:
 - Define a shared search response shape for keyword, vector, and hybrid results.
 - Define result fields:
@@ -78,12 +83,14 @@ Deliverables:
   - `mode`
   - `vector_hits`
   - `keyword_hits`
-- Decide whether the current `search_docs` output remains a string for MCP compatibility or becomes structured JSON.
+- Change `search_docs` to return the canonical JSON contract immediately for keyword-only search.
+- Document the Stage 1 release as experimental `0.99.0`.
 
 Acceptance criteria:
 - A documented schema exists for all search modes.
 - Keyword search can return the new metadata without requiring a vector index.
-- Existing MCP clients have a migration path if the response shape changes.
+- Empty or missing keyword indexes still produce a valid JSON response.
+- The Stage 1 response shape is documented as the experimental `0.99.0` contract.
 
 ### Stage 2: Harden Keyword-Only Best-Effort Search
 Goal: Make the existing SQLite path the reliable fallback for every later stage.
@@ -189,6 +196,38 @@ Acceptance criteria:
 
 ## API Contract
 ### Search Response
+Canonical schema:
+
+```json
+{
+  "mode": "keyword | vector | hybrid",
+  "vector_hits": 0,
+  "keyword_hits": 0,
+  "results": [
+    {
+      "text": "string",
+      "page_url": "string",
+      "title": "string",
+      "score": 0.0,
+      "source": "keyword | vector"
+    }
+  ]
+}
+```
+
+Required metadata fields:
+- `mode`: the search mode used to produce the response
+- `vector_hits`: number of vector results considered for the response
+- `keyword_hits`: number of keyword results considered for the response
+
+Required result fields:
+- `text`: snippet or chunk text returned to the caller
+- `page_url`: canonical page URL for the result
+- `title`: page title associated with the result
+- `score`: experimental floating-point relevance score
+- `source`: result origin, such as `keyword` or `vector`
+
+### Search With Results
 ```json
 {
   "mode": "keyword",
@@ -203,6 +242,16 @@ Acceptance criteria:
       "source": "keyword"
     }
   ]
+}
+```
+
+### Search With No Results
+```json
+{
+  "mode": "keyword",
+  "vector_hits": 0,
+  "keyword_hits": 0,
+  "results": []
 }
 ```
 
@@ -244,7 +293,7 @@ semantic_search_docs(site_name: str, query: str, limit: int)
 ## Rollout / Migration
 - Keep keyword search as the first stable fallback before exposing vector features.
 - Introduce vector configuration as optional and disabled by default until local verification is reliable.
-- Preserve existing `search_docs` behavior or document any response shape migration before release.
+- Document the `search_docs` response migration from Markdown text to the experimental JSON contract in `0.99.0`.
 - Update user-facing docs in the same change that exposes new MCP tools.
 
 ## Risks and Mitigations
@@ -255,13 +304,12 @@ semantic_search_docs(site_name: str, query: str, limit: int)
 - Risk: Semantic search requires a site scope but the issue proposes a global function signature.
   - Mitigation: Align the final tool signature with the repository's existing `site_name` configuration model.
 - Risk: Structured responses may break clients expecting string output.
-  - Mitigation: Add a compatibility plan before changing existing tool output.
+  - Mitigation: Document the Stage 1 response migration and keep the JSON payload stable for later stages.
 
 ## Open Questions
 - Should semantic search be global, or should it require `site_name` like the existing MCP tools?
 - Which embedding provider should be used for query embeddings?
 - Which vector database should be supported first?
-- Should hybrid search replace `search_docs` or be exposed as a separate tool?
 - What stable chunk identifier should be used for deduplication?
 
 ## References

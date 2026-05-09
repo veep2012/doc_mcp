@@ -11,7 +11,9 @@ Tools:
 
 from mcp.server.fastmcp import FastMCP
 
+import json
 import os
+import sqlite3
 
 from .config.loader import get_sites as _get_sites
 from .index_store import count_pages, get_page, list_pages as _list_pages, search_pages
@@ -24,6 +26,33 @@ def _find_site(name: str) -> dict | None:
         if site["name"].lower() == name.lower():
             return site
     return None
+
+
+def _empty_search_response() -> dict:
+    return {"mode": "keyword", "vector_hits": 0, "keyword_hits": 0, "results": []}
+
+
+def _keyword_score(rank: float | None, position: int) -> float:
+    if rank is None:
+        return round(1.0 / (position + 1), 6)
+    normalized = 1.0 / (1.0 + abs(float(rank)))
+    return round(max(0.0, min(1.0, normalized)), 6)
+
+
+def _search_response(results: list[dict]) -> dict:
+    response = _empty_search_response()
+    response["keyword_hits"] = len(results)
+    response["results"] = [
+        {
+            "text": result.get("excerpt") or "",
+            "page_url": result["url"],
+            "title": result.get("title") or "",
+            "score": _keyword_score(result.get("rank"), index),
+            "source": "keyword",
+        }
+        for index, result in enumerate(results)
+    ]
+    return response
 
 
 @mcp.tool()
@@ -75,14 +104,11 @@ def search_docs(site_name: str, query: str, limit: int = 10) -> str:
     site = _find_site(site_name)
     if not site:
         return f"Site '{site_name}' not found."
-    results = search_pages(site["index_file"], query, limit)
-    if not results:
-        return f"No results found for '{query}' in '{site_name}'."
-    lines = [f"## Search results for '{query}' in '{site_name}'\n"]
-    for r in results:
-        lines.append(f"### [{r['title']}]({r['url']})")
-        lines.append(f"{r['excerpt']}\n")
-    return "\n".join(lines)
+    try:
+        results = search_pages(site["index_file"], query, limit)
+    except sqlite3.Error:
+        results = []
+    return json.dumps(_search_response(results), indent=2)
 
 
 @mcp.tool()
