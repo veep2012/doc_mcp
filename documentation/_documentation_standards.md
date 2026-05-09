@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-04-24
-- Version: v1.0
+- Last Updated: 2026-05-09
+- Version: v1.1
 
 ## Change Log
+- 2026-05-09 | v1.1 | Clarified that every document must keep exactly one Change Log entry per calendar date and merge same-day updates into the existing row.
 - 2026-04-24 | v1.0 | Reformatted the standards document into the repository documentation layout and preserved the governing rules.
 
 ## Purpose
@@ -71,7 +72,7 @@ Use `documentation/_documentation_template.md` as the starting point.
 - Add a new entry for each new document version.
 - Record version/date and a concise summary of what changed.
 - Keep the newest entry first.
-- Keep at most one `Change Log` entry per calendar date in each document.
+- Every document must keep exactly one `Change Log` entry per calendar date.
 - If multiple updates happen on the same date, merge them into the existing entry for that date instead of adding another row.
 - Keep historical decisions in document history or linked ADRs.
 

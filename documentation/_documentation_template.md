@@ -5,13 +5,14 @@
 - Owner: <team or person>
 - Reviewers: <names or roles>
 - Created: YYYY-MM-DD
-- Last Updated: YYYY-MM-DD
-- Version: v0.1
+- Last Updated: 2026-05-09
+- Version: v0.2
 - Related Tickets: <links or IDs>
 
 ## Change Log
-- YYYY-MM-DD | v0.1 | Initial draft
-- YYYY-MM-DD | v0.2 | <what changed>
+- 2026-05-09 | v0.2 | Added the one-entry-per-day Change Log rule and updated the starter metadata.
+
+Rule: keep exactly one Change Log entry per calendar date and merge same-day updates into the existing row.
 
 ## Purpose
 One short paragraph: what this document explains and why it exists.
