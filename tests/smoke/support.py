@@ -14,8 +14,12 @@ from pathlib import Path
 from typing import TextIO
 
 import pytest
-from mcp import ClientSession
-from mcp.client.stdio import StdioServerParameters, stdio_client
+
+try:
+    from mcp import ClientSession
+    from mcp.client.stdio import StdioServerParameters, stdio_client
+except ModuleNotFoundError:  # pragma: no cover - optional smoke dependency
+    pytest.skip("mcp is required for smoke tests", allow_module_level=True)
 
 from tests.conftest import REPO_ROOT
 

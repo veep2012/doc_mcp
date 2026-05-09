@@ -38,12 +38,14 @@ python -m src.main
 
 ### Available Tools
 - `get_sites`
+- `get_version`
 - `list_pages(site_name)`
 - `search_docs(site_name, query, limit=10)`
 - `fetch_page(site_name, url)`
 
 ### Tool Behavior
 - `get_sites` lists each configured site and counts pages in its SQLite index.
+- `get_version` returns the MCP server name and code-embedded package version for runtime checks.
 - `list_pages` returns indexed page titles, URLs, and last crawled timestamps.
 - `search_docs` runs SQLite FTS5 keyword search and returns the experimental `0.99.0` canonical JSON response contract.
 - `fetch_page` returns the full Markdown content for a single indexed page.

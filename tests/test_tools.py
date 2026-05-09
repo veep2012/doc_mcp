@@ -92,3 +92,15 @@ def test_search_docs_returns_empty_json_for_empty_or_missing_indexes(monkeypatch
 
     assert json.loads(tools.search_docs("Empty Docs", "Alpha")) == expected
     assert json.loads(tools.search_docs("Missing Docs", "Alpha")) == expected
+
+
+def test_get_version_returns_server_metadata(monkeypatch):
+    monkeypatch.setenv("MCP_SERVER_NAME", "docs-mcp")
+
+    payload = json.loads(tools.get_version())
+
+    assert payload == {
+        "package_name": "doc-mcp",
+        "server_name": "docs-mcp",
+        "version": "0.99.0",
+    }

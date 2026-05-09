@@ -7,14 +7,32 @@ Tools:
   - fetch_page    : retrieve a page by URL
   - list_pages    : list all indexed pages for a site
   - get_sites     : list all configured sites
+  - get_version   : report the MCP server version
 """
-
-from mcp.server.fastmcp import FastMCP
 
 import json
 import os
 import sqlite3
 
+try:
+    from mcp.server.fastmcp import FastMCP
+except ModuleNotFoundError:  # pragma: no cover - only used in minimal test environments
+
+    class FastMCP:  # type: ignore[too-many-ancestors]
+        def __init__(self, name: str):
+            self.name = name
+
+        def tool(self):
+            def decorator(func):
+                return func
+
+            return decorator
+
+        def run(self, transport: str = "stdio"):
+            raise ModuleNotFoundError("mcp is required to run the MCP server")
+
+
+from . import __version__
 from .config.loader import get_sites as _get_sites
 from .index_store import count_pages, get_page, list_pages as _list_pages, search_pages
 
@@ -70,6 +88,17 @@ def get_sites() -> str:
         lines.append(f"- **{site['name']}** ({auth}) — {status}")
         lines.append(f"  URL: {site['url']}")
     return "\n".join(lines)
+
+
+@mcp.tool()
+def get_version() -> str:
+    """Return the MCP server name and version."""
+    payload = {
+        "server_name": os.getenv("MCP_SERVER_NAME", "docs-mcp"),
+        "package_name": "doc-mcp",
+        "version": __version__,
+    }
+    return json.dumps(payload, indent=2, sort_keys=True)
 
 
 @mcp.tool()
