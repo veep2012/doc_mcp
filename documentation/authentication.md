@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-04-25
-- Version: v1.1
+- Last Updated: 2026-05-10
+- Version: v1.2
 
 ## Change Log
+- 2026-05-10 | v1.2 | Clarified that authentication is currently manual headful-only and that the sample auth metadata keys are informational.
 - 2026-04-25 | v1.1 | Updated commands and references for installed docmcp-auth package entry point.
 - 2026-04-24 | v1.0 | Reformatted the authentication guide and documented the current headful session flow.
 
@@ -56,7 +57,8 @@ docmcp-auth --site "My Docs" --force
 
 ### Practical Notes
 - Authentication is per site.
-- The login browser is headful so the user can complete MFA, email-code, or magic-link flows manually.
+- The login browser is headful so the user can complete whatever site-specific login flow is required manually.
+- The sample `auth_type` and `auth_mode` keys in `config/sites.yaml` are informational only; the runtime does not branch on them.
 - The crawler reuses the saved session if it is still valid.
 
 ## Edge Cases

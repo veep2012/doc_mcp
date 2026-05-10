@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-05-09
-- Version: v1.3
+- Last Updated: 2026-05-10
+- Version: v1.4
 
 ## Change Log
+- 2026-05-10 | v1.4 | Clarified that `search_docs` is keyword-only today and that the vector search counters remain zero until a vector backend is added.
 - 2026-05-09 | v1.3 | Documented the experimental `0.99.0` JSON response contract for `search_docs`.
 - 2026-04-25 | v1.2 | Added VS Code GitHub Copilot MCP setup instructions with the stable wheel-installed docmcp-server entry point and workspace runtime env values.
 - 2026-04-24 | v1.0 | Reformatted the MCP server reference and clarified stdio startup, tools, and client wiring.
@@ -47,7 +48,7 @@ python -m src.main
 - `get_sites` lists each configured site and counts pages in its SQLite index.
 - `get_version` returns the MCP server name and code-embedded package version for runtime checks.
 - `list_pages` returns indexed page titles, URLs, and last crawled timestamps.
-- `search_docs` runs SQLite FTS5 keyword search and returns the experimental `0.99.0` canonical JSON response contract.
+- `search_docs` runs SQLite FTS5 keyword search and returns the current `0.99.0` JSON response contract.
 - `fetch_page` returns the full Markdown content for a single indexed page.
 
 ### Experimental Search Contract (`0.99.0`)
@@ -71,6 +72,12 @@ shape:
 }
 ```
 
+Implementation notes:
+- `mode` is always `"keyword"` in the current code path.
+- `vector_hits` is always `0` because the server does not expose a vector backend yet.
+- `keyword_hits` reflects the number of SQLite FTS5 matches returned for the query.
+- `limit` defaults to `10` and is passed through to the underlying SQLite query.
+
 If no keyword results are available, the tool still returns valid JSON:
 
 ```json
@@ -81,6 +88,8 @@ If no keyword results are available, the tool still returns valid JSON:
   "results": []
 }
 ```
+
+If the site name is unknown, the tool returns a plain text error string rather than JSON.
 
 ### Client Setup
 - The server is designed for MCP clients that connect over stdio, such as VS Code / Copilot or Claude Desktop.
