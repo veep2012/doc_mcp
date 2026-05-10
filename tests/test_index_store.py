@@ -31,3 +31,18 @@ def test_index_store_round_trip_and_upsert(tmp_path):
     assert len(results) == 1
     assert results[0]["url"] == "https://example.test/guide"
     assert "[Alpha]" in results[0]["excerpt"]
+
+
+def test_read_paths_do_not_create_missing_index_file(tmp_path):
+    index_dir = tmp_path / "site"
+    index_dir.mkdir()
+    index_file = index_dir / "docs.db"
+
+    assert not index_file.exists()
+
+    assert search_pages(str(index_file), "Alpha") == []
+    assert get_page(str(index_file), "https://example.test/missing") is None
+    assert list_pages(str(index_file)) == []
+    assert count_pages(str(index_file)) == 0
+
+    assert not index_file.exists()

@@ -53,6 +53,11 @@ def test_mcp_tools_return_site_pages_search_and_fetch(monkeypatch, tmp_path):
     assert "Alpha beta" in fetch_output
 
 
+def test_keyword_score_is_monotonic_with_result_order():
+    assert tools._keyword_score(-0.001, 0) > tools._keyword_score(-10.0, 1)
+    assert tools._keyword_score(-10.0, 1) > tools._keyword_score(-20.0, 2)
+
+
 def test_mcp_tools_report_unknown_site(monkeypatch):
     monkeypatch.setattr(tools, "_get_sites", lambda: [])
 

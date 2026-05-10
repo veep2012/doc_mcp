@@ -51,10 +51,9 @@ def _empty_search_response() -> dict:
 
 
 def _keyword_score(rank: float | None, position: int) -> float:
-    if rank is None:
-        return round(1.0 / (position + 1), 6)
-    normalized = 1.0 / (1.0 + abs(float(rank)))
-    return round(max(0.0, min(1.0, normalized)), 6)
+    # FTS5 bm25() ranks are ordered best-to-worst by ascending value, and can be negative.
+    # Use the returned position so the score stays monotonic with the result ordering.
+    return round(1.0 / (position + 1), 6)
 
 
 def _search_response(results: list[dict]) -> dict:
