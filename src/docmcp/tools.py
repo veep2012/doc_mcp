@@ -50,6 +50,15 @@ def _empty_search_response() -> dict:
     return {"mode": "keyword", "vector_hits": 0, "keyword_hits": 0, "results": []}
 
 
+def _site_not_found_search_response(site_name: str) -> dict:
+    response = _empty_search_response()
+    response["error"] = {
+        "type": "site_not_found",
+        "message": f"Site '{site_name}' not found.",
+    }
+    return response
+
+
 def _keyword_score(rank: float | None, position: int) -> float:
     # FTS5 bm25() ranks are ordered best-to-worst by ascending value, and can be negative.
     # Use the returned position so the score stays monotonic with the result ordering.
@@ -131,7 +140,7 @@ def search_docs(site_name: str, query: str, limit: int = 10) -> str:
     """
     site = _find_site(site_name)
     if not site:
-        return f"Site '{site_name}' not found."
+        return json.dumps(_site_not_found_search_response(site_name), indent=2)
     try:
         results = search_pages(site["index_file"], query, limit)
     except sqlite3.Error:

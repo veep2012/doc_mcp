@@ -62,7 +62,16 @@ def test_mcp_tools_report_unknown_site(monkeypatch):
     monkeypatch.setattr(tools, "_get_sites", lambda: [])
 
     assert tools.list_pages("Missing Docs") == "Site 'Missing Docs' not found."
-    assert tools.search_docs("Missing Docs", "query") == "Site 'Missing Docs' not found."
+    assert json.loads(tools.search_docs("Missing Docs", "query")) == {
+        "mode": "keyword",
+        "vector_hits": 0,
+        "keyword_hits": 0,
+        "results": [],
+        "error": {
+            "type": "site_not_found",
+            "message": "Site 'Missing Docs' not found.",
+        },
+    }
     assert (
         tools.fetch_page("Missing Docs", "https://example.test") == "Site 'Missing Docs' not found."
     )
@@ -97,6 +106,29 @@ def test_search_docs_returns_empty_json_for_empty_or_missing_indexes(monkeypatch
 
     assert json.loads(tools.search_docs("Empty Docs", "Alpha")) == expected
     assert json.loads(tools.search_docs("Missing Docs", "Alpha")) == expected
+
+
+def test_search_docs_rejects_non_positive_limit(monkeypatch, tmp_path):
+    index_file = tmp_path / "docs.db"
+    init_db(str(index_file))
+    upsert_page(str(index_file), "https://example.test/guide", "Guide", "Alpha beta")
+
+    monkeypatch.setattr(
+        tools,
+        "_get_sites",
+        lambda: [
+            {
+                "name": "Example Docs",
+                "url": "https://example.test",
+                "auth_required": False,
+                "index_file": str(index_file),
+            }
+        ],
+    )
+
+    expected = {"mode": "keyword", "vector_hits": 0, "keyword_hits": 0, "results": []}
+
+    assert json.loads(tools.search_docs("Example Docs", "Alpha", limit=0)) == expected
 
 
 def test_get_version_returns_server_metadata(monkeypatch):

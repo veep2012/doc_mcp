@@ -224,8 +224,14 @@ Required result fields:
 - `text`: snippet or chunk text returned to the caller
 - `page_url`: canonical page URL for the result
 - `title`: page title associated with the result
-- `score`: experimental floating-point relevance score
+- `score`: experimental floating-point ordering hint
 - `source`: result origin, such as `keyword` or `vector`
+
+Score semantics in Stage 1:
+- `score` is keyword-only in the current release.
+- `score` is derived from returned ordering, not from semantic similarity.
+- `score` is not comparable across queries, datasets, or future search engines.
+- `score` should be treated as an ordinal hint until vector or hybrid search is introduced.
 
 ### Search With Results
 ```json
@@ -244,6 +250,12 @@ Required result fields:
   ]
 }
 ```
+
+### Score Semantics
+- The current `score` values are experimental and keyword-only.
+- They are derived from result order rather than a semantic similarity calculation.
+- They are stable enough for UI ranking, but not meaningful across different queries or engines.
+- Future vector or hybrid search modes may change how scores are computed while preserving the response shape.
 
 ### Search With No Results
 ```json
@@ -305,6 +317,8 @@ semantic_search_docs(site_name: str, query: str, limit: int)
   - Mitigation: Align the final tool signature with the repository's existing `site_name` configuration model.
 - Risk: Structured responses may break clients expecting string output.
   - Mitigation: Document the Stage 1 response migration and keep the JSON payload stable for later stages.
+- Risk: Lookup failures and empty-result responses can be confused by callers.
+  - Mitigation: Return structured JSON for unknown-site errors and keep empty-result responses as the base JSON contract with no `error` field.
 
 ## Open Questions
 - Should semantic search be global, or should it require `site_name` like the existing MCP tools?

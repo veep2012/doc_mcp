@@ -9,7 +9,7 @@
 - Version: v1.4
 
 ## Change Log
-- 2026-05-10 | v1.4 | Clarified that `search_docs` is keyword-only today and that the vector search counters remain zero until a vector backend is added.
+- 2026-05-10 | v1.4 | Clarified that `search_docs` is keyword-only today, that the vector search counters remain zero until a vector backend is added, that `score` is an ordinal value derived from result order rather than a semantic relevance score, and that lookup failures return structured JSON.
 - 2026-05-09 | v1.3 | Documented the experimental `0.99.0` JSON response contract for `search_docs`.
 - 2026-04-25 | v1.2 | Added VS Code GitHub Copilot MCP setup instructions with the stable wheel-installed docmcp-server entry point and workspace runtime env values.
 - 2026-04-24 | v1.0 | Reformatted the MCP server reference and clarified stdio startup, tools, and client wiring.
@@ -77,6 +77,10 @@ Implementation notes:
 - `vector_hits` is always `0` because the server does not expose a vector backend yet.
 - `keyword_hits` reflects the number of SQLite FTS5 matches returned for the query.
 - `limit` defaults to `10` and is passed through to the underlying SQLite query.
+- `score` is experimental and keyword-only today.
+- `score` is derived from the returned ordering, not from a semantic similarity metric.
+- `score` is not comparable across different queries, datasets, or future search engines.
+- `score` should be treated as an ordinal hint for UI ranking, not as an absolute relevance measure.
 
 If no keyword results are available, the tool still returns valid JSON:
 
@@ -89,7 +93,22 @@ If no keyword results are available, the tool still returns valid JSON:
 }
 ```
 
-If the site name is unknown, the tool returns a plain text error string rather than JSON.
+If the site name is unknown, the tool returns structured JSON with an `error` object instead of plain text:
+
+```json
+{
+  "mode": "keyword",
+  "vector_hits": 0,
+  "keyword_hits": 0,
+  "results": [],
+  "error": {
+    "type": "site_not_found",
+    "message": "Site 'Missing Docs' not found."
+  }
+}
+```
+
+Successful search calls and empty-index search calls still return the base JSON search contract.
 
 ### Client Setup
 - The server is designed for MCP clients that connect over stdio, such as VS Code / Copilot or Claude Desktop.

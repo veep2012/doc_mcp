@@ -33,6 +33,23 @@ def test_index_store_round_trip_and_upsert(tmp_path):
     assert "[Alpha]" in results[0]["excerpt"]
 
 
+def test_search_pages_rejects_non_positive_and_clamps_large_limits(tmp_path):
+    index_file = tmp_path / "docs.db"
+
+    init_db(str(index_file))
+    for i in range(105):
+        upsert_page(
+            str(index_file),
+            f"https://example.test/page-{i}",
+            f"Page {i}",
+            "Alpha content",
+        )
+
+    assert search_pages(str(index_file), "Alpha", limit=0) == []
+    assert search_pages(str(index_file), "Alpha", limit=-5) == []
+    assert len(search_pages(str(index_file), "Alpha", limit=1000)) == 100
+
+
 def test_read_paths_do_not_create_missing_index_file(tmp_path):
     index_dir = tmp_path / "site"
     index_dir.mkdir()

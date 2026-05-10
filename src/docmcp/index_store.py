@@ -7,6 +7,8 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
+_SEARCH_LIMIT_MAX = 100
+
 
 def _get_conn(index_file: str) -> sqlite3.Connection:
     path = Path(index_file)
@@ -19,6 +21,12 @@ def _get_ro_conn(index_file: str) -> sqlite3.Connection | None:
     if not path.exists():
         return None
     return sqlite3.connect(f"{path.resolve(strict=False).as_uri()}?mode=ro", uri=True)
+
+
+def _normalize_search_limit(limit: int) -> int | None:
+    if limit <= 0:
+        return None
+    return min(limit, _SEARCH_LIMIT_MAX)
 
 
 def init_db(index_file: str) -> None:
@@ -81,6 +89,9 @@ def upsert_page(index_file: str, url: str, title: str, content_md: str) -> None:
 
 def search_pages(index_file: str, query: str, limit: int = 10) -> list[dict]:
     """Full-text search across title and content. Returns list of matching pages."""
+    limit = _normalize_search_limit(limit)
+    if limit is None:
+        return []
     conn = _get_ro_conn(index_file)
     if conn is None:
         return []
