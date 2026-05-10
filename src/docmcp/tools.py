@@ -7,12 +7,32 @@ Tools:
   - fetch_page    : retrieve a page by URL
   - list_pages    : list all indexed pages for a site
   - get_sites     : list all configured sites
+  - get_version   : report the MCP server version
 """
 
-from mcp.server.fastmcp import FastMCP
-
+import json
 import os
+import sqlite3
 
+try:
+    from mcp.server.fastmcp import FastMCP
+except ModuleNotFoundError:  # pragma: no cover - only used in minimal test environments
+
+    class FastMCP:  # type: ignore[too-many-ancestors]
+        def __init__(self, name: str):
+            self.name = name
+
+        def tool(self):
+            def decorator(func):
+                return func
+
+            return decorator
+
+        def run(self, transport: str = "stdio"):
+            raise ModuleNotFoundError("mcp is required to run the MCP server")
+
+
+from . import __version__
 from .config.loader import get_sites as _get_sites
 from .index_store import count_pages, get_page, list_pages as _list_pages, search_pages
 
@@ -24,6 +44,41 @@ def _find_site(name: str) -> dict | None:
         if site["name"].lower() == name.lower():
             return site
     return None
+
+
+def _empty_search_response() -> dict:
+    return {"mode": "keyword", "vector_hits": 0, "keyword_hits": 0, "results": []}
+
+
+def _site_not_found_search_response(site_name: str) -> dict:
+    response = _empty_search_response()
+    response["error"] = {
+        "type": "site_not_found",
+        "message": f"Site '{site_name}' not found.",
+    }
+    return response
+
+
+def _keyword_score(rank: float | None, position: int) -> float:
+    # FTS5 bm25() ranks are ordered best-to-worst by ascending value, and can be negative.
+    # Use the returned position so the score stays monotonic with the result ordering.
+    return round(1.0 / (position + 1), 6)
+
+
+def _search_response(results: list[dict]) -> dict:
+    response = _empty_search_response()
+    response["keyword_hits"] = len(results)
+    response["results"] = [
+        {
+            "text": result.get("excerpt") or "",
+            "page_url": result["url"],
+            "title": result.get("title") or "",
+            "score": _keyword_score(result.get("rank"), index),
+            "source": "keyword",
+        }
+        for index, result in enumerate(results)
+    ]
+    return response
 
 
 @mcp.tool()
@@ -41,6 +96,17 @@ def get_sites() -> str:
         lines.append(f"- **{site['name']}** ({auth}) — {status}")
         lines.append(f"  URL: {site['url']}")
     return "\n".join(lines)
+
+
+@mcp.tool()
+def get_version() -> str:
+    """Return the MCP server name and version."""
+    payload = {
+        "server_name": os.getenv("MCP_SERVER_NAME", "docs-mcp"),
+        "package_name": "doc-mcp",
+        "version": __version__,
+    }
+    return json.dumps(payload, indent=2, sort_keys=True)
 
 
 @mcp.tool()
@@ -74,15 +140,12 @@ def search_docs(site_name: str, query: str, limit: int = 10) -> str:
     """
     site = _find_site(site_name)
     if not site:
-        return f"Site '{site_name}' not found."
-    results = search_pages(site["index_file"], query, limit)
-    if not results:
-        return f"No results found for '{query}' in '{site_name}'."
-    lines = [f"## Search results for '{query}' in '{site_name}'\n"]
-    for r in results:
-        lines.append(f"### [{r['title']}]({r['url']})")
-        lines.append(f"{r['excerpt']}\n")
-    return "\n".join(lines)
+        return json.dumps(_site_not_found_search_response(site_name), indent=2)
+    try:
+        results = search_pages(site["index_file"], query, limit)
+    except sqlite3.Error:
+        results = []
+    return json.dumps(_search_response(results), indent=2)
 
 
 @mcp.tool()

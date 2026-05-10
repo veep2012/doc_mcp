@@ -72,7 +72,7 @@ Copy-Item config\sites.yaml.example config\sites.yaml
 
 3. Edit `config/sites.yaml` and `.env` for your site, credentials, and paths.
 
-   The current authentication flow is validated for `headful` login only. The `email_code` and `password_only` auth types are not tested thoroughly and are not recommended for production use.
+   The current authentication flow is manual and headful only: Playwright opens a visible browser and you complete the login yourself. The sample `auth_type` and `auth_mode` keys are informational metadata, not runtime switches, so the active configuration is driven by `auth_required`, `session_file`, `crawl`, and `index_file`.
 
 4. Authenticate the site:
 
@@ -92,6 +92,8 @@ python crawl_cli.py --site "My Docs"
 ```bash
 python -m src.main
 ```
+
+`search_docs(site_name, query, limit=10)` returns JSON text in `0.99.0`, not Markdown or prose snippets. MCP clients and prompt flows should parse the JSON response instead of rendering it directly as display text.
 
 ## Smoke Tests
 

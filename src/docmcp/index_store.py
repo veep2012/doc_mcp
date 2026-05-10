@@ -7,11 +7,26 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
+_SEARCH_LIMIT_MAX = 100
+
 
 def _get_conn(index_file: str) -> sqlite3.Connection:
     path = Path(index_file)
     path.parent.mkdir(parents=True, exist_ok=True)
     return sqlite3.connect(str(path))
+
+
+def _get_ro_conn(index_file: str) -> sqlite3.Connection | None:
+    path = Path(index_file)
+    if not path.exists():
+        return None
+    return sqlite3.connect(f"{path.resolve(strict=False).as_uri()}?mode=ro", uri=True)
+
+
+def _normalize_search_limit(limit: int) -> int | None:
+    if limit <= 0:
+        return None
+    return min(limit, _SEARCH_LIMIT_MAX)
 
 
 def init_db(index_file: str) -> None:
@@ -74,25 +89,38 @@ def upsert_page(index_file: str, url: str, title: str, content_md: str) -> None:
 
 def search_pages(index_file: str, query: str, limit: int = 10) -> list[dict]:
     """Full-text search across title and content. Returns list of matching pages."""
-    with _get_conn(index_file) as conn:
+    limit = _normalize_search_limit(limit)
+    if limit is None:
+        return []
+    conn = _get_ro_conn(index_file)
+    if conn is None:
+        return []
+    with conn as conn:
         rows = conn.execute(
             """
             SELECT p.url, p.title, p.last_crawled,
-                   snippet(pages_fts, 1, '[', ']', '...', 20) AS excerpt
+                   snippet(pages_fts, 1, '[', ']', '...', 20) AS excerpt,
+                   bm25(pages_fts) AS rank
             FROM pages_fts
             JOIN pages p ON pages_fts.rowid = p.id
             WHERE pages_fts MATCH ?
-            ORDER BY bm25(pages_fts)
+            ORDER BY rank
             LIMIT ?
         """,
             (query, limit),
         ).fetchall()
-    return [{"url": r[0], "title": r[1], "last_crawled": r[2], "excerpt": r[3]} for r in rows]
+    return [
+        {"url": r[0], "title": r[1], "last_crawled": r[2], "excerpt": r[3], "rank": r[4]}
+        for r in rows
+    ]
 
 
 def get_page(index_file: str, url: str) -> dict | None:
     """Fetch a single page by URL."""
-    with _get_conn(index_file) as conn:
+    conn = _get_ro_conn(index_file)
+    if conn is None:
+        return None
+    with conn as conn:
         row = conn.execute(
             "SELECT url, title, content_md, last_crawled FROM pages WHERE url = ?", (url,)
         ).fetchone()
@@ -103,12 +131,18 @@ def get_page(index_file: str, url: str) -> dict | None:
 
 def list_pages(index_file: str) -> list[dict]:
     """List all indexed pages (url, title, last_crawled)."""
-    with _get_conn(index_file) as conn:
+    conn = _get_ro_conn(index_file)
+    if conn is None:
+        return []
+    with conn as conn:
         rows = conn.execute("SELECT url, title, last_crawled FROM pages ORDER BY title").fetchall()
     return [{"url": r[0], "title": r[1], "last_crawled": r[2]} for r in rows]
 
 
 def count_pages(index_file: str) -> int:
     """Return total number of indexed pages."""
-    with _get_conn(index_file) as conn:
+    conn = _get_ro_conn(index_file)
+    if conn is None:
+        return 0
+    with conn as conn:
         return conn.execute("SELECT COUNT(*) FROM pages").fetchone()[0]
