@@ -1,4 +1,5 @@
 import json
+import sqlite3
 
 import docmcp.tools as tools
 from docmcp.index_store import init_db, upsert_page
@@ -108,6 +109,64 @@ def test_search_docs_returns_empty_json_for_empty_or_missing_indexes(monkeypatch
     assert json.loads(tools.search_docs("Missing Docs", "Alpha")) == expected
 
 
+def test_search_docs_returns_empty_json_for_zero_match_query(monkeypatch, tmp_path):
+    index_file = tmp_path / "docs.db"
+    init_db(str(index_file))
+    upsert_page(str(index_file), "https://example.test/guide", "Guide", "Alpha beta")
+
+    monkeypatch.setattr(
+        tools,
+        "_get_sites",
+        lambda: [
+            {
+                "name": "Example Docs",
+                "url": "https://example.test",
+                "auth_required": False,
+                "index_file": str(index_file),
+            }
+        ],
+    )
+
+    assert json.loads(tools.search_docs("Example Docs", "Omega")) == {
+        "mode": "keyword",
+        "vector_hits": 0,
+        "keyword_hits": 0,
+        "results": [],
+    }
+
+
+def test_search_docs_returns_empty_json_on_sqlite_query_error(monkeypatch, tmp_path):
+    index_file = tmp_path / "docs.db"
+
+    def raise_sqlite_error(index_file: str, query: str, limit: int) -> list[dict]:
+        raise sqlite3.OperationalError("broken")
+
+    monkeypatch.setattr(
+        tools,
+        "_get_sites",
+        lambda: [
+            {
+                "name": "Broken Docs",
+                "url": "https://example.test",
+                "auth_required": False,
+                "index_file": str(index_file),
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        tools,
+        "search_pages",
+        raise_sqlite_error,
+    )
+
+    assert json.loads(tools.search_docs("Broken Docs", "Alpha")) == {
+        "mode": "keyword",
+        "vector_hits": 0,
+        "keyword_hits": 0,
+        "results": [],
+    }
+
+
 def test_search_docs_rejects_non_positive_limit(monkeypatch, tmp_path):
     index_file = tmp_path / "docs.db"
     init_db(str(index_file))
@@ -139,5 +198,5 @@ def test_get_version_returns_server_metadata(monkeypatch):
     assert payload == {
         "package_name": "doc-mcp",
         "server_name": "docs-mcp",
-        "version": "0.99.0",
+        "version": "0.99.1",
     }
