@@ -198,5 +198,5 @@ def test_get_version_returns_server_metadata(monkeypatch):
     assert payload == {
         "package_name": "doc-mcp",
         "server_name": "docs-mcp",
-        "version": "0.99.0",
+        "version": "0.99.1",
     }

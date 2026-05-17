@@ -6,11 +6,11 @@
 - Reviewers: Repository maintainers
 - Created: 2026-04-25
 - Last Updated: 2026-05-17
-- Version: v0.99.0
+- Version: v0.99.1
 - Related Tickets: https://github.com/veep2012/doc_mcp/issues/1
 
 ## Change Log
-- 2026-05-17 | v0.99.0 | Marked Stage 2 keyword-only hardening as implemented for the current `search_docs` path, including safe empty-result fallbacks for missing, empty, or failing SQLite keyword indexes.
+- 2026-05-17 | v0.99.1 | Marked Stage 2 keyword-only hardening as implemented for the current `search_docs` path, including safe empty-result fallbacks for missing, empty, or failing SQLite keyword indexes.
 - 2026-05-09 | v0.99.0 | Finalized the Stage 1 keyword search response contract, canonical JSON schema, examples, and experimental release status.
 - 2026-04-25 | v0.2 | Added the staged semantic, keyword, and hybrid search plan and updated implementation references for package entry points.
 
@@ -68,7 +68,7 @@ The main architectural constraint is that MCP must not own indexing. Chunking, e
 ### Stage 1: Define Search Contracts
 Goal: Establish the stable result schema before adding vector behavior.
 
-Stage 1 is the experimental `0.99.0` contract-definition release. In this stage,
+Stage 1 is the experimental `0.99.1` contract-definition release. In this stage,
 `search_docs(site_name, query, limit=10)` changes from Markdown output to a JSON
 string that matches the canonical schema below.
 
@@ -85,13 +85,13 @@ Deliverables:
   - `vector_hits`
   - `keyword_hits`
 - Change `search_docs` to return the canonical JSON contract immediately for keyword-only search.
-- Document the Stage 1 release as experimental `0.99.0`.
+- Document the Stage 1 release as experimental `0.99.1`.
 
 Acceptance criteria:
 - A documented schema exists for all search modes.
 - Keyword search can return the new metadata without requiring a vector index.
 - Empty or missing keyword indexes still produce a valid JSON response.
-- The Stage 1 response shape is documented as the experimental `0.99.0` contract.
+- The Stage 1 response shape is documented as the experimental `0.99.1` contract.
 
 ### Stage 2: Harden Keyword-Only Best-Effort Search
 Goal: Make the existing SQLite path the reliable fallback for every later stage.
@@ -311,7 +311,7 @@ semantic_search_docs(site_name: str, query: str, limit: int)
 ## Rollout / Migration
 - Keep keyword search as the first stable fallback before exposing vector features.
 - Introduce vector configuration as optional and disabled by default until local verification is reliable.
-- Document the `search_docs` response migration from Markdown text to the experimental JSON contract in `0.99.0`.
+- Document the `search_docs` response migration from Markdown text to the experimental JSON contract in `0.99.1`.
 - Update user-facing docs in the same change that exposes new MCP tools.
 
 ## Risks and Mitigations
