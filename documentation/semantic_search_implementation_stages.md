@@ -6,25 +6,26 @@
 - Reviewers: Repository maintainers
 - Created: 2026-04-25
 - Last Updated: 2026-05-17
-- Version: v0.99.1
+- Version: v1.0.0
 - Related Tickets: https://github.com/veep2012/doc_mcp/issues/1
 
 ## Change Log
+- 2026-05-17 | v1.0.0 | Reframed the epic around a repo-owned local vector index and a separate post-crawl vectorizer step, replacing the external vector DB assumption.
 - 2026-05-17 | v0.99.1 | Marked Stage 2 keyword-only hardening as implemented for the current `search_docs` path, including safe empty-result fallbacks for missing, empty, or failing SQLite keyword indexes.
 - 2026-05-09 | v0.99.0 | Finalized the Stage 1 keyword search response contract, canonical JSON schema, examples, and experimental release status.
 - 2026-04-25 | v0.2 | Added the staged semantic, keyword, and hybrid search plan and updated implementation references for package entry points.
 
 ## Purpose
-Split the semantic search epic into implementation stages that can be delivered and validated independently while keeping the MCP server read-only and stateless.
+Split the semantic search epic into implementation stages that can be delivered and validated independently while keeping the MCP server read-only at query time.
 
 ## Scope
 - In scope:
-  - Staged implementation plan for best-effort search, semantic search, hybrid search, mode transparency, and graceful degradation.
+  - Staged implementation plan for best-effort search, local vector indexing, semantic search, hybrid search, mode transparency, and graceful degradation.
   - Acceptance criteria for each implementation stage.
-  - Boundaries between MCP retrieval behavior and external indexing behavior.
+  - Boundaries between the crawler, the post-crawl vectorizer, and MCP retrieval behavior.
 - Out of scope:
-  - Building the external chunking, embedding, or indexing pipeline.
-  - Selecting a final production vector database provider.
+  - Selecting a final production embedding provider.
+  - Selecting a final production vector storage backend outside the repo-owned local index.
   - Replacing the current SQLite crawler and keyword index.
 
 ## Audience
@@ -35,27 +36,29 @@ Split the semantic search epic into implementation stages that can be delivered 
 ## Definitions
 - MCP: The read-only Model Context Protocol server that exposes documentation retrieval tools.
 - Keyword index: The existing SQLite FTS index populated by the crawler.
-- Vector index: An externally managed vector store such as Chroma.
+- Vector index: A repo-owned local vector store built from crawled content.
+- Vectorizer: A dedicated post-crawl step that reads crawled pages and writes the local vector index.
 - Chunk: A searchable text segment stored in the vector index.
 - Best-effort search: Search behavior that returns useful results from whatever index data is currently available.
 - Hybrid search: Search behavior that combines vector and keyword results.
 
 ## Background / Context
-The current MCP server exposes keyword search through `search_docs(site_name, query, limit=10)` and reads indexed documentation pages from SQLite. Issue #1 expands this into a best-effort retrieval layer that can use an external vector index when available, fall back to SQLite keyword search when needed, and expose enough metadata for callers to understand how results were produced.
+The current MCP server exposes keyword search through `search_docs(site_name, query, limit=10)` and reads indexed documentation pages from SQLite. Issue #1 expands this into a best-effort retrieval layer that can use a repo-owned local vector index when available, fall back to SQLite keyword search when needed, and expose enough metadata for callers to understand how results were produced.
 
-The main architectural constraint is that MCP must not own indexing. Chunking, embedding generation, and vector index updates remain outside the MCP server. MCP may embed the incoming query at request time when semantic search is requested, but it should only read existing SQLite and vector index data.
+The main architectural constraint is that MCP must not own indexing at query time. Chunking, embedding generation, and vector index writes belong to a separate post-crawl vectorizer step. MCP may read both SQLite and the local vector index, but it should never create or update either store during a search request.
 
 ## Requirements
 ### Functional Requirements
-- FR-1: MCP must work when the vector index is absent.
-- FR-2: MCP must work when the vector index is partial.
-- FR-3: MCP must work when the vector index is complete.
+- FR-1: MCP keyword search must work when the vector index is absent.
+- FR-2: MCP keyword search must work when the vector index is partial.
+- FR-3: The vectorizer must be able to build or refresh the local vector index from crawled content.
 - FR-4: MCP must fall back to SQLite keyword search when vector search cannot produce usable results.
-- FR-5: MCP must not perform document chunking, document embedding generation, or index writes.
-- FR-6: MCP must expose semantic search for documentation queries.
-- FR-7: MCP must support hybrid search when both keyword and vector indexes are available.
-- FR-8: MCP responses must identify the search mode used: `vector`, `keyword`, or `hybrid`.
-- FR-9: MCP responses should include vector hit count and keyword hit count when available.
+- FR-5: MCP query paths must not perform document chunking, document embedding generation, or vector index writes.
+- FR-6: The vectorizer must generate embeddings and persist them to the local vector index.
+- FR-7: MCP must expose semantic search for documentation queries.
+- FR-8: MCP must support hybrid search when both keyword and vector indexes are available.
+- FR-9: MCP responses must identify the search mode used: `vector`, `keyword`, or `hybrid`.
+- FR-10: MCP responses should include vector hit count and keyword hit count when available.
 
 ### Non-Functional Requirements
 - NFR-1: Missing vector data must not crash MCP tools.
@@ -112,37 +115,53 @@ Acceptance criteria:
 - Missing vector configuration causes no errors.
 - Empty keyword results return a valid response with `keyword_hits: 0`.
 
-### Stage 3: Add Optional Vector Client Boundary
-Goal: Add a read-only adapter for an external vector index without changing crawler responsibilities.
+### Stage 3: Define Local Vector Index Boundary
+Goal: Specify the repo-owned local vector store, its record shape, and the interfaces needed by later stages.
 
 Deliverables:
-- Add configuration for vector search availability and connection details.
-- Add a vector client interface that can query existing chunks by site and query embedding.
-- Ensure vector client initialization is optional and lazy enough that MCP can start without a vector DB.
-- Keep all vector index writes out of MCP code.
+- Add configuration for the local vector index path and vectorizer settings.
+- Define the local vector record schema, including site partitioning, page URL, title, chunk identity, chunk text, and embedding payload.
+- Define a read interface for MCP and a write interface for the vectorizer.
+- Make local vector index initialization optional so the MCP server can start without vector data.
+- Keep vector writes out of MCP query code.
 
 Acceptance criteria:
-- MCP starts successfully with no vector DB installed or configured.
-- Vector client failures are caught and converted into keyword fallback.
-- No chunking, document embedding generation, or vector writes are introduced in MCP.
+- MCP starts successfully with no local vector index present.
+- MCP can detect missing or unreadable vector data and fall back to keyword search.
+- The vector index layout is documented well enough for the vectorizer stage to write compatible records.
 
-### Stage 4: Implement Semantic Search Tool
+### Stage 4: Add Post-Crawl Vectorizer
+Goal: Build or refresh the local vector index from crawled content in a dedicated step.
+
+Deliverables:
+- Add a separate vectorizer command or job that runs after crawl.
+- Read crawled content from the existing SQLite source data or crawler outputs.
+- Chunk documents, generate embeddings, and write the local vector index.
+- Support full rebuilds and repeatable refreshes after recrawl.
+- Keep the vectorizer separate from the MCP server runtime.
+
+Acceptance criteria:
+- The local vector index can be built from crawled content without starting MCP search tooling.
+- Re-running the vectorizer after recrawl updates changed pages.
+- Vectorizer failure does not break keyword search in MCP.
+
+### Stage 5: Implement Semantic Search Tool
 Goal: Expose semantic retrieval when vector data and query embedding are available.
 
 Deliverables:
-- Add `semantic_search_docs(query: str, limit: int)` or a site-scoped equivalent if site isolation is required by the existing tool model.
+- Add `semantic_search_docs(site_name: str, query: str, limit: int)` as the preferred semantic search tool.
 - Embed the incoming query at request time.
-- Query the external vector index for top-K chunks.
+- Query the local vector index for top-K chunks.
 - Return text, page URL, title, and similarity score for each result.
 - Return `mode: "vector"` when only vector results are used.
 
 Acceptance criteria:
-- Semantic search returns top-K similar chunks from existing vector data.
+- Semantic search returns top-K similar chunks from the local vector index.
 - Semantic search handles partial vector indexes by querying only available chunks.
 - Embedding failure returns a valid fallback response when keyword search can be used.
-- Missing vector DB does not crash the MCP server.
+- Missing vector data does not crash the MCP server.
 
-### Stage 5: Implement Hybrid Search
+### Stage 6: Implement Hybrid Search
 Goal: Combine semantic and keyword results when both indexes can answer the query.
 
 Deliverables:
@@ -158,7 +177,7 @@ Acceptance criteria:
 - Duplicate results are not returned to callers.
 - Ranking behavior is deterministic and documented.
 
-### Stage 6: Add Observability And Degradation Tests
+### Stage 7: Add Observability And Degradation Tests
 Goal: Prove the system behaves correctly across missing, partial, and failing dependencies.
 
 Deliverables:
@@ -166,39 +185,25 @@ Deliverables:
   - No vector index.
   - Partial vector index.
   - Full vector index.
-  - Vector DB unavailable.
+  - Vectorizer failure.
   - Embedding provider failure.
   - Empty vector results with keyword fallback.
-- Add structured logging for selected search mode and fallback reason.
-- Add manual verification steps for local keyword-only and vector-enabled runs.
+- Add structured logging for selected search mode and vectorizer fallback reason.
+- Add manual verification steps for local keyword-only and vectorized runs.
 
 Acceptance criteria:
 - Test coverage demonstrates graceful degradation for all issue #1 failure modes.
 - Logs identify whether a query used keyword, vector, or hybrid mode.
 - No test requires a fully indexed dataset unless it is specifically testing the full-index case.
 
-### Stage 7: Documentation And Release Readiness
-Goal: Make the feature understandable and safe to operate.
-
-Deliverables:
-- Update MCP server documentation with new tools and response schemas.
-- Update configuration documentation with optional vector settings.
-- Update operations and troubleshooting docs with fallback behavior.
-- Document external indexing assumptions and the read-only MCP boundary.
-
-Acceptance criteria:
-- Users can tell which components are required for keyword-only, vector, and hybrid modes.
-- Operators can diagnose why a query fell back to keyword mode.
-- Documentation states that MCP uses existing data and does not create vector index data.
-
 ### Suggested Delivery Order
 1. Stage 1: Define Search Contracts
 2. Stage 2: Harden Keyword-Only Best-Effort Search
-3. Stage 3: Add Optional Vector Client Boundary
-4. Stage 4: Implement Semantic Search Tool
-5. Stage 5: Implement Hybrid Search
-6. Stage 6: Add Observability And Degradation Tests
-7. Stage 7: Documentation And Release Readiness
+3. Stage 3: Define Local Vector Index Boundary
+4. Stage 4: Add Post-Crawl Vectorizer
+5. Stage 5: Implement Semantic Search Tool
+6. Stage 6: Implement Hybrid Search
+7. Stage 7: Add Observability And Degradation Tests
 
 ## API Contract
 ### Search Response
@@ -275,48 +280,47 @@ Score semantics in Stage 1:
 
 ### Semantic Search Tool
 ```python
-semantic_search_docs(query: str, limit: int)
-```
-
-If site isolation remains required by the current configuration model, use:
-
-```python
 semantic_search_docs(site_name: str, query: str, limit: int)
 ```
 
 ## Edge Cases
-- No vector DB configured: return keyword results with `mode: "keyword"`.
-- Vector DB unavailable: log the fallback reason and return keyword results if possible.
+- No local vector index configured or present: return keyword results with `mode: "keyword"`.
+- Local vector index unavailable or unreadable: log the fallback reason and return keyword results if possible.
 - Embedding provider failure: log the fallback reason and return keyword results if possible.
 - Empty SQLite index and no vector index: return an empty result set without crashing.
 - Partial vector index: query only available chunks and do not require full crawl coverage.
 - Duplicate keyword and vector hits: keep one result and preserve the best available score or merged rank.
 - Score scale mismatch: normalize or rank within each source before merging hybrid results.
+- Stale vector index after recrawl: vectorizer rebuilds should refresh or replace stale chunks deterministically.
 
 ## Testing Strategy
 - Unit tests:
   - Search response schema serialization.
   - Keyword fallback decisions.
-  - Vector client error handling.
+  - Local vector reader and writer error handling.
   - Hybrid merge and deduplication behavior.
 - Integration tests:
   - Keyword-only MCP search against SQLite.
-  - Vector-enabled search against a test vector adapter or fixture.
+  - Vectorized search against a local vector fixture or test store.
   - Hybrid search with overlapping keyword and vector results.
 - Manual verification:
-  - Start MCP with no vector config and run keyword search.
-  - Start MCP with vector config and run semantic search.
-  - Stop or misconfigure vector DB and verify keyword fallback.
+  - Start MCP with no vector index and run keyword search.
+  - Run the vectorizer after crawl and verify the local vector index is created.
+  - Start MCP with the vector index present and run semantic search.
+  - Rebuild the vector index after recrawl and verify refreshed results.
 
 ## Rollout / Migration
 - Keep keyword search as the first stable fallback before exposing vector features.
-- Introduce vector configuration as optional and disabled by default until local verification is reliable.
+- Introduce the local vector index as optional and disabled by default until local verification is reliable.
+- Add the vectorizer as a separate post-crawl step so indexing remains explicit and inspectable.
 - Document the `search_docs` response migration from Markdown text to the experimental JSON contract in `0.99.1`.
 - Update user-facing docs in the same change that exposes new MCP tools.
 
 ## Risks and Mitigations
-- Risk: MCP becomes coupled to a specific indexing pipeline.
-  - Mitigation: Depend on a read-only vector client interface and document the external indexing boundary.
+- Risk: The repo becomes coupled to a brittle vector storage implementation.
+  - Mitigation: Define a narrow read/write interface and keep the storage layout documented and versioned.
+- Risk: Vectorizer rebuilds produce stale or duplicate chunks.
+  - Mitigation: Use stable chunk identifiers and a deterministic refresh policy.
 - Risk: Hybrid ranking produces confusing result order.
   - Mitigation: Start with a simple deterministic merge and record the ranking strategy in documentation.
 - Risk: Semantic search requires a site scope but the issue proposes a global function signature.
@@ -326,15 +330,17 @@ semantic_search_docs(site_name: str, query: str, limit: int)
 - Risk: Lookup failures and empty-result responses can be confused by callers.
   - Mitigation: Return structured JSON for unknown-site errors and keep empty-result responses as the base JSON contract with no `error` field.
 
-## Open Questions
-- Should semantic search be global, or should it require `site_name` like the existing MCP tools?
-- Which embedding provider should be used for query embeddings?
-- Which vector database should be supported first?
-- What stable chunk identifier should be used for deduplication?
+## Assumptions
+- The repo owns the local vector index alongside the existing SQLite keyword index.
+- The vectorizer runs as a separate explicit step after crawl, not inside the crawler.
+- MCP stays read-only at query time and never writes crawl or vector data.
+- Keyword search remains the stable fallback for all failure modes.
 
 ## References
 - [Issue #1: Epic: Semantic Search over External Vector Index](https://github.com/veep2012/doc_mcp/issues/1)
 - [documentation/mcp-server.md](./mcp-server.md)
 - [documentation/crawling.md](./crawling.md)
+- [documentation/configuration.md](./configuration.md)
+- [documentation/manual-test-scenarios.md](./manual-test-scenarios.md)
 - [src/docmcp/tools.py](../src/docmcp/tools.py)
 - [src/docmcp/index_store.py](../src/docmcp/index_store.py)
