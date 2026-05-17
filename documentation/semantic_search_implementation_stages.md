@@ -5,11 +5,12 @@
 - Owner: Repository maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-25
-- Last Updated: 2026-05-09
+- Last Updated: 2026-05-17
 - Version: v0.99.0
 - Related Tickets: https://github.com/veep2012/doc_mcp/issues/1
 
 ## Change Log
+- 2026-05-17 | v0.99.0 | Marked Stage 2 keyword-only hardening as implemented for the current `search_docs` path, including safe empty-result fallbacks for missing, empty, or failing SQLite keyword indexes.
 - 2026-05-09 | v0.99.0 | Finalized the Stage 1 keyword search response contract, canonical JSON schema, examples, and experimental release status.
 - 2026-04-25 | v0.2 | Added the staged semantic, keyword, and hybrid search plan and updated implementation references for package entry points.
 
@@ -94,6 +95,11 @@ Acceptance criteria:
 
 ### Stage 2: Harden Keyword-Only Best-Effort Search
 Goal: Make the existing SQLite path the reliable fallback for every later stage.
+
+Stage 2 is implemented in the current code path. `search_docs(site_name, query, limit=10)`
+continues to execute keyword-only SQLite search, preserves the Stage 1 JSON contract, returns
+structured empty results for missing or empty indexes, and treats SQLite keyword-query failures as
+empty keyword results rather than crashing callers.
 
 Deliverables:
 - Normalize keyword search result formatting to match the shared schema.
