@@ -93,7 +93,7 @@ python crawl_cli.py --site "My Docs"
 python -m src.main
 ```
 
-`search_docs(site_name, query, limit=10)` returns JSON text in `0.99.1`, not Markdown or prose snippets. MCP clients and prompt flows should parse the JSON response instead of rendering it directly as display text.
+Since `0.99.0`, `search_docs(site_name, query, limit=10)` returns JSON text, not Markdown or prose snippets. MCP clients and prompt flows should parse the JSON response instead of rendering it directly as display text.
 
 ## Smoke Tests
 
