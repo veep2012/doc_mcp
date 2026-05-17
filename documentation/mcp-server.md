@@ -74,7 +74,7 @@ shape:
 
 Implementation notes:
 - `mode` is always `"keyword"` in the current code path.
-- `vector_hits` is always `0` because the server does not expose a vector backend yet.
+- `vector_hits` is always `0` because the server does not expose a vector query path yet, even if a local vector sidecar has been built separately.
 - `keyword_hits` reflects the number of SQLite FTS5 matches returned for the query.
 - `limit` defaults to `10` and is passed through to the underlying SQLite query.
 - `score` is experimental and keyword-only today.

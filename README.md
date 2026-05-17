@@ -48,9 +48,9 @@ python -m playwright install chromium
 ```
 
 The development checkout can run through source-tree wrappers, so editable
-install is not required. If you want the `docmcp-auth`, `docmcp-crawl`, and
-`docmcp-server` console commands in this environment, run this after activating
-`.venv`:
+install is not required. If you want the `docmcp-auth`, `docmcp-crawl`,
+`docmcp-vectorize`, and `docmcp-server` console commands in this environment,
+run this after activating `.venv`:
 
 ```bash
 python -m pip install -e .
@@ -72,7 +72,7 @@ Copy-Item config\sites.yaml.example config\sites.yaml
 
 3. Edit `config/sites.yaml` and `.env` for your site, credentials, and paths.
 
-   The current authentication flow is manual and headful only: Playwright opens a visible browser and you complete the login yourself. The sample `auth_type` and `auth_mode` keys are informational metadata, not runtime switches, so the active configuration is driven by `auth_required`, `session_file`, `crawl`, and `index_file`.
+   The current authentication flow is manual and headful only: Playwright opens a visible browser and you complete the login yourself. The sample `auth_type` and `auth_mode` keys are informational metadata, not runtime switches, so the active configuration is driven by `auth_required`, `session_file`, `crawl`, `index_file`, optional `vector_index_file`, and optional `vectorizer` settings.
 
 4. Authenticate the site:
 
@@ -87,7 +87,16 @@ python auth_cli.py --site "My Docs"
 python crawl_cli.py --site "My Docs"
 ```
 
-6. Start the MCP server:
+6. Build or refresh the local vector sidecar:
+
+```bash
+python vectorize_cli.py --site "My Docs"
+```
+
+This step is explicit and separate on purpose: crawl does not auto-trigger
+vectorization, and MCP stays read-only at query time.
+
+7. Start the MCP server:
 
 ```bash
 python -m src.main
@@ -139,7 +148,9 @@ cp /path/to/sites.yaml config/sites.yaml
 cp /path/to/.env .env
 ```
 
-Relative `CONFIG_FILE`, `session_file`, and `index_file` values are resolved from `DOC_MCP_HOME`, or from the current working directory when `DOC_MCP_HOME` is not set.
+Relative `CONFIG_FILE`, `session_file`, `index_file`, and `vector_index_file`
+values are resolved from `DOC_MCP_HOME`, or from the current working directory
+when `DOC_MCP_HOME` is not set.
 
 5. Use the installed console commands:
 
@@ -148,6 +159,7 @@ export DOC_MCP_HOME="$PWD"
 export CONFIG_FILE="config/sites.yaml"
 docmcp-auth --help
 docmcp-crawl --help
+docmcp-vectorize --help
 docmcp-server
 ```
 
@@ -157,6 +169,7 @@ docmcp-server
 - `.env` stores local secrets and overrides.
 - `storage/` receives Playwright session files.
 - `index/` receives SQLite search indexes.
+- `index/*.vec.db` receives the local vector sidecars written by `docmcp-vectorize`.
 
 ## Detailed Docs
 

@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-26
-- Last Updated: 2026-05-03
-- Version: v0.8
+- Last Updated: 2026-05-17
+- Version: v0.9
 
 ## Change Log
+- 2026-05-17 | v0.9 | Added explicit vectorizer build and rebuild verification steps.
 - 2026-05-03 | v0.8 | Linked the automated pytest scenario document and clarified that this manual checklist remains the source coverage baseline.
 - 2026-04-26 | v0.3 | Added manual verification scenarios with separate development and installed-wheel runtime flows.
 
@@ -53,6 +54,7 @@ The manual scenarios remain the source coverage checklist for the repository. Au
 - Config file: `config/sites.yaml`
 - Session file: `storage/my-docs.json`
 - Index file: `index/my-docs.db`
+- Vector index file: `index/my-docs.vec.db`
 - Search term: choose a term that appears on a known crawled page
 
 Replace these values with the actual site name and paths used in `config/sites.yaml`.
@@ -63,6 +65,7 @@ Run this block first when validating the repository checkout directly.
 ### Development Command Set
 - Auth command: `python auth_cli.py`
 - Crawl command: `python crawl_cli.py`
+- Vectorizer command: `python vectorize_cli.py`
 - Server command: `python -m src.main`; stop it with `Ctrl+C` after startup is verified.
 
 ### MT-001A: Create Development Source-Tree Environment
@@ -103,10 +106,11 @@ Run this block first when validating the repository checkout directly.
   3. Edit `config/sites.yaml` for the test site.
   4. Confirm `session_file` points under `storage/`.
   5. Confirm `index_file` points under `index/`.
-  6. Leave `DOC_MCP_HOME` unset when running from the repository root; the loader uses the current directory by default.
-  7. Leave `CONFIG_FILE` unset to use the default `config/sites.yaml`.
+  6. Confirm `vector_index_file` points under `index/` if you set it explicitly.
+  7. Leave `DOC_MCP_HOME` unset when running from the repository root; the loader uses the current directory by default.
+  8. Leave `CONFIG_FILE` unset to use the default `config/sites.yaml`.
 - Expected result:
-  - The site entry has a stable `name`, `url`, `crawl.start_url`, `session_file`, and `index_file`.
+  - The site entry has a stable `name`, `url`, `crawl.start_url`, `session_file`, `index_file`, and optional vector sidecar settings.
   - Relative runtime paths resolve from the repository root.
 - Pass/Fail:
   - Pass if the config can be read by the development CLI in the next scenario.
@@ -129,6 +133,7 @@ Run this block after the development environment passes, using a separate runtim
 ### Runtime Command Set
 - Auth command: `docmcp-auth`
 - Crawl command: `docmcp-crawl`
+- Vectorizer command: `docmcp-vectorize`
 - Server command: `docmcp-server`; stop it with `Ctrl+C` after startup is verified.
 
 ### MT-001B: Create Separate Installed-Wheel Environment
@@ -167,9 +172,10 @@ Run this block after the development environment passes, using a separate runtim
   4. Edit `config/sites.yaml` for the test site.
   5. Confirm `session_file` points under `storage/`.
   6. Confirm `index_file` points under `index/`.
-  7. If running commands from the runtime directory, leave `DOC_MCP_HOME` unset; the loader uses the current directory by default.
-  8. Leave `CONFIG_FILE` unset to use the default `config/sites.yaml`.
-  9. If running commands from another directory, set both explicitly:
+  7. Confirm `vector_index_file` points under `index/` if you set it explicitly.
+  8. If running commands from the runtime directory, leave `DOC_MCP_HOME` unset; the loader uses the current directory by default.
+  9. Leave `CONFIG_FILE` unset to use the default `config/sites.yaml`.
+  10. If running commands from another directory, set both explicitly:
      - `export DOC_MCP_HOME="/path/to/runtime-workspace"`
      - `export CONFIG_FILE="config/sites.yaml"`
 - Expected result:
@@ -258,7 +264,32 @@ Run these scenarios after either `MT-003A` or `MT-003B`, using the command set f
   - Pass if the run completes and updates existing indexed rows.
   - Fail if headless mode changes authentication state or prevents page extraction unexpectedly.
 
-### MT-009: Expired Session Stops Crawl
+### MT-009: Build Local Vector Index After Crawl
+- Steps:
+  1. Run the selected vectorizer command with `--site "My Docs"`.
+  2. Confirm the command finishes with a `Done` message that reports pages, chunks, and the vector index path.
+  3. Confirm `index/my-docs.vec.db` exists.
+- Expected result:
+  - The vectorizer reads the crawled SQLite keyword index instead of crawling again.
+  - A local vector sidecar file is created or refreshed.
+  - The step remains separate from MCP startup and from the crawl command.
+- Pass/Fail:
+  - Pass if the vectorizer creates or refreshes the sidecar without changing the keyword crawl database contract.
+  - Fail if the command cannot read the crawl output, writes to the wrong path, or requires the MCP server to be running.
+
+### MT-010: Rebuild Local Vector Index After Recrawl
+- Steps:
+  1. Re-run the selected crawl command for `My Docs` after changing or refreshing the crawled content.
+  2. Re-run the selected vectorizer command for `My Docs`.
+  3. Inspect the updated vector index file timestamp and command output.
+- Expected result:
+  - Re-running the vectorizer refreshes the site partition deterministically instead of appending stale duplicate chunks.
+  - The vectorizer remains safe to run repeatedly after recrawl.
+- Pass/Fail:
+  - Pass if the sidecar refresh is successful and no stale chunk duplicates are observed during inspection.
+  - Fail if refresh attempts accumulate duplicate records or leave the vector index unreadable.
+
+### MT-011: Expired Session Stops Crawl
 - Steps:
   1. Move the session file to a temporary backup path or use an expired session.
   2. Run the selected crawl command with `--site "My Docs"`.
@@ -272,7 +303,7 @@ Run these scenarios after either `MT-003A` or `MT-003B`, using the command set f
   - Fail if the crawler stores login pages or continues with unauthenticated content.
 
 ## MCP Server
-### MT-010: Start MCP Server From Shell
+### MT-012: Start MCP Server From Shell
 - Steps:
   1. From the repository root, leave `DOC_MCP_HOME` and `CONFIG_FILE` unset unless you need to override the defaults.
   2. If running from another directory or a wheel runtime directory, run `export DOC_MCP_HOME="/path/to/runtime-workspace"` and `export CONFIG_FILE="config/sites.yaml"`.
@@ -287,7 +318,7 @@ Run these scenarios after either `MT-003A` or `MT-003B`, using the command set f
   - Pass if startup succeeds and no missing-config error appears.
   - Fail if startup cannot find `config/sites.yaml`, fails to load sites, or exits unexpectedly.
 
-### MT-011: Verify VS Code MCP Configuration
+### MT-013: Verify VS Code MCP Configuration
 - Steps:
   1. Create or update `.vscode/mcp.json` with the documented `docs-mcp` server config.
   2. Development source tree: ensure `command` points to the active environment's `python` executable and `args` includes `-m` and `src.main`.
@@ -304,7 +335,7 @@ Run these scenarios after either `MT-003A` or `MT-003B`, using the command set f
   - Fail if VS Code reports missing `config/sites.yaml` or uses the wrong working directory.
 
 ## Search And Fetch Smoke Test
-### MT-012: Search Indexed Content Through MCP Client
+### MT-014: Search Indexed Content Through MCP Client
 - Steps:
   1. Start the MCP server in the client.
   2. Use the MCP search tool for `My Docs`.
@@ -318,7 +349,7 @@ Run these scenarios after either `MT-003A` or `MT-003B`, using the command set f
   - Pass if search and fetch both return expected documentation content.
   - Fail if the site is missing, search is empty for known content, or fetch cannot find a returned URL.
 
-### MT-013: Unknown Site Fails Clearly
+### MT-015: Unknown Site Fails Clearly
 - Steps:
   1. Use the MCP client to search a site name that is not in `config/sites.yaml`.
 - Expected result:
@@ -337,6 +368,7 @@ Run these scenarios after either `MT-003A` or `MT-003B`, using the command set f
 ## Edge Cases
 - If the selected site requires MFA, pause the manual run until login completes and record the login path used.
 - If a crawl starts from a redirected URL, verify indexed URLs still belong to the configured site and path scope.
+- If the vectorizer fails because `sqlite-vec` is unavailable or the vector sidecar schema is unreadable, confirm that `docmcp-server` still starts and keyword search remains available.
 - If a command is run outside the repository or runtime workspace, set `DOC_MCP_HOME` and `CONFIG_FILE` explicitly before treating failures as product defects.
 
 ## Risks and Mitigations

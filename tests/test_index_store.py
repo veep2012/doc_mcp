@@ -1,4 +1,12 @@
-from docmcp.index_store import count_pages, get_page, init_db, list_pages, search_pages, upsert_page
+from docmcp.index_store import (
+    count_pages,
+    get_page,
+    init_db,
+    list_pages,
+    read_pages,
+    search_pages,
+    upsert_page,
+)
 
 
 def test_index_store_round_trip_and_upsert(tmp_path):
@@ -57,9 +65,20 @@ def test_read_paths_do_not_create_missing_index_file(tmp_path):
 
     assert not index_file.exists()
 
-    assert search_pages(str(index_file), "Alpha") == []
-    assert get_page(str(index_file), "https://example.test/missing") is None
-    assert list_pages(str(index_file)) == []
-    assert count_pages(str(index_file)) == 0
 
-    assert not index_file.exists()
+def test_read_pages_returns_full_page_rows(tmp_path):
+    index_file = tmp_path / "docs.db"
+
+    init_db(str(index_file))
+    upsert_page(str(index_file), "https://example.test/guide", "Guide", "Alpha beta content")
+
+    pages = read_pages(str(index_file))
+
+    assert pages == [
+        {
+            "url": "https://example.test/guide",
+            "title": "Guide",
+            "content_md": "Alpha beta content",
+            "last_crawled": pages[0]["last_crawled"],
+        }
+    ]

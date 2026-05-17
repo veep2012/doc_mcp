@@ -25,7 +25,7 @@ def _runtime_root() -> Path:
 
 # Only rewrite file-backed runtime outputs here. Nested crawl fields are URLs,
 # glob patterns, or scalar options in the current schema, not local paths.
-_RUNTIME_PATH_KEYS = frozenset({"session_file", "index_file"})
+_RUNTIME_PATH_KEYS = frozenset({"session_file", "index_file", "vector_index_file"})
 
 
 def _resolve_runtime_path(value: Any, root: Path) -> Any:
