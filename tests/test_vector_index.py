@@ -31,12 +31,13 @@ def test_shape_vector_records_uses_stable_site_partition_and_chunk_ids():
     ]
 
     records = shape_vector_records(site, pages)
+    rebuilt_records = shape_vector_records(site, pages)
 
     assert [record.site_key for record in records] == ["example docs", "example docs"]
     assert [record.chunk_index for record in records] == [0, 1]
     assert records[0].chunk_text == "alpha beta gamma"
     assert records[1].chunk_text == "gamma delta epsilon"
-    assert records[0].chunk_id == records[0].chunk_id
+    assert records[0].chunk_id == rebuilt_records[0].chunk_id
     assert records[0].chunk_id != records[1].chunk_id
     assert len(records[0].embedding) == 8
 
