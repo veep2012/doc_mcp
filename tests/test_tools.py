@@ -138,6 +138,9 @@ def test_search_docs_returns_empty_json_for_zero_match_query(monkeypatch, tmp_pa
 def test_search_docs_returns_empty_json_on_sqlite_query_error(monkeypatch, tmp_path):
     index_file = tmp_path / "docs.db"
 
+    def raise_sqlite_error(index_file: str, query: str, limit: int) -> list[dict]:
+        raise sqlite3.OperationalError("broken")
+
     monkeypatch.setattr(
         tools,
         "_get_sites",
@@ -153,7 +156,7 @@ def test_search_docs_returns_empty_json_on_sqlite_query_error(monkeypatch, tmp_p
     monkeypatch.setattr(
         tools,
         "search_pages",
-        lambda index_file, query, limit: (_ for _ in ()).throw(sqlite3.OperationalError("broken")),
+        raise_sqlite_error,
     )
 
     assert json.loads(tools.search_docs("Broken Docs", "Alpha")) == {
