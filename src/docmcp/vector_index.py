@@ -413,10 +413,18 @@ def inspect_vector_index(site: dict) -> dict:
                 (site_key,),
             ).fetchone()
     except sqlite3.Error as exc:
-        return {"available": False, "reason": f"unreadable: {exc}", "vector_index_file": vector_index_file}
+        return {
+            "available": False,
+            "reason": f"unreadable: {exc}",
+            "vector_index_file": vector_index_file,
+        }
 
     if build_row is None:
-        return {"available": False, "reason": "site_missing", "vector_index_file": vector_index_file}
+        return {
+            "available": False,
+            "reason": "site_missing",
+            "vector_index_file": vector_index_file,
+        }
 
     return {
         "available": True,

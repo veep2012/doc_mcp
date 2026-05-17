@@ -45,7 +45,9 @@ def main() -> None:
             )
         return
 
-    site = next((candidate for candidate in sites if candidate["name"].lower() == args.site.lower()), None)
+    site = next(
+        (candidate for candidate in sites if candidate["name"].lower() == args.site.lower()), None
+    )
     if not site:
         print(f"[vectorize] Site '{args.site}' not found. Use --list to see available sites.")
         sys.exit(1)
