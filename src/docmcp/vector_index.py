@@ -206,9 +206,10 @@ def _vector_ro_conn(vector_index_file: str) -> sqlite3.Connection | None:
     path = Path(vector_index_file)
     if not path.exists():
         return None
-    # Use non-strict resolution so readonly URI opening still works for callers
-    # that hand us normalized sidecar paths during transitions around rebuilds.
-    conn = sqlite3.connect(f"{path.resolve(strict=False).as_uri()}?mode=ro", uri=True)
+    resolved_uri = path.resolve(
+        strict=False
+    ).as_uri()  # strict=False keeps URI normalization safe around rebuild transitions.
+    conn = sqlite3.connect(f"{resolved_uri}?mode=ro", uri=True)
     _load_sqlite_vec(conn)
     return conn
 
