@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-04-25
-- Version: v1.1
+- Last Updated: 2026-05-17
+- Version: v1.2
 
 ## Change Log
+- 2026-05-17 | v1.2 | Documented the explicit post-crawl vectorizer step and local vector sidecar artifact.
 - 2026-04-25 | v1.1 | Updated commands and references for installed docmcp-crawl package entry point and moved index store.
 - 2026-04-24 | v1.0 | Reformatted the crawl guide and documented the current Playwright and SQLite flow.
 
@@ -45,6 +46,11 @@ docmcp-crawl --site "My Docs" --force-auth
 docmcp-crawl --site "My Docs" --headless
 ```
 
+- Build or refresh the local vector sidecar after crawl:
+```bash
+docmcp-vectorize --site "My Docs"
+```
+
 ### Crawl Behavior
 - The current crawler uses Playwright directly instead of Crawl4AI.
 - It starts from `crawl.start_url`.
@@ -72,11 +78,13 @@ docmcp-crawl --site "My Docs" --headless
 ### Runtime Outputs
 - Session file: `storage/<site>.json`
 - SQLite index: `index/<site>.db`
+- Vector sidecar: `index/<site>.vec.db`
 
 ### Useful Behavior To Know
 - A site can be crawled again after content changes without creating duplicate rows.
 - If a session expires during a crawl, the crawler stops and tells you to re-authenticate.
 - Anchor-heavy documentation sites remain indexed as canonical pages instead of fragment-only records.
+- Crawl does not auto-trigger vectorization. The vectorizer remains an explicit follow-up step.
 
 ## Edge Cases
 - Static resources are filtered out before indexing so they do not pollute search results.

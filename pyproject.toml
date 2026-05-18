@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "doc-mcp"
-version = "0.99.1"
+version = "0.99.2"
 description = "Documentation MCP server with Playwright-based authentication and crawling"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -21,12 +21,14 @@ dependencies = [
   "mcp>=1.0.0",
   "PyYAML>=6.0.1",
   "python-dotenv>=1.0.0",
+  "sqlite-vec>=0.1.9",
 ]
 
 [project.scripts]
 docmcp-server = "docmcp.main:main"
 docmcp-auth = "docmcp.auth_cli:main"
 docmcp-crawl = "docmcp.crawl_cli:main"
+docmcp-vectorize = "docmcp.vectorize_cli:main"
 
 [tool.setuptools]
 include-package-data = true
