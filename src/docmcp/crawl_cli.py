@@ -191,12 +191,6 @@ def _extract_links(page_url: str, link_elements: list[dict]) -> list[tuple[str, 
     return links
 
 
-def _debug(message: str, enabled: bool = False) -> None:
-    """Print a debug-only crawl trace line."""
-    if enabled:
-        print(f"[crawl][debug] {message}")
-
-
 def _format_queue_preview(
     queue: deque[tuple[str, int]], depth: int, total_levels: int, limit: int = 5
 ) -> str:
@@ -277,6 +271,11 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
     queue: deque[tuple[str, int]] = deque([(_normalize_url(start_url), 0)])
     page_count = 0
 
+    def _debug(message: str) -> None:
+        """Print a debug-only crawl trace line."""
+        if debug:
+            print(f"[crawl][debug] {message}")
+
     async with async_playwright() as p:
         # Launch browser — headful by default to avoid anti-bot detection
         browser = await p.chromium.launch(headless=headless)
@@ -316,8 +315,7 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
                 level_number = depth + 1
                 total_levels = max_depth + 1
                 _debug(
-                    f"Starting level {level_number}/{total_levels} with {level_total} queued URL(s)",
-                    debug,
+                    f"Starting level {level_number}/{total_levels} with {level_total} queued URL(s)"
                 )
 
                 for index_in_level in range(1, level_total + 1):
@@ -333,7 +331,7 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
                     print(
                         f"[crawl] [{index_in_level} of {level_total} level {level_number}/{total_levels}] {url}"
                     )
-                    _debug(f"Navigating to {url}", debug)
+                    _debug(f"Navigating to {url}")
 
                     try:
                         await page.goto(url, wait_until="networkidle", timeout=60000)
@@ -343,9 +341,9 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
 
                     current_url = _normalize_url(page.url)
                     if current_url != url:
-                        _debug(f"Navigation redirected to {current_url}", debug)
+                        _debug(f"Navigation redirected to {current_url}")
                     else:
-                        _debug(f"Navigation stayed on {current_url}", debug)
+                        _debug(f"Navigation stayed on {current_url}")
 
                     # Detect redirect to login page
                     if any(ind in current_url for ind in login_indicators):
@@ -362,8 +360,7 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
 
                     content_md = _html_to_markdown(html) if html else ""
                     _debug(
-                        f"Page title={title!r}; extracted {len(html)} HTML chars -> {len(content_md)} Markdown chars",
-                        debug,
+                        f"Page title={title!r}; extracted {len(html)} HTML chars -> {len(content_md)} Markdown chars"
                     )
 
                     # Save to index
@@ -379,8 +376,7 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
                             )
                             discovered_links = _extract_links(current_url, anchors)
                             _debug(
-                                f"Discovered {len(anchors)} raw anchors, {len(discovered_links)} normalized link target(s)",
-                                debug,
+                                f"Discovered {len(anchors)} raw anchors, {len(discovered_links)} normalized link target(s)"
                             )
                             for href, is_anchor_link in discovered_links:
                                 should_enqueue, reason = _link_discovery_decision(
@@ -397,11 +393,10 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
                                     queue.append((href, depth + 1))
                                     queued.add(href)
                                     _debug(
-                                        f"Discovered {href} -> queued for level {depth + 2}/{total_levels}",
-                                        debug,
+                                        f"Discovered {href} -> queued for level {depth + 2}/{total_levels}"
                                     )
                                 else:
-                                    _debug(f"Discovered {href} -> skipped ({reason})", debug)
+                                    _debug(f"Discovered {href} -> skipped ({reason})")
                         except Exception as e:
                             print(f"[crawl]   ✗ Link extraction error: {e}")
 
@@ -412,7 +407,7 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
                 if debug and queue:
                     next_depth = queue[0][1]
                     if next_depth > depth:
-                        _debug(_format_queue_preview(queue, next_depth, total_levels), debug)
+                        _debug(_format_queue_preview(queue, next_depth, total_levels))
 
         finally:
             await browser.close()
