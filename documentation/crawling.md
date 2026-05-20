@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-04-25
-- Version: v1.1
+- Last Updated: 2026-05-20
+- Version: v1.2
 
 ## Change Log
+- 2026-05-20 | v1.2 | Added crawler debug mode guidance and queue/link trace expectations.
 - 2026-04-25 | v1.1 | Updated commands and references for installed docmcp-crawl package entry point and moved index store.
 - 2026-04-24 | v1.0 | Reformatted the crawl guide and documented the current Playwright and SQLite flow.
 
@@ -45,6 +46,11 @@ docmcp-crawl --site "My Docs" --force-auth
 docmcp-crawl --site "My Docs" --headless
 ```
 
+- Run the crawler with detailed diagnostics:
+```bash
+docmcp-crawl --site "My Docs" --debug
+```
+
 ### Crawl Behavior
 - The current crawler uses Playwright directly instead of Crawl4AI.
 - It starts from `crawl.start_url`.
@@ -72,6 +78,8 @@ docmcp-crawl --site "My Docs" --headless
 ### Runtime Outputs
 - Session file: `storage/<site>.json`
 - SQLite index: `index/<site>.db`
+- Normal runs keep the existing progress output focused on page indexing progress.
+- `--debug` adds crawler-only trace lines for navigation, extracted content sizes, discovered links, skip reasons, queued URLs, and the next breadth-first queue preview before the crawler descends to the next level.
 
 ### Useful Behavior To Know
 - A site can be crawled again after content changes without creating duplicate rows.
