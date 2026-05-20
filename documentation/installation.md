@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-04-27
-- Version: v1.6
+- Last Updated: 2026-05-20
+- Version: v1.7
 
 ## Change Log
+- 2026-05-20 | v1.7 | Aligned source-tree and installed command guidance with the current CLI wrappers and version/help behavior.
 - 2026-04-27 | v1.6 | Clarified optional Make setup, Playwright installation, and optional editable install for source-tree development.
 - 2026-04-25 | v1.1 | Updated setup and verification commands for the package entry points and explicit virtual environment activation.
 - 2026-04-24 | v1.0 | Reformatted the setup guide to the documentation standard and kept the install paths and verification commands.
@@ -52,7 +53,7 @@ On Windows PowerShell:
 .venv\Scripts\Activate.ps1
 ```
 
-The source-tree wrappers work without installing the package itself. If you want the `docmcp-auth`, `docmcp-crawl`, and `docmcp-server` console commands, install the project in editable mode:
+The source-tree compatibility wrappers work without installing the package itself. If you want the `docmcp-auth`, `docmcp-crawl`, and `docmcp-server` console commands, install the project in editable mode:
 
 ```bash
 pip install -e .
@@ -95,6 +96,8 @@ python crawl_cli.py --help
 python -m src.main
 ```
 
+These wrappers are useful during repository development. They resolve the current package from the checkout, and `--help` / `--version` complete without loading the heavier auth or browser paths.
+
 Installed package commands:
 
 ```bash
@@ -102,6 +105,8 @@ docmcp-auth --help
 docmcp-crawl --help
 docmcp-server
 ```
+
+The installed commands are preferred once the package is installed into a virtual environment or wheel runtime.
 
 On Windows, do not rely on a standalone `playwright` file being visible in
 the activated environment. Verify Playwright through Python:

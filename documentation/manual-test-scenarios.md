@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-26
-- Last Updated: 2026-05-03
-- Version: v0.8
+- Last Updated: 2026-05-20
+- Version: v0.9
 
 ## Change Log
+- 2026-05-20 | v0.9 | Aligned the manual checklist with the current CLI wrappers, version commands, and crawler debug behavior.
 - 2026-05-03 | v0.8 | Linked the automated pytest scenario document and clarified that this manual checklist remains the source coverage baseline.
 - 2026-04-26 | v0.3 | Added manual verification scenarios with separate development and installed-wheel runtime flows.
 
@@ -61,9 +62,9 @@ Replace these values with the actual site name and paths used in `config/sites.y
 Run this block first when validating the repository checkout directly.
 
 ### Development Command Set
-- Auth command: `python auth_cli.py`
-- Crawl command: `python crawl_cli.py`
-- Server command: `python -m src.main`; stop it with `Ctrl+C` after startup is verified.
+- Auth command: `python auth_cli.py` or `docmcp-auth` once installed
+- Crawl command: `python crawl_cli.py` or `docmcp-crawl` once installed
+- Server command: `python -m src.main` or `docmcp-server` once installed; stop it with `Ctrl+C` after startup is verified.
 
 ### MT-001A: Create Development Source-Tree Environment
 - Steps:
@@ -86,12 +87,13 @@ Run this block first when validating the repository checkout directly.
      - Windows PowerShell: `.venv\Scripts\Activate.ps1`
   4. Run `python auth_cli.py --help`.
   5. Run `python crawl_cli.py --help`.
-  6. Run `python -c "import src.docmcp.main"` to verify the server module imports.
+  6. Run `python auth_cli.py --version` and `python crawl_cli.py --version`.
+  7. Run `python -c "import src.docmcp.main"` to verify the server module imports.
 - Expected result:
   - The virtual environment is created.
   - Chromium is installed by Playwright.
   - Source-tree wrapper commands run without installing the package itself.
-  - `docmcp-auth`, `docmcp-crawl`, and `docmcp-server` are not required for this test block.
+  - `docmcp-auth`, `docmcp-crawl`, and `docmcp-server` are not required for this test block, but they should behave the same if installed.
 - Pass/Fail:
   - Pass if setup succeeds and the wrapper commands print help or start correctly.
   - Fail if dependency installation, Playwright installation, or source-tree imports fail.
@@ -151,10 +153,11 @@ Run this block after the development environment passes, using a separate runtim
   6. Run `docmcp-auth --help`.
   7. Run `docmcp-crawl --help`.
   8. Run `command -v docmcp-server` to verify the server console script is installed.
+  9. Run `docmcp-auth --version` and `docmcp-crawl --version`.
 - Expected result:
   - The wheel installs into an environment that does not depend on the repository source tree.
   - The `docmcp-auth`, `docmcp-crawl`, and `docmcp-server` console commands are available.
-  - Help output prints without import errors.
+  - Help and version output print without importing the browser-heavy paths.
 - Pass/Fail:
   - Pass if the wheel installs and all console commands are available.
   - Fail if the wheel build, wheel install, Playwright install, or console script import fails.

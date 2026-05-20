@@ -74,23 +74,25 @@ Copy-Item config\sites.yaml.example config\sites.yaml
 
    The current authentication flow is manual and headful only: Playwright opens a visible browser and you complete the login yourself. The sample `auth_type` and `auth_mode` keys are informational metadata, not runtime switches, so the active configuration is driven by `auth_required`, `session_file`, `crawl`, and `index_file`.
 
+   `--help` and `--version` are lightweight for the auth, crawl, and server CLIs. The crawler also writes detailed debug traces to `stderr`, which keeps them separate from normal crawl progress output if you want to pipe or capture the main stream.
+
 4. Authenticate the site:
 
 ```bash
-python auth_cli.py --list
-python auth_cli.py --site "My Docs"
+docmcp-auth --list
+docmcp-auth --site "My Docs"
 ```
 
 5. Crawl and index the site:
 
 ```bash
-python crawl_cli.py --site "My Docs"
+docmcp-crawl --site "My Docs"
 ```
 
 6. Start the MCP server:
 
 ```bash
-python -m src.main
+docmcp-server
 ```
 
 Since `0.99.0`, `search_docs(site_name, query, limit=10)` returns JSON text, not Markdown or prose snippets. MCP clients and prompt flows should parse the JSON response instead of rendering it directly as display text.
