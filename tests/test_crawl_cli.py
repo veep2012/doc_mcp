@@ -2,7 +2,10 @@ import sys
 import types
 from collections import deque
 
+import pytest
+
 import docmcp.crawl_cli as crawl_cli
+from docmcp import __version__
 from docmcp.crawl_cli import (
     _disallowed_reason,
     _extract_links,
@@ -51,7 +54,9 @@ def test_disallowed_reason_explains_why_url_is_filtered():
     deny_patterns = ["https://example.test/docs/private/*"]
 
     assert (
-        _disallowed_reason("https://other.test/docs/guide", start_url, allow_patterns, deny_patterns)
+        _disallowed_reason(
+            "https://other.test/docs/guide", start_url, allow_patterns, deny_patterns
+        )
         == "host 'other.test' is outside start host 'example.test'"
     )
     assert (
@@ -64,7 +69,9 @@ def test_disallowed_reason_explains_why_url_is_filtered():
         == "matches deny pattern 'https://example.test/docs/private/*'"
     )
     assert (
-        _disallowed_reason("https://example.test/docs/guide", start_url, allow_patterns, deny_patterns)
+        _disallowed_reason(
+            "https://example.test/docs/guide", start_url, allow_patterns, deny_patterns
+        )
         == "does not match allow patterns"
     )
 
@@ -204,16 +211,39 @@ def test_main_accepts_debug_and_threads_it_to_crawler(monkeypatch):
 
     monkeypatch.setattr(crawl_cli, "get_sites", lambda: [site])
     monkeypatch.setattr(crawl_cli, "crawl_site_headful", fake_crawl)
-    monkeypatch.setattr(sys, "argv", ["docmcp-crawl", "--site", "Example Docs", "--headless", "--debug"])
+    monkeypatch.setattr(
+        sys, "argv", ["docmcp-crawl", "--site", "Example Docs", "--headless", "--debug"]
+    )
 
     crawl_cli.main()
 
     assert captured == {"site": site, "headless": True, "debug": True}
 
 
-async def test_crawl_site_headful_debug_outputs_queue_and_link_reasons(
-    monkeypatch, tmp_path, capsys
-):
+def test_crawl_cli_version_and_help_include_current_version(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["docmcp-crawl", "--version"])
+    with pytest.raises(SystemExit) as excinfo:
+        crawl_cli.main()
+    assert excinfo.value.code == 0
+    assert capsys.readouterr().out.strip() == f"docmcp-crawl {__version__}"
+
+    monkeypatch.setattr(sys, "argv", ["docmcp-crawl", "--help"])
+    with pytest.raises(SystemExit) as excinfo:
+        crawl_cli.main()
+    assert excinfo.value.code == 0
+    help_text = capsys.readouterr().out
+    assert f"Version: {__version__}" in help_text
+
+
+def test_crawl_cli_version_rejects_other_arguments(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["docmcp-crawl", "--version", "--debug"])
+    with pytest.raises(SystemExit) as excinfo:
+        crawl_cli.main()
+    assert excinfo.value.code == 2
+    assert "--version cannot be combined with other arguments" in capsys.readouterr().err
+
+
+def test_crawl_site_headful_debug_outputs_queue_and_link_reasons(monkeypatch, tmp_path, capsys):
     class FakeElement:
         def __init__(self, html):
             self.html = html
@@ -293,7 +323,9 @@ async def test_crawl_site_headful_debug_outputs_queue_and_link_reasons(
         },
     }
 
-    await crawl_cli.crawl_site_headful(site, headless=True, debug=True)
+    import asyncio
+
+    asyncio.run(crawl_cli.crawl_site_headful(site, headless=True, debug=True))
 
     output = capsys.readouterr().out
     assert "[crawl][debug] Starting level 1/2 with 1 queued URL(s)" in output
@@ -303,20 +335,23 @@ async def test_crawl_site_headful_debug_outputs_queue_and_link_reasons(
         "[crawl][debug] Discovered https://example.test/docs/install -> queued for level 2/2"
         in output
     )
-    assert "[crawl][debug] Discovered https://example.test/docs/install -> skipped (already queued)" in output
-    assert "[crawl][debug] Discovered https://example.test/docs -> skipped (anchor link points to the current page)" in output
+    assert (
+        "[crawl][debug] Discovered https://example.test/docs/install -> skipped (already queued)"
+        in output
+    )
+    assert (
+        "[crawl][debug] Discovered https://example.test/docs -> skipped (anchor link points to the current page)"
+        in output
+    )
     assert (
         "[crawl][debug] Discovered https://other.test/docs/offsite -> skipped "
-        "(host 'other.test' is outside start host 'example.test')"
-        in output
+        "(host 'other.test' is outside start host 'example.test')" in output
     )
     assert (
         "[crawl][debug] Discovered https://example.test/docs/static/logo.png -> skipped "
-        "(URL points to a non-page asset)"
-        in output
+        "(URL points to a non-page asset)" in output
     )
     assert (
         "[crawl][debug] Next queue for level 2/2: 1 queued URL -> "
-        "https://example.test/docs/install"
-        in output
+        "https://example.test/docs/install" in output
     )

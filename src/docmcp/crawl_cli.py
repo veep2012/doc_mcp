@@ -24,7 +24,7 @@ from urllib.parse import urljoin, urlparse, urlunparse
 
 from dotenv import load_dotenv
 
-from .auth.session import authenticate
+from . import __version__
 from .config.loader import ConfigError, get_sites
 from .index_store import init_db, upsert_page
 
@@ -427,7 +427,12 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Headful browser crawler — authenticates and indexes a documentation site."
+        prog="docmcp-crawl",
+        description=(
+            "Headful browser crawler — authenticates and indexes a documentation site.\n"
+            f"Version: {__version__}"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--site", type=str, help="Name of the site to crawl (as in sites.yaml)")
     parser.add_argument(
@@ -440,7 +445,14 @@ def main():
     )
     parser.add_argument("--debug", action="store_true", help="Print detailed crawler diagnostics")
     parser.add_argument("--list", action="store_true", help="List all configured sites")
+    parser.add_argument("--version", action="store_true", help="Show the current version and exit")
     args = parser.parse_args()
+
+    if args.version:
+        if args.site or args.force_auth or args.headless or args.debug or args.list:
+            parser.error("--version cannot be combined with other arguments")
+        print(f"{parser.prog} {__version__}")
+        sys.exit(0)
 
     if not args.list and not args.site:
         parser.print_help()
@@ -466,6 +478,8 @@ def main():
 
     # Authenticate first if required
     if site.get("auth_required"):
+        from .auth.session import authenticate
+
         asyncio.run(authenticate(site, force=args.force_auth))
 
     # Then crawl
