@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-04-27
-- Version: v1.2
+- Last Updated: 2026-05-20
+- Version: v1.3
 
 ## Change Log
+- 2026-05-20 | v1.3 | Added crawl debug guidance for diagnosing queue, link, and page-level crawler behavior.
 - 2026-04-27 | v1.2 | Added Windows Playwright module verification and recovery steps.
 - 2026-04-25 | v1.1 | Updated troubleshooting notes for the package entry point and VS Code MCP configuration.
 - 2026-04-24 | v1.0 | Reformatted the troubleshooting guide and grouped the common failures into standard sections.
@@ -45,7 +46,11 @@ List the most common failure modes for `doc-mcp` and the first corrective step f
 
 ### Pages Look Truncated
 - The crawler tries several page containers, but some sites still expose incomplete content to automation.
-- Re-run in normal mode and inspect the site structure if needed.
+- Re-run with `docmcp-crawl --site "My Docs" --debug` to inspect navigation, extraction, and discovered-link diagnostics before inspecting the site structure manually.
+
+### Crawl Behavior Is Hard To Explain
+- Run `docmcp-crawl --site "My Docs" --debug` to print crawler-only queue previews, per-page navigation details, discovered links, and skip reasons.
+- Compare the debug trace with your `allow_patterns`, `deny_patterns`, and `start_url` configuration when pages are unexpectedly skipped or queued.
 
 ### Missing Markdown Conversion
 - If `markdownify` is not installed, the crawler falls back to plain text extraction.
