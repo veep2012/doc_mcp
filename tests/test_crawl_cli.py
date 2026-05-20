@@ -131,6 +131,32 @@ def test_format_queue_preview_summarizes_next_depth():
     )
 
 
+def test_format_queue_preview_handles_empty_and_truncates_long_queues():
+    empty_queue = deque([("https://example.test/docs", 0)])
+    long_queue = deque(
+        [
+            ("https://example.test/docs", 0),
+            ("https://example.test/docs/a", 1),
+            ("https://example.test/docs/b", 1),
+            ("https://example.test/docs/c", 1),
+            ("https://example.test/docs/d", 1),
+            ("https://example.test/docs/e", 1),
+            ("https://example.test/docs/f", 1),
+            ("https://example.test/docs/g", 1),
+        ]
+    )
+
+    assert _format_queue_preview(empty_queue, depth=1, total_levels=3) == (
+        "Next queue for level 2/3: 0 queued URLs -> (empty)"
+    )
+    assert _format_queue_preview(long_queue, depth=1, total_levels=3) == (
+        "Next queue for level 2/3: 7 queued URLs -> "
+        "https://example.test/docs/a, https://example.test/docs/b, "
+        "https://example.test/docs/c, https://example.test/docs/d, "
+        "https://example.test/docs/e, ... (+2 more)"
+    )
+
+
 def test_link_discovery_decision_reports_queue_and_skip_reasons():
     start_url = "https://example.test/docs"
     allow_patterns = ["https://example.test/docs/*"]
@@ -327,7 +353,8 @@ def test_crawl_site_headful_debug_outputs_queue_and_link_reasons(monkeypatch, tm
 
     asyncio.run(crawl_cli.crawl_site_headful(site, headless=True, debug=True))
 
-    output = capsys.readouterr().out
+    captured = capsys.readouterr()
+    output = captured.err
     assert "[crawl][debug] Starting level 1/2 with 1 queued URL(s)" in output
     assert "[crawl][debug] Navigating to https://example.test/docs" in output
     assert "[crawl][debug] Discovered 6 raw anchors, 6 normalized link target(s)" in output
@@ -355,3 +382,89 @@ def test_crawl_site_headful_debug_outputs_queue_and_link_reasons(monkeypatch, tm
         "[crawl][debug] Next queue for level 2/2: 1 queued URL -> "
         "https://example.test/docs/install" in output
     )
+
+
+def test_crawl_site_headful_redirects_to_final_url_and_indexes_that_url(
+    monkeypatch, tmp_path, capsys
+):
+    indexed = []
+
+    class FakePage:
+        def __init__(self):
+            self.url = ""
+
+        async def goto(self, url, wait_until, timeout):
+            self.url = "https://example.test/docs/guide?from=nav#intro"
+
+        async def title(self):
+            return "Guide"
+
+        async def content(self):
+            return "<html><body><main><h1>Guide</h1></main></body></html>"
+
+        async def query_selector(self, selector):
+            return None
+
+        async def eval_on_selector_all(self, selector, script):
+            return []
+
+    class FakeContext:
+        async def new_page(self):
+            return FakePage()
+
+    class FakeBrowser:
+        async def new_context(self, **kwargs):
+            return FakeContext()
+
+        async def close(self):
+            return None
+
+    class FakeChromium:
+        async def launch(self, headless):
+            return FakeBrowser()
+
+    class FakePlaywrightManager:
+        async def __aenter__(self):
+            return types.SimpleNamespace(chromium=FakeChromium())
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    async def fake_sleep(delay):
+        return None
+
+    def fake_upsert_page(index_file, url, title, content_md):
+        indexed.append((index_file, url, title, content_md))
+
+    monkeypatch.setitem(
+        sys.modules,
+        "playwright.async_api",
+        types.SimpleNamespace(async_playwright=lambda: FakePlaywrightManager()),
+    )
+    monkeypatch.setattr(crawl_cli.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(crawl_cli, "upsert_page", fake_upsert_page)
+
+    site = {
+        "name": "Example Docs",
+        "url": "https://example.test/docs",
+        "index_file": str(tmp_path / "docs.db"),
+        "crawl": {
+            "start_url": "https://example.test/docs",
+            "max_depth": 0,
+            "delay_seconds": 0,
+        },
+    }
+
+    import asyncio
+
+    asyncio.run(crawl_cli.crawl_site_headful(site, headless=True, debug=True))
+
+    output = capsys.readouterr()
+    assert "[crawl][debug] Navigating to https://example.test/docs" in output.err
+    assert "[crawl][debug] Navigation redirected to https://example.test/docs/guide" in output.err
+    assert indexed[0][:3] == (
+        str(tmp_path / "docs.db"),
+        "https://example.test/docs/guide",
+        "Guide",
+    )
+    assert "Guide" in indexed[0][3]

@@ -196,6 +196,8 @@ def _format_queue_preview(
 ) -> str:
     """Summarize the queued URLs for a crawl depth."""
     queued_urls = [url for url, item_depth in queue if item_depth == depth]
+    if not queued_urls:
+        return f"Next queue for level {depth + 1}/{total_levels}: 0 queued URLs -> (empty)"
     preview = ", ".join(queued_urls[:limit])
     remaining = len(queued_urls) - limit
     if remaining > 0:
@@ -274,7 +276,7 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
     def _debug(message: str) -> None:
         """Print a debug-only crawl trace line."""
         if debug:
-            print(f"[crawl][debug] {message}")
+            print(f"[crawl][debug] {message}", file=sys.stderr)
 
     async with async_playwright() as p:
         # Launch browser — headful by default to avoid anti-bot detection
