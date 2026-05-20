@@ -14,14 +14,18 @@ import sys
 
 from dotenv import load_dotenv
 
-from .auth.session import authenticate
+from . import __version__
 from .config.loader import ConfigError, get_sites
 
 load_dotenv()
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Authenticate to a documentation site.")
+    parser = argparse.ArgumentParser(
+        prog="docmcp-auth",
+        description=f"Authenticate to a documentation site.\nVersion: {__version__}",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument(
         "--site", type=str, help="Name of the site to authenticate (as in sites.yaml)"
     )
@@ -29,7 +33,14 @@ def main():
         "--force", action="store_true", help="Force re-authentication even if session is valid"
     )
     parser.add_argument("--list", action="store_true", help="List all configured sites")
+    parser.add_argument("--version", action="store_true", help="Show the current version and exit")
     args = parser.parse_args()
+
+    if args.version:
+        if args.site or args.force or args.list:
+            parser.error("--version cannot be combined with other arguments")
+        print(f"{parser.prog} {__version__}")
+        sys.exit(0)
 
     if not args.list and not args.site:
         parser.print_help()
@@ -53,6 +64,8 @@ def main():
     if not site:
         print(f"Site '{args.site}' not found in config. Use --list to see available sites.")
         return
+
+    from .auth.session import authenticate
 
     asyncio.run(authenticate(site, force=args.force))
     print("\n[auth] Done. You can now start the MCP server.")
