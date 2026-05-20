@@ -74,23 +74,25 @@ Copy-Item config\sites.yaml.example config\sites.yaml
 
    The current authentication flow is validated for `headful` login only. The `email_code` and `password_only` auth types are not tested thoroughly and are not recommended for production use.
 
+   `--help` and `--version` are lightweight for the auth, crawl, and server CLIs. The crawler also writes detailed debug traces to `stderr`, which keeps them separate from normal crawl progress output if you want to pipe or capture the main stream.
+
 4. Authenticate the site:
 
 ```bash
-python auth_cli.py --list
-python auth_cli.py --site "My Docs"
+docmcp-auth --list
+docmcp-auth --site "My Docs"
 ```
 
 5. Crawl and index the site:
 
 ```bash
-python crawl_cli.py --site "My Docs"
+docmcp-crawl --site "My Docs"
 ```
 
 6. Start the MCP server:
 
 ```bash
-python -m src.main
+docmcp-server
 ```
 
 ## Smoke Tests

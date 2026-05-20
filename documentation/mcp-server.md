@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-04-25
-- Version: v1.2
+- Last Updated: 2026-05-20
+- Version: v1.3
 
 ## Change Log
+- 2026-05-20 | v1.3 | Added current server version/help guidance and clarified startup diagnostics.
 - 2026-04-25 | v1.2 | Added VS Code GitHub Copilot MCP setup instructions with the stable wheel-installed docmcp-server entry point and workspace runtime env values.
 - 2026-04-24 | v1.0 | Reformatted the MCP server reference and clarified stdio startup, tools, and client wiring.
 
@@ -27,6 +28,12 @@ Describe the stdio MCP server entry point, the tools it exposes, and the client 
 ### Start The Server
 ```bash
 docmcp-server
+```
+
+Show the current server version:
+
+```bash
+docmcp-server --version
 ```
 
 Source-tree compatibility wrapper:
@@ -52,6 +59,7 @@ python -m src.main
 - The client command should point to the installed `docmcp-server` console script inside the active environment.
 - `CONFIG_FILE` should point to the workspace `config/sites.yaml`.
 - `DOC_MCP_HOME` should point to the workspace root used for runtime files.
+- The server reconfigures stdout and stderr to UTF-8 at startup and emits startup diagnostics to `stderr`.
 
 Example values:
 - Command: `docmcp-server`

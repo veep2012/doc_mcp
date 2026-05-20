@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-04-25
-- Version: v1.1
+- Last Updated: 2026-05-20
+- Version: v1.2
 
 ## Change Log
+- 2026-05-20 | v1.2 | Added current CLI version/help behavior and clarified lazy auth-path loading.
 - 2026-04-25 | v1.1 | Updated commands and references for installed docmcp-auth package entry point.
 - 2026-04-24 | v1.0 | Reformatted the authentication guide and documented the current headful session flow.
 
@@ -40,6 +41,11 @@ docmcp-auth --site "My Docs"
 docmcp-auth --site "My Docs" --force
 ```
 
+- Show the current version:
+```bash
+docmcp-auth --version
+```
+
 ### Session Flow
 1. The CLI loads the site definition from `config/sites.yaml`.
 2. If `auth_required` is false, authentication is skipped.
@@ -58,6 +64,7 @@ docmcp-auth --site "My Docs" --force
 - Authentication is per site.
 - The login browser is headful so the user can complete MFA, email-code, or magic-link flows manually.
 - The crawler reuses the saved session if it is still valid.
+- `--help`, `--list`, and `--version` complete without loading the browser authentication path until it is needed.
 
 ## Edge Cases
 - If a cookie has expired, the saved session is treated as invalid before the browser check runs.
