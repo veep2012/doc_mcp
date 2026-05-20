@@ -5,10 +5,12 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-04-25
-- Version: v1.1
+- Last Updated: 2026-05-20
+- Version: v1.3
 
 ## Change Log
+- 2026-05-20 | v1.3 | Clarified debug output routing, queue preview formatting, and redirected URL indexing.
+- 2026-05-20 | v1.2 | Added crawler debug mode guidance and queue/link trace expectations.
 - 2026-04-25 | v1.1 | Updated commands and references for installed docmcp-crawl package entry point and moved index store.
 - 2026-04-24 | v1.0 | Reformatted the crawl guide and documented the current Playwright and SQLite flow.
 
@@ -45,6 +47,16 @@ docmcp-crawl --site "My Docs" --force-auth
 docmcp-crawl --site "My Docs" --headless
 ```
 
+- Run the crawler with detailed diagnostics:
+```bash
+docmcp-crawl --site "My Docs" --debug
+```
+
+- Show the current crawler version:
+```bash
+docmcp-crawl --version
+```
+
 ### Crawl Behavior
 - The current crawler uses Playwright directly instead of Crawl4AI.
 - It starts from `crawl.start_url`.
@@ -56,6 +68,7 @@ docmcp-crawl --site "My Docs" --headless
 - It applies `allow_patterns` and `deny_patterns`.
 - It waits `delay_seconds` between pages.
 - It stops if it detects a redirect to a login page.
+- If a page redirects to another canonical URL, the crawler indexes the final normalized URL after stripping query strings and fragments.
 
 ### Content Extraction
 - The crawler attempts to extract the most complete rendered HTML it can find.
@@ -72,11 +85,16 @@ docmcp-crawl --site "My Docs" --headless
 ### Runtime Outputs
 - Session file: `storage/<site>.json`
 - SQLite index: `index/<site>.db`
+- Normal runs keep the existing progress output focused on page indexing progress.
+- `--debug` adds crawler-only trace lines for navigation, extracted content sizes, discovered links, skip reasons, queued URLs, and the next breadth-first queue preview before the crawler descends to the next level.
+- Debug traces are written to `stderr`, which keeps them separate from the normal crawl progress stream.
+- Queue previews summarize the next depth, show up to five URLs, and explicitly mark an empty next queue.
 
 ### Useful Behavior To Know
 - A site can be crawled again after content changes without creating duplicate rows.
 - If a session expires during a crawl, the crawler stops and tells you to re-authenticate.
 - Anchor-heavy documentation sites remain indexed as canonical pages instead of fragment-only records.
+- Redirected navigation is indexed using the final page URL, not the original requested URL.
 
 ## Edge Cases
 - Static resources are filtered out before indexing so they do not pollute search results.

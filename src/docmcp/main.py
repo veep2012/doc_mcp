@@ -2,6 +2,7 @@
 MCP server entry point for installed console scripts.
 """
 
+import argparse
 import logging
 import os
 import sys
@@ -9,6 +10,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from . import __version__
 from .config.loader import ConfigError, validate_config
 
 
@@ -42,6 +44,17 @@ def _log_startup_configuration(config: dict) -> None:
 
 def main() -> None:
     """Run the MCP server in stdio mode."""
+    parser = argparse.ArgumentParser(
+        prog="docmcp-server",
+        description=f"Run the MCP server in stdio mode.\nVersion: {__version__}",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("--version", action="store_true", help="Show the current version and exit")
+    args = parser.parse_args()
+    if args.version:
+        print(f"{parser.prog} {__version__}")
+        sys.exit(0)
+
     _configure_stdio()
     load_dotenv()
     logging.basicConfig(

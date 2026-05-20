@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-04-25
-- Version: v1.1
+- Last Updated: 2026-05-20
+- Version: v1.2
 
 ## Change Log
+- 2026-05-20 | v1.2 | Noted the current CLI version/help behavior and the source-tree versus installed command model.
 - 2026-04-25 | v1.1 | Updated architecture references for the docmcp package entry points and moved implementation modules.
 - 2026-04-24 | v1.0 | Reformatted the architecture overview to the documentation standard and clarified the runtime flow.
 
@@ -42,6 +43,7 @@ flowchart TD
 - `src/docmcp/tools.py` exposes the MCP tools used by clients.
 - `src/docmcp/config/loader.py` loads `config/sites.yaml` and resolves `${ENV_VAR}` placeholders from `.env` and process env.
 - `src/docmcp/index_store.py` manages the SQLite schema, FTS5 index, and page upserts.
+- The CLI entry points support `--help` and `--version` without forcing the browser-heavy auth or crawl imports unless they are needed.
 
 ### Data Flow
 1. The user configures a site in `config/sites.yaml`.
