@@ -111,6 +111,7 @@ def test_extract_links_skips_or_preserves_query_links_based_on_setting():
     ]
 
     assert _extract_links("https://example.test/docs/guide?tab=api", link_elements) == [
+        ("https://example.test/docs/guide?tab=api", True),
         ("https://example.test/docs/install", False),
     ]
     assert _extract_links(

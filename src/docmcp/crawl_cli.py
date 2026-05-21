@@ -191,7 +191,9 @@ def _extract_links(
         absolute_url = urljoin(page_url, href)
         parsed_url = urlparse(absolute_url)
         normalized_absolute_url = _normalize_url(absolute_url, ignore_query_links=False)
-        is_anchor_link = bool(parsed_url.fragment) and normalized_absolute_url == normalized_page_url
+        is_anchor_link = (
+            bool(parsed_url.fragment) and normalized_absolute_url == normalized_page_url
+        )
         if ignore_query_links and parsed_url.query and not is_anchor_link:
             continue
         normalized_url = (
