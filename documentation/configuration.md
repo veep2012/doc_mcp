@@ -6,10 +6,10 @@
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
 - Last Updated: 2026-05-21
-- Version: v1.3
+- Version: v1.4
 
 ## Change Log
-- 2026-05-21 | v1.3 | Documented `MCP_LOG_LEVEL`, clarified workspace `.env` resolution, and aligned runtime path notes with the loader.
+- 2026-05-21 | v1.4 | Documented `MCP_LOG_LEVEL`, clarified workspace `.env` resolution, and aligned runtime path notes with the loader.
 - 2026-04-25 | v1.1 | Documented runtime root resolution through DOC_MCP_HOME and updated implementation references.
 - 2026-04-24 | v1.0 | Reformatted the configuration reference and documented the live loader behavior.
 
@@ -54,7 +54,7 @@ SITE1_PASSWORD=replace-me
 - `crawl.max_depth`: breadth-first crawl depth
 - `crawl.delay_seconds`: pause between page fetches
 - `crawl.block_images`: block image, font, and media requests
-- `crawl.ignore_query_links`: skip discovered links that include a query string
+- `crawl.ignore_query_links`: skip discovered links that contain a query string
 - `crawl.ignore_anchor_links`: skip fragment-only links
 - `crawl.ignore_https_errors`: ignore TLS errors for that site
 - `crawl.allow_patterns`: optional allow-list glob patterns
@@ -92,8 +92,8 @@ The sample config file also includes a few future-facing keys such as `auth_mode
 - Workspace `.env` values are only used for config resolution; loading config does not mutate process env.
 - `CONFIG_FILE` can override the default config path.
 - Relative `CONFIG_FILE`, `session_file`, and `index_file` values should be interpreted from `DOC_MCP_HOME` or the process working directory.
-- `crawl.start_url` is used as the initial crawl seed with its configured query string intact.
-- `crawl.ignore_query_links: true` keeps query-bearing discovered links out of the crawl, while `false` allows them to be crawled and indexed as distinct URLs.
+- `crawl.start_url` is used as the initial crawl seed and is preserved exactly as configured, including any query string.
+- `crawl.ignore_query_links: true` skips discovered links that contain a query string, while `false` allows them to be crawled and indexed as distinct URLs.
 - Informational keys should not be treated as enforced runtime behavior.
 
 ## References
