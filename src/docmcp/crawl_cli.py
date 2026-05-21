@@ -190,10 +190,15 @@ def _extract_links(
             continue
         absolute_url = urljoin(page_url, href)
         parsed_url = urlparse(absolute_url)
-        if ignore_query_links and parsed_url.query:
+        normalized_absolute_url = _normalize_url(absolute_url, ignore_query_links=False)
+        is_anchor_link = bool(parsed_url.fragment) and normalized_absolute_url == normalized_page_url
+        if ignore_query_links and parsed_url.query and not is_anchor_link:
             continue
-        normalized_url = _normalize_url(absolute_url, ignore_query_links=ignore_query_links)
-        is_anchor_link = "#" in absolute_url and normalized_url == normalized_page_url
+        normalized_url = (
+            normalized_page_url
+            if is_anchor_link
+            else _normalize_url(absolute_url, ignore_query_links=ignore_query_links)
+        )
         links.append((normalized_url, is_anchor_link))
     return links
 
