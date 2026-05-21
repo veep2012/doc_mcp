@@ -281,33 +281,15 @@ def test_main_authenticates_before_crawling_when_required(monkeypatch):
     site = {"name": "Example Docs", "url": "https://example.test", "auth_required": True}
     calls = []
 
-    async def fake_authenticate(arg_site, force=False):
+    def fake_authenticate(arg_site, force=False):
         calls.append(("auth", arg_site, force))
 
     async def fake_crawl(arg_site, headless=False, debug=False):
         calls.append(("crawl", arg_site, headless, debug))
 
-    fake_auth_module = types.ModuleType("docmcp.auth.session")
-    fake_auth_module.authenticate = fake_authenticate
-    fake_src_auth_module = types.ModuleType("src.docmcp.auth.session")
-    fake_src_auth_module.authenticate = fake_authenticate
-    fake_docmcp_auth_package = types.ModuleType("docmcp.auth")
-    fake_docmcp_auth_package.session = fake_auth_module
-    fake_src_auth_package = types.ModuleType("src.docmcp.auth")
-    fake_src_auth_package.session = fake_src_auth_module
-    fake_docmcp_package = types.ModuleType("docmcp")
-    fake_docmcp_package.auth = fake_docmcp_auth_package
-    fake_src_docmcp_package = types.ModuleType("src.docmcp")
-    fake_src_docmcp_package.auth = fake_src_auth_package
-
     monkeypatch.setattr(crawl_cli, "get_sites", lambda: [site])
     monkeypatch.setattr(crawl_cli, "crawl_site_headful", fake_crawl)
-    monkeypatch.setitem(sys.modules, "docmcp", fake_docmcp_package)
-    monkeypatch.setitem(sys.modules, "src.docmcp", fake_src_docmcp_package)
-    monkeypatch.setitem(sys.modules, "docmcp.auth", fake_docmcp_auth_package)
-    monkeypatch.setitem(sys.modules, "docmcp.auth.session", fake_auth_module)
-    monkeypatch.setitem(sys.modules, "src.docmcp.auth", fake_src_auth_package)
-    monkeypatch.setitem(sys.modules, "src.docmcp.auth.session", fake_src_auth_module)
+    monkeypatch.setattr(crawl_cli, "_authenticate_site", fake_authenticate)
     monkeypatch.setattr(sys, "argv", ["docmcp-crawl", "--site", "Example Docs"])
 
     crawl_cli.main()
