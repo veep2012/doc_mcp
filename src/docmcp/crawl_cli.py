@@ -278,6 +278,7 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
 
     visited: set[str] = set()
     seed_url = _normalize_url(start_url, ignore_query_links=False)
+    seed_preserves_query = "?" in seed_url
     queued: set[str] = {seed_url}
     queue: deque[tuple[str, int]] = deque([(seed_url, 0)])
     page_count = 0
@@ -350,7 +351,9 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
                         print(f"[crawl]   ✗ Navigation error: {e}")
                         continue
 
-                    strip_query = ignore_query_links and "?" not in url
+                    strip_query = ignore_query_links and not (
+                        url == seed_url and seed_preserves_query
+                    )
                     current_url = _normalize_url(
                         page.url,
                         ignore_query_links=strip_query,

@@ -107,9 +107,12 @@ def test_extract_links_skips_or_preserves_query_links_based_on_setting():
     link_elements = [
         {"href": "/docs/guide?tab=api#details"},
         {"href": "/docs/install?source=nav"},
+        {"href": "/docs/install"},
     ]
 
-    assert _extract_links("https://example.test/docs/guide?tab=api", link_elements) == []
+    assert _extract_links("https://example.test/docs/guide?tab=api", link_elements) == [
+        ("https://example.test/docs/install", False),
+    ]
     assert _extract_links(
         "https://example.test/docs/guide?tab=api",
         link_elements,
@@ -117,6 +120,7 @@ def test_extract_links_skips_or_preserves_query_links_based_on_setting():
     ) == [
         ("https://example.test/docs/guide?tab=api", True),
         ("https://example.test/docs/install?source=nav", False),
+        ("https://example.test/docs/install", False),
     ]
 
 
