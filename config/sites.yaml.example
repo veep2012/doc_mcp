@@ -17,7 +17,7 @@ sites:
       delay_seconds: 1.0
       respect_robots_txt: true
       block_images: true            # skip image/font/media requests to speed up crawling
-      ignore_query_links: true      # skip discovered links that differ only by ?query
+      ignore_query_links: true      # skip discovered links that contain a ?query string
       ignore_anchor_links: true     # skip links that only differ by #fragment
       ignore_https_errors: false    # set true for sites with bad/mismatched TLS certs
       allow_patterns: []            # e.g. ["https://docs.example.com/documentation/*"]
