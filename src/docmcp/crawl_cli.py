@@ -52,13 +52,13 @@ except ImportError:
 # ---------------------------------------------------------------------------
 
 
-def _normalize_url(url: str, *, ignore_query_links: bool = True) -> str:
-    """Strip fragments and optionally query strings; normalize scheme/host to lowercase."""
+def _normalize_url(url: str, *, strip_query: bool = True) -> str:
+    """Strip fragments and optionally the query string; normalize scheme/host to lowercase."""
     p = urlparse(url)
     path = p.path
     if path != "/" and path.endswith("/"):
         path = path.rstrip("/")
-    query = "" if ignore_query_links else p.query
+    query = "" if strip_query else p.query
     return urlunparse((p.scheme.lower(), p.netloc.lower(), path, "", query, ""))
 
 
@@ -182,7 +182,7 @@ def _extract_links(
     Returns pairs of (normalized_url, is_anchor_link).
     """
     links = []
-    normalized_page_url = _normalize_url(page_url, ignore_query_links=False)
+    normalized_page_url = _normalize_url(page_url, strip_query=False)
     for el in link_elements:
         href = el.get("href", "") or ""
         href = href.strip()
@@ -190,7 +190,7 @@ def _extract_links(
             continue
         absolute_url = urljoin(page_url, href)
         parsed_url = urlparse(absolute_url)
-        normalized_absolute_url = _normalize_url(absolute_url, ignore_query_links=False)
+        normalized_absolute_url = _normalize_url(absolute_url, strip_query=False)
         is_anchor_link = (
             bool(parsed_url.fragment) and normalized_absolute_url == normalized_page_url
         )
@@ -199,7 +199,7 @@ def _extract_links(
         normalized_url = (
             normalized_page_url
             if is_anchor_link
-            else _normalize_url(absolute_url, ignore_query_links=ignore_query_links)
+            else _normalize_url(absolute_url, strip_query=ignore_query_links)
         )
         links.append((normalized_url, is_anchor_link))
     return links
@@ -284,7 +284,7 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
     login_indicators = ["login", "signin", "sign-in", "/auth", "/sso"]
 
     visited: set[str] = set()
-    seed_url = _normalize_url(start_url, ignore_query_links=False)
+    seed_url = _normalize_url(start_url, strip_query=False)
     seed_preserves_query = "?" in seed_url
     queued: set[str] = {seed_url}
     queue: deque[tuple[str, int]] = deque([(seed_url, 0)])
@@ -363,7 +363,7 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
                     )
                     current_url = _normalize_url(
                         page.url,
-                        ignore_query_links=strip_query,
+                        strip_query=strip_query,
                     )
                     if current_url != url:
                         _debug(f"Navigation redirected to {current_url}")
