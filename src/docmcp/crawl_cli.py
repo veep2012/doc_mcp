@@ -350,10 +350,10 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
                         print(f"[crawl]   ✗ Navigation error: {e}")
                         continue
 
-                    preserve_query = not ignore_query_links or "?" in url
+                    strip_query = ignore_query_links and "?" not in url
                     current_url = _normalize_url(
                         page.url,
-                        ignore_query_links=not preserve_query,
+                        ignore_query_links=strip_query,
                     )
                     if current_url != url:
                         _debug(f"Navigation redirected to {current_url}")
