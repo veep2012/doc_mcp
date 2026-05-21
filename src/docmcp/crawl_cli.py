@@ -247,6 +247,13 @@ def _link_discovery_decision(
     return True, "eligible for crawl"
 
 
+def _authenticate_site(site: dict, force: bool = False) -> None:
+    """Authenticate a site using the lazy-loaded auth session helper."""
+    from .auth.session import authenticate
+
+    authenticate(site, force=force)
+
+
 # ---------------------------------------------------------------------------
 # Core headful crawler
 # ---------------------------------------------------------------------------
@@ -502,9 +509,7 @@ def main():
 
     # Authenticate first if required
     if site.get("auth_required"):
-        from .auth.session import authenticate
-
-        asyncio.run(authenticate(site, force=args.force_auth))
+        _authenticate_site(site, force=args.force_auth)
 
     # Then crawl
     asyncio.run(crawl_site_headful(site, headless=args.headless, debug=args.debug))
