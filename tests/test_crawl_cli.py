@@ -276,6 +276,32 @@ def test_main_accepts_debug_and_threads_it_to_crawler(monkeypatch):
     assert captured == {"site": site, "headless": True, "debug": True}
 
 
+def test_main_authenticates_before_crawling_when_required(monkeypatch):
+    site = {"name": "Example Docs", "url": "https://example.test", "auth_required": True}
+    calls = []
+
+    async def fake_authenticate(arg_site, force=False):
+        calls.append(("auth", arg_site, force))
+
+    async def fake_crawl(arg_site, headless=False, debug=False):
+        calls.append(("crawl", arg_site, headless, debug))
+
+    fake_auth_module = types.ModuleType("docmcp.auth.session")
+    fake_auth_module.authenticate = fake_authenticate
+
+    monkeypatch.setattr(crawl_cli, "get_sites", lambda: [site])
+    monkeypatch.setattr(crawl_cli, "crawl_site_headful", fake_crawl)
+    monkeypatch.setitem(sys.modules, "docmcp.auth.session", fake_auth_module)
+    monkeypatch.setattr(sys, "argv", ["docmcp-crawl", "--site", "Example Docs"])
+
+    crawl_cli.main()
+
+    assert calls == [
+        ("auth", site, False),
+        ("crawl", site, False, False),
+    ]
+
+
 def test_crawl_cli_version_and_help_include_current_version(monkeypatch, capsys):
     monkeypatch.setattr(sys, "argv", ["docmcp-crawl", "--version"])
     with pytest.raises(SystemExit) as excinfo:
@@ -596,3 +622,146 @@ def test_crawl_site_headful_preserves_query_start_url_and_indexes_query_links(
         "https://example.test/docs/guide?tab=api",
         "Guide",
     )
+
+
+@pytest.mark.parametrize(
+    "crawl_cfg, expected",
+    [
+        (
+            {
+                "start_url": "https://example.test/docs?page=1",
+                "max_depth": 1,
+                "delay_seconds": 0.25,
+                "block_images": False,
+                "ignore_query_links": False,
+                "ignore_anchor_links": True,
+                "ignore_https_errors": False,
+            },
+            {
+                "visited_urls": [
+                    "https://example.test/docs?page=1",
+                    "https://example.test/docs/guide?tab=api",
+                ],
+                "indexed_urls": [
+                    "https://example.test/docs?page=1",
+                    "https://example.test/docs/guide?tab=api",
+                ],
+                "sleep_calls": [0.25, 0.25],
+                "route_calls": [],
+                "ignore_https_errors": False,
+            },
+        ),
+        (
+            {
+                "start_url": "https://example.test/docs?page=1",
+                "max_depth": 1,
+                "delay_seconds": 0.25,
+                "block_images": True,
+                "ignore_query_links": False,
+                "ignore_anchor_links": True,
+                "ignore_https_errors": True,
+            },
+            {
+                "visited_urls": [
+                    "https://example.test/docs?page=1",
+                    "https://example.test/docs/guide?tab=api",
+                ],
+                "indexed_urls": [
+                    "https://example.test/docs?page=1",
+                    "https://example.test/docs/guide?tab=api",
+                ],
+                "sleep_calls": [0.25, 0.25],
+                "route_calls": ["**/*"],
+                "ignore_https_errors": True,
+            },
+        ),
+    ],
+)
+def test_crawl_site_headful_runtime_config_matrix(monkeypatch, tmp_path, crawl_cfg, expected):
+    indexed = []
+    visited_urls = []
+    sleep_calls = []
+    route_calls = []
+    context_kwargs = {}
+
+    class FakePage:
+        def __init__(self):
+            self.url = ""
+
+        async def goto(self, url, wait_until, timeout):
+            visited_urls.append(url)
+            self.url = url
+
+        async def title(self):
+            return "Docs" if self.url.endswith("?page=1") else "Guide"
+
+        async def content(self):
+            return "<html><body><main><h1>Docs</h1></main></body></html>"
+
+        async def query_selector(self, selector):
+            return None
+
+        async def eval_on_selector_all(self, selector, script):
+            if self.url.endswith("?page=1"):
+                return [
+                    {"href": "/docs?page=1#intro"},
+                    {"href": "/docs/guide?tab=api"},
+                ]
+            return []
+
+    class FakeContext:
+        async def route(self, pattern, handler):
+            route_calls.append(pattern)
+
+        async def new_page(self):
+            return FakePage()
+
+    class FakeBrowser:
+        async def new_context(self, **kwargs):
+            context_kwargs.update(kwargs)
+            return FakeContext()
+
+        async def close(self):
+            return None
+
+    class FakeChromium:
+        async def launch(self, headless):
+            return FakeBrowser()
+
+    class FakePlaywrightManager:
+        async def __aenter__(self):
+            return types.SimpleNamespace(chromium=FakeChromium())
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    async def fake_sleep(delay):
+        sleep_calls.append(delay)
+
+    def fake_upsert_page(index_file, url, title, content_md):
+        indexed.append((index_file, url, title, content_md))
+
+    monkeypatch.setitem(
+        sys.modules,
+        "playwright.async_api",
+        types.SimpleNamespace(async_playwright=lambda: FakePlaywrightManager()),
+    )
+    monkeypatch.setattr(crawl_cli.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(crawl_cli, "upsert_page", fake_upsert_page)
+
+    site = {
+        "name": "Example Docs",
+        "url": "https://example.test/docs",
+        "index_file": str(tmp_path / "docs.db"),
+        "crawl": crawl_cfg,
+    }
+
+    import asyncio
+
+    asyncio.run(crawl_cli.crawl_site_headful(site, headless=True, debug=False))
+
+    assert context_kwargs["ignore_https_errors"] is expected["ignore_https_errors"]
+    assert route_calls == expected["route_calls"]
+    assert sleep_calls == expected["sleep_calls"]
+    assert visited_urls == expected["visited_urls"]
+    assert [row[1] for row in indexed] == expected["indexed_urls"]
