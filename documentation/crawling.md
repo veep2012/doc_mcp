@@ -62,7 +62,7 @@ docmcp-crawl --version
 - If `auth_required` is true for the site, the crawl command authenticates before crawling and reuses any still-valid saved session.
 - It starts from `crawl.start_url` and preserves that configured query string on the initial crawl seed.
 - It uses breadth-first traversal up to `crawl.max_depth`.
-- It normalizes URLs by stripping fragments, and it strips query strings from discovered links unless `crawl.ignore_query_links` is set to `false`.
+- It normalizes URLs by stripping fragments, and it skips discovered links with query strings unless `crawl.ignore_query_links` is set to `false`.
 - It restricts crawling to the same host and the same starting path prefix.
 - It skips static assets such as images, fonts, CSS, JavaScript, and archives.
 - It optionally skips discovered query links and anchor-only links independently.
