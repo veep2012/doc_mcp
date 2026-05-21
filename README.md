@@ -72,10 +72,7 @@ Copy-Item config\sites.yaml.example config\sites.yaml
 
 3. Edit `config/sites.yaml` and `.env` for your site, credentials, and paths.
 
-   The current authentication flow is manual and headful only: Playwright opens a visible browser and you complete the login yourself. The sample `auth_type` and `auth_mode` keys are informational metadata, not runtime switches, so the active configuration is driven by `auth_required`, `session_file`, `crawl`, and `index_file`.
-
-   `--help` and `--version` are lightweight for the auth, crawl, and server CLIs. The crawler also writes detailed debug traces to `stderr`, which keeps them separate from normal crawl progress output if you want to pipe or capture the main stream.
-
+   The current authentication flow is manual and headful only: Playwright opens a visible browser and you complete the login yourself. The sample `auth_type` and `auth_mode` fields in `config/sites.yaml.example` are informational metadata, not runtime switches, so the active configuration is driven by `auth_required`, `session_file`, `crawl`, and `index_file`. `--help` and `--version` are lightweight for the auth, crawl, and server CLIs. The crawler also writes detailed debug traces to `stderr`, which keeps them separate from normal crawl progress output if you want to pipe or capture the main stream.
 4. Authenticate the site:
 
 ```bash

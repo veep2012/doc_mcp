@@ -5,12 +5,12 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-05-20
-- Version: v1.4
+- Last Updated: 2026-05-21
+- Version: v1.5
 
 ## Change Log
-- 2026-05-20 | v1.4 | Clarified debug stderr routing and redirected-navigation diagnostics.
-- 2026-05-20 | v1.3 | Added crawl debug guidance for diagnosing queue, link, and page-level crawler behavior.
+- 2026-05-21 | v1.5 | Consolidated same-day crawl diagnostics updates and kept the startup and recovery guidance aligned with the current code.
+- 2026-05-20 | v1.4 | Clarified debug stderr routing, redirected-navigation diagnostics, and crawl debug guidance for queue, link, and page-level behavior.
 - 2026-04-27 | v1.2 | Added Windows Playwright module verification and recovery steps.
 - 2026-04-25 | v1.1 | Updated troubleshooting notes for the package entry point and VS Code MCP configuration.
 - 2026-04-24 | v1.0 | Reformatted the troubleshooting guide and grouped the common failures into standard sections.

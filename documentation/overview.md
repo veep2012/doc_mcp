@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-05-20
-- Version: v1.2
+- Last Updated: 2026-05-21
+- Version: v1.3
 
 ## Change Log
+- 2026-05-21 | v1.3 | Clarified the full MCP tool surface and the runtime env resolution behavior.
 - 2026-05-20 | v1.2 | Noted the current CLI version/help behavior and the source-tree versus installed command model.
 - 2026-04-25 | v1.1 | Updated architecture references for the docmcp package entry points and moved implementation modules.
 - 2026-04-24 | v1.0 | Reformatted the architecture overview to the documentation standard and clarified the runtime flow.
@@ -41,7 +42,7 @@ flowchart TD
 - `docmcp-crawl` opens the site in Playwright, walks the documentation tree, converts HTML to Markdown, and stores results in SQLite.
 - `docmcp-server` starts the MCP server in stdio mode through `src/docmcp/main.py`.
 - `src/docmcp/tools.py` exposes the MCP tools used by clients.
-- `src/docmcp/config/loader.py` loads `config/sites.yaml` and resolves `${ENV_VAR}` placeholders from `.env` and process env.
+- `src/docmcp/config/loader.py` loads `config/sites.yaml` and resolves `${ENV_VAR}` placeholders from the runtime `.env` plus process env.
 - `src/docmcp/index_store.py` manages the SQLite schema, FTS5 index, and page upserts.
 - The CLI entry points support `--help` and `--version` without forcing the browser-heavy auth or crawl imports unless they are needed.
 
@@ -50,7 +51,7 @@ flowchart TD
 2. The user authenticates once with `docmcp-auth`.
 3. The crawler reuses the saved session if it is still valid.
 4. Each crawled page is normalized, converted to Markdown, and written to SQLite.
-5. The MCP server reads from SQLite and returns search results or page content to AI clients.
+5. The MCP server reads from SQLite and returns site lists, page lists, search results, or page content to AI clients.
 
 ### Storage Layout
 - Sessions: `storage/<site>.json`
