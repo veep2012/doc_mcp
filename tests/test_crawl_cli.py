@@ -292,6 +292,7 @@ def test_main_authenticates_before_crawling_when_required(monkeypatch):
     monkeypatch.setattr(crawl_cli, "get_sites", lambda: [site])
     monkeypatch.setattr(crawl_cli, "crawl_site_headful", fake_crawl)
     monkeypatch.setitem(sys.modules, "docmcp.auth.session", fake_auth_module)
+    monkeypatch.setitem(sys.modules, "src.docmcp.auth.session", fake_auth_module)
     monkeypatch.setattr(sys, "argv", ["docmcp-crawl", "--site", "Example Docs"])
 
     crawl_cli.main()
