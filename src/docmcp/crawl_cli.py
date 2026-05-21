@@ -52,13 +52,14 @@ except ImportError:
 # ---------------------------------------------------------------------------
 
 
-def _normalize_url(url: str) -> str:
-    """Strip fragments and query strings; normalize scheme/host to lowercase."""
+def _normalize_url(url: str, *, strip_query: bool = True) -> str:
+    """Strip fragments and optionally the query string; normalize scheme/host to lowercase."""
     p = urlparse(url)
     path = p.path
     if path != "/" and path.endswith("/"):
         path = path.rstrip("/")
-    return urlunparse((p.scheme.lower(), p.netloc.lower(), path, "", "", ""))
+    query = "" if strip_query else p.query
+    return urlunparse((p.scheme.lower(), p.netloc.lower(), path, "", query, ""))
 
 
 _STATIC_EXTENSIONS = {
@@ -173,20 +174,33 @@ async def _extract_page_html(page) -> str:
     return max(candidates, key=len)
 
 
-def _extract_links(page_url: str, link_elements: list[dict]) -> list[tuple[str, bool]]:
+def _extract_links(
+    page_url: str, link_elements: list[dict], *, ignore_query_links: bool = True
+) -> list[tuple[str, bool]]:
     """Extract and normalize hrefs from Playwright link objects.
 
     Returns pairs of (normalized_url, is_anchor_link).
     """
     links = []
+    normalized_page_url = _normalize_url(page_url, strip_query=False)
     for el in link_elements:
         href = el.get("href", "") or ""
         href = href.strip()
         if not href or href.startswith(("#", "mailto:", "javascript:")):
             continue
         absolute_url = urljoin(page_url, href)
-        normalized_url = _normalize_url(absolute_url)
-        is_anchor_link = "#" in absolute_url and normalized_url == _normalize_url(page_url)
+        parsed_url = urlparse(absolute_url)
+        normalized_absolute_url = _normalize_url(absolute_url, strip_query=False)
+        is_anchor_link = (
+            bool(parsed_url.fragment) and normalized_absolute_url == normalized_page_url
+        )
+        if ignore_query_links and parsed_url.query and not is_anchor_link:
+            continue
+        normalized_url = (
+            normalized_page_url
+            if is_anchor_link
+            else _normalize_url(absolute_url, strip_query=ignore_query_links)
+        )
         links.append((normalized_url, is_anchor_link))
     return links
 
@@ -233,6 +247,13 @@ def _link_discovery_decision(
     return True, "eligible for crawl"
 
 
+def _authenticate_site(site: dict, force: bool = False) -> None:
+    """Authenticate a site using the lazy-loaded auth session helper."""
+    from .auth.session import authenticate
+
+    authenticate(site, force=force)
+
+
 # ---------------------------------------------------------------------------
 # Core headful crawler
 # ---------------------------------------------------------------------------
@@ -253,6 +274,7 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
     allow_patterns = crawl_cfg.get("allow_patterns", [])
     deny_patterns = crawl_cfg.get("deny_patterns", [])
     block_images = crawl_cfg.get("block_images", False)
+    ignore_query_links = crawl_cfg.get("ignore_query_links", True)
     ignore_anchor_links = crawl_cfg.get("ignore_anchor_links", True)
     ignore_https_errors = crawl_cfg.get("ignore_https_errors", False)
     index_file = site["index_file"]
@@ -269,8 +291,10 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
     login_indicators = ["login", "signin", "sign-in", "/auth", "/sso"]
 
     visited: set[str] = set()
-    queued: set[str] = {_normalize_url(start_url)}
-    queue: deque[tuple[str, int]] = deque([(_normalize_url(start_url), 0)])
+    seed_url = _normalize_url(start_url, strip_query=False)
+    seed_preserves_query = "?" in seed_url
+    queued: set[str] = {seed_url}
+    queue: deque[tuple[str, int]] = deque([(seed_url, 0)])
     page_count = 0
 
     def _debug(message: str) -> None:
@@ -341,7 +365,13 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
                         print(f"[crawl]   ✗ Navigation error: {e}")
                         continue
 
-                    current_url = _normalize_url(page.url)
+                    strip_query = ignore_query_links and not (
+                        url == seed_url and seed_preserves_query
+                    )
+                    current_url = _normalize_url(
+                        page.url,
+                        strip_query=strip_query,
+                    )
                     if current_url != url:
                         _debug(f"Navigation redirected to {current_url}")
                     else:
@@ -376,7 +406,11 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
                             anchors = await page.eval_on_selector_all(
                                 "a[href]", "els => els.map(e => ({ href: e.href }))"
                             )
-                            discovered_links = _extract_links(current_url, anchors)
+                            discovered_links = _extract_links(
+                                current_url,
+                                anchors,
+                                ignore_query_links=ignore_query_links,
+                            )
                             _debug(
                                 f"Discovered {len(anchors)} raw anchors, {len(discovered_links)} normalized link target(s)"
                             )
@@ -475,9 +509,7 @@ def main():
 
     # Authenticate first if required
     if site.get("auth_required"):
-        from .auth.session import authenticate
-
-        asyncio.run(authenticate(site, force=args.force_auth))
+        _authenticate_site(site, force=args.force_auth)
 
     # Then crawl
     asyncio.run(crawl_site_headful(site, headless=args.headless, debug=args.debug))

@@ -18,10 +18,20 @@ from docmcp.crawl_cli import (
 )
 
 
-def test_normalize_url_strips_fragments_queries_and_trailing_slashes():
+def test_normalize_url_strips_fragments_queries_and_trailing_slashes_by_default():
     assert (
         _normalize_url("HTTPS://Example.TEST/docs/guide/?q=1#intro")
         == "https://example.test/docs/guide"
+    )
+
+
+def test_normalize_url_can_preserve_query_strings():
+    assert (
+        _normalize_url(
+            "HTTPS://Example.TEST/docs/guide/?q=1#intro",
+            strip_query=False,
+        )
+        == "https://example.test/docs/guide?q=1"
     )
 
 
@@ -90,6 +100,27 @@ def test_extract_links_marks_anchors_and_skips_non_http_targets():
 
     assert links == [
         ("https://example.test/docs/guide", True),
+    ]
+
+
+def test_extract_links_skips_or_preserves_query_links_based_on_setting():
+    link_elements = [
+        {"href": "/docs/guide?tab=api#details"},
+        {"href": "/docs/install?source=nav"},
+        {"href": "/docs/install"},
+    ]
+
+    assert _extract_links("https://example.test/docs/guide?tab=api", link_elements) == [
+        ("https://example.test/docs/guide?tab=api", True),
+        ("https://example.test/docs/install", False),
+    ]
+    assert _extract_links(
+        "https://example.test/docs/guide?tab=api",
+        link_elements,
+        ignore_query_links=False,
+    ) == [
+        ("https://example.test/docs/guide?tab=api", True),
+        ("https://example.test/docs/install?source=nav", False),
         ("https://example.test/docs/install", False),
     ]
 
@@ -244,6 +275,29 @@ def test_main_accepts_debug_and_threads_it_to_crawler(monkeypatch):
     crawl_cli.main()
 
     assert captured == {"site": site, "headless": True, "debug": True}
+
+
+def test_main_authenticates_before_crawling_when_required(monkeypatch):
+    site = {"name": "Example Docs", "url": "https://example.test", "auth_required": True}
+    calls = []
+
+    def fake_authenticate(arg_site, force=False):
+        calls.append(("auth", arg_site, force))
+
+    async def fake_crawl(arg_site, headless=False, debug=False):
+        calls.append(("crawl", arg_site, headless, debug))
+
+    monkeypatch.setattr(crawl_cli, "get_sites", lambda: [site])
+    monkeypatch.setattr(crawl_cli, "crawl_site_headful", fake_crawl)
+    monkeypatch.setattr(crawl_cli, "_authenticate_site", fake_authenticate)
+    monkeypatch.setattr(sys, "argv", ["docmcp-crawl", "--site", "Example Docs"])
+
+    crawl_cli.main()
+
+    assert calls == [
+        ("auth", site, False),
+        ("crawl", site, False, False),
+    ]
 
 
 def test_crawl_cli_version_and_help_include_current_version(monkeypatch, capsys):
@@ -468,3 +522,340 @@ def test_crawl_site_headful_redirects_to_final_url_and_indexes_that_url(
         "Guide",
     )
     assert "Guide" in indexed[0][3]
+
+
+def test_crawl_site_headful_preserves_query_start_url_and_indexes_query_links(
+    monkeypatch, tmp_path, capsys
+):
+    indexed = []
+    visited_urls = []
+
+    class FakePage:
+        def __init__(self):
+            self.url = ""
+
+        async def goto(self, url, wait_until, timeout):
+            visited_urls.append(url)
+            self.url = url
+
+        async def title(self):
+            return "Guide" if "tab=api" in self.url else "Docs"
+
+        async def content(self):
+            return "<html><body><main><h1>Guide</h1></main></body></html>"
+
+        async def query_selector(self, selector):
+            return None
+
+        async def eval_on_selector_all(self, selector, script):
+            if self.url.endswith("/docs?page=1"):
+                return [{"href": "/docs/guide?tab=api"}]
+            return []
+
+    class FakeContext:
+        async def new_page(self):
+            return FakePage()
+
+    class FakeBrowser:
+        async def new_context(self, **kwargs):
+            return FakeContext()
+
+        async def close(self):
+            return None
+
+    class FakeChromium:
+        async def launch(self, headless):
+            return FakeBrowser()
+
+    class FakePlaywrightManager:
+        async def __aenter__(self):
+            return types.SimpleNamespace(chromium=FakeChromium())
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    async def fake_sleep(delay):
+        return None
+
+    def fake_upsert_page(index_file, url, title, content_md):
+        indexed.append((index_file, url, title, content_md))
+
+    monkeypatch.setitem(
+        sys.modules,
+        "playwright.async_api",
+        types.SimpleNamespace(async_playwright=lambda: FakePlaywrightManager()),
+    )
+    monkeypatch.setattr(crawl_cli.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(crawl_cli, "upsert_page", fake_upsert_page)
+
+    site = {
+        "name": "Example Docs",
+        "url": "https://example.test/docs",
+        "index_file": str(tmp_path / "docs.db"),
+        "crawl": {
+            "start_url": "https://example.test/docs?page=1",
+            "max_depth": 1,
+            "delay_seconds": 0,
+            "ignore_query_links": False,
+        },
+    }
+
+    import asyncio
+
+    asyncio.run(crawl_cli.crawl_site_headful(site, headless=True, debug=True))
+
+    output = capsys.readouterr()
+    assert visited_urls == [
+        "https://example.test/docs?page=1",
+        "https://example.test/docs/guide?tab=api",
+    ]
+    assert "[crawl][debug] Navigating to https://example.test/docs?page=1" in output.err
+    assert indexed[0][:3] == (
+        str(tmp_path / "docs.db"),
+        "https://example.test/docs?page=1",
+        "Docs",
+    )
+    assert indexed[1][:3] == (
+        str(tmp_path / "docs.db"),
+        "https://example.test/docs/guide?tab=api",
+        "Guide",
+    )
+
+
+def test_crawl_site_headful_keeps_query_anchor_links_as_current_page_targets(
+    monkeypatch, tmp_path, capsys
+):
+    indexed = []
+    visited_urls = []
+
+    class FakePage:
+        def __init__(self):
+            self.url = ""
+
+        async def goto(self, url, wait_until, timeout):
+            visited_urls.append(url)
+            self.url = url
+
+        async def title(self):
+            return "Docs"
+
+        async def content(self):
+            return "<html><body><main><h1>Docs</h1></main></body></html>"
+
+        async def query_selector(self, selector):
+            return None
+
+        async def eval_on_selector_all(self, selector, script):
+            return [
+                {"href": "/docs?page=1#intro"},
+                {"href": "/docs/other?tab=api"},
+            ]
+
+    class FakeContext:
+        async def new_page(self):
+            return FakePage()
+
+    class FakeBrowser:
+        async def new_context(self, **kwargs):
+            return FakeContext()
+
+        async def close(self):
+            return None
+
+    class FakeChromium:
+        async def launch(self, headless):
+            return FakeBrowser()
+
+    class FakePlaywrightManager:
+        async def __aenter__(self):
+            return types.SimpleNamespace(chromium=FakeChromium())
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    async def fake_sleep(delay):
+        return None
+
+    def fake_upsert_page(index_file, url, title, content_md):
+        indexed.append((index_file, url, title, content_md))
+
+    monkeypatch.setitem(
+        sys.modules,
+        "playwright.async_api",
+        types.SimpleNamespace(async_playwright=lambda: FakePlaywrightManager()),
+    )
+    monkeypatch.setattr(crawl_cli.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(crawl_cli, "upsert_page", fake_upsert_page)
+
+    site = {
+        "name": "Example Docs",
+        "url": "https://example.test/docs",
+        "index_file": str(tmp_path / "docs.db"),
+        "crawl": {
+            "start_url": "https://example.test/docs?page=1",
+            "max_depth": 1,
+            "delay_seconds": 0,
+            "ignore_query_links": True,
+            "ignore_anchor_links": True,
+        },
+    }
+
+    import asyncio
+
+    asyncio.run(crawl_cli.crawl_site_headful(site, headless=True, debug=True))
+
+    output = capsys.readouterr()
+    assert visited_urls == ["https://example.test/docs?page=1"]
+    assert "[crawl][debug] Discovered 2 raw anchors, 1 normalized link target(s)" in output.err
+    assert (
+        "[crawl][debug] Discovered https://example.test/docs?page=1 -> skipped "
+        "(anchor link points to the current page)" in output.err
+    )
+    assert indexed[0][:3] == (
+        str(tmp_path / "docs.db"),
+        "https://example.test/docs?page=1",
+        "Docs",
+    )
+
+
+@pytest.mark.parametrize(
+    "crawl_cfg, expected",
+    [
+        (
+            {
+                "start_url": "https://example.test/docs?page=1",
+                "max_depth": 1,
+                "delay_seconds": 0.25,
+                "block_images": False,
+                "ignore_query_links": False,
+                "ignore_anchor_links": True,
+                "ignore_https_errors": False,
+            },
+            {
+                "visited_urls": [
+                    "https://example.test/docs?page=1",
+                    "https://example.test/docs/guide?tab=api",
+                ],
+                "indexed_urls": [
+                    "https://example.test/docs?page=1",
+                    "https://example.test/docs/guide?tab=api",
+                ],
+                "sleep_calls": [0.25, 0.25],
+                "route_calls": [],
+                "ignore_https_errors": False,
+            },
+        ),
+        (
+            {
+                "start_url": "https://example.test/docs?page=1",
+                "max_depth": 1,
+                "delay_seconds": 0.25,
+                "block_images": True,
+                "ignore_query_links": False,
+                "ignore_anchor_links": True,
+                "ignore_https_errors": True,
+            },
+            {
+                "visited_urls": [
+                    "https://example.test/docs?page=1",
+                    "https://example.test/docs/guide?tab=api",
+                ],
+                "indexed_urls": [
+                    "https://example.test/docs?page=1",
+                    "https://example.test/docs/guide?tab=api",
+                ],
+                "sleep_calls": [0.25, 0.25],
+                "route_calls": ["**/*"],
+                "ignore_https_errors": True,
+            },
+        ),
+    ],
+)
+def test_crawl_site_headful_runtime_config_matrix(monkeypatch, tmp_path, crawl_cfg, expected):
+    indexed = []
+    visited_urls = []
+    sleep_calls = []
+    route_calls = []
+    context_kwargs = {}
+
+    class FakePage:
+        def __init__(self):
+            self.url = ""
+
+        async def goto(self, url, wait_until, timeout):
+            visited_urls.append(url)
+            self.url = url
+
+        async def title(self):
+            return "Docs" if self.url.endswith("?page=1") else "Guide"
+
+        async def content(self):
+            return "<html><body><main><h1>Docs</h1></main></body></html>"
+
+        async def query_selector(self, selector):
+            return None
+
+        async def eval_on_selector_all(self, selector, script):
+            if self.url.endswith("?page=1"):
+                return [
+                    {"href": "/docs?page=1#intro"},
+                    {"href": "/docs/guide?tab=api"},
+                ]
+            return []
+
+    class FakeContext:
+        async def route(self, pattern, handler):
+            route_calls.append(pattern)
+
+        async def new_page(self):
+            return FakePage()
+
+    class FakeBrowser:
+        async def new_context(self, **kwargs):
+            context_kwargs.update(kwargs)
+            return FakeContext()
+
+        async def close(self):
+            return None
+
+    class FakeChromium:
+        async def launch(self, headless):
+            return FakeBrowser()
+
+    class FakePlaywrightManager:
+        async def __aenter__(self):
+            return types.SimpleNamespace(chromium=FakeChromium())
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    async def fake_sleep(delay):
+        sleep_calls.append(delay)
+
+    def fake_upsert_page(index_file, url, title, content_md):
+        indexed.append((index_file, url, title, content_md))
+
+    monkeypatch.setitem(
+        sys.modules,
+        "playwright.async_api",
+        types.SimpleNamespace(async_playwright=lambda: FakePlaywrightManager()),
+    )
+    monkeypatch.setattr(crawl_cli.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(crawl_cli, "upsert_page", fake_upsert_page)
+
+    site = {
+        "name": "Example Docs",
+        "url": "https://example.test/docs",
+        "index_file": str(tmp_path / "docs.db"),
+        "crawl": crawl_cfg,
+    }
+
+    import asyncio
+
+    asyncio.run(crawl_cli.crawl_site_headful(site, headless=True, debug=False))
+
+    assert context_kwargs["ignore_https_errors"] is expected["ignore_https_errors"]
+    assert route_calls == expected["route_calls"]
+    assert sleep_calls == expected["sleep_calls"]
+    assert visited_urls == expected["visited_urls"]
+    assert [row[1] for row in indexed] == expected["indexed_urls"]
