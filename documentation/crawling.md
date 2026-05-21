@@ -6,12 +6,11 @@
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
 - Last Updated: 2026-05-21
-- Version: v1.4
+- Version: v1.5
 
 ## Change Log
-- 2026-05-21 | v1.4 | Added query-link crawl control and documented query-bearing start_url handling.
-- 2026-05-20 | v1.3 | Clarified debug output routing, queue preview formatting, and redirected URL indexing.
-- 2026-05-20 | v1.2 | Added crawler debug mode guidance and queue/link trace expectations.
+- 2026-05-21 | v1.5 | Clarified automatic auth-before-crawl behavior, query-link handling, and crawler indexing notes.
+- 2026-05-20 | v1.4 | Clarified debug output routing, queue preview formatting, redirected URL indexing, and crawler trace expectations.
 - 2026-04-25 | v1.1 | Updated commands and references for installed docmcp-crawl package entry point and moved index store.
 - 2026-04-24 | v1.0 | Reformatted the crawl guide and documented the current Playwright and SQLite flow.
 
@@ -60,6 +59,7 @@ docmcp-crawl --version
 
 ### Crawl Behavior
 - The current crawler uses Playwright directly instead of Crawl4AI.
+- If `auth_required` is true for the site, the crawl command authenticates before crawling and reuses any still-valid saved session.
 - It starts from `crawl.start_url` and preserves that configured query string on the initial crawl seed.
 - It uses breadth-first traversal up to `crawl.max_depth`.
 - It normalizes URLs by stripping fragments, and it strips query strings from discovered links unless `crawl.ignore_query_links` is set to `false`.

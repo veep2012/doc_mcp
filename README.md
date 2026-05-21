@@ -72,9 +72,7 @@ Copy-Item config\sites.yaml.example config\sites.yaml
 
 3. Edit `config/sites.yaml` and `.env` for your site, credentials, and paths.
 
-   The current authentication flow is validated for `headful` login only. The `email_code` and `password_only` auth types are not tested thoroughly and are not recommended for production use.
-
-   `--help` and `--version` are lightweight for the auth, crawl, and server CLIs. The crawler also writes detailed debug traces to `stderr`, which keeps them separate from normal crawl progress output if you want to pipe or capture the main stream.
+   `--help` and `--version` are lightweight for the auth, crawl, and server CLIs. The current auth flow is headful only, and the sample `auth_mode` / `auth_type` fields in `config/sites.yaml.example` are informational rather than runtime switches. The crawler also writes detailed debug traces to `stderr`, which keeps them separate from normal crawl progress output if you want to pipe or capture the main stream.
 
 4. Authenticate the site:
 
