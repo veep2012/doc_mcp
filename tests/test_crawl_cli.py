@@ -640,6 +640,102 @@ def test_crawl_site_headful_preserves_query_start_url_and_indexes_query_links(
     )
 
 
+def test_crawl_site_headful_keeps_query_anchor_links_as_current_page_targets(
+    monkeypatch, tmp_path, capsys
+):
+    indexed = []
+    visited_urls = []
+
+    class FakePage:
+        def __init__(self):
+            self.url = ""
+
+        async def goto(self, url, wait_until, timeout):
+            visited_urls.append(url)
+            self.url = url
+
+        async def title(self):
+            return "Docs"
+
+        async def content(self):
+            return "<html><body><main><h1>Docs</h1></main></body></html>"
+
+        async def query_selector(self, selector):
+            return None
+
+        async def eval_on_selector_all(self, selector, script):
+            return [
+                {"href": "/docs?page=1#intro"},
+                {"href": "/docs/other?tab=api"},
+            ]
+
+    class FakeContext:
+        async def new_page(self):
+            return FakePage()
+
+    class FakeBrowser:
+        async def new_context(self, **kwargs):
+            return FakeContext()
+
+        async def close(self):
+            return None
+
+    class FakeChromium:
+        async def launch(self, headless):
+            return FakeBrowser()
+
+    class FakePlaywrightManager:
+        async def __aenter__(self):
+            return types.SimpleNamespace(chromium=FakeChromium())
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    async def fake_sleep(delay):
+        return None
+
+    def fake_upsert_page(index_file, url, title, content_md):
+        indexed.append((index_file, url, title, content_md))
+
+    monkeypatch.setitem(
+        sys.modules,
+        "playwright.async_api",
+        types.SimpleNamespace(async_playwright=lambda: FakePlaywrightManager()),
+    )
+    monkeypatch.setattr(crawl_cli.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(crawl_cli, "upsert_page", fake_upsert_page)
+
+    site = {
+        "name": "Example Docs",
+        "url": "https://example.test/docs",
+        "index_file": str(tmp_path / "docs.db"),
+        "crawl": {
+            "start_url": "https://example.test/docs?page=1",
+            "max_depth": 1,
+            "delay_seconds": 0,
+            "ignore_query_links": True,
+            "ignore_anchor_links": True,
+        },
+    }
+
+    import asyncio
+
+    asyncio.run(crawl_cli.crawl_site_headful(site, headless=True, debug=True))
+
+    output = capsys.readouterr()
+    assert visited_urls == ["https://example.test/docs?page=1"]
+    assert "[crawl][debug] Discovered 2 raw anchors, 1 normalized link target(s)" in output.err
+    assert (
+        "[crawl][debug] Discovered https://example.test/docs?page=1 -> skipped "
+        "(anchor link points to the current page)" in output.err
+    )
+    assert indexed[0][:3] == (
+        str(tmp_path / "docs.db"),
+        "https://example.test/docs?page=1",
+        "Docs",
+    )
+
+
 @pytest.mark.parametrize(
     "crawl_cfg, expected",
     [
