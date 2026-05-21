@@ -18,10 +18,20 @@ from docmcp.crawl_cli import (
 )
 
 
-def test_normalize_url_strips_fragments_queries_and_trailing_slashes():
+def test_normalize_url_strips_fragments_queries_and_trailing_slashes_by_default():
     assert (
         _normalize_url("HTTPS://Example.TEST/docs/guide/?q=1#intro")
         == "https://example.test/docs/guide"
+    )
+
+
+def test_normalize_url_can_preserve_query_strings():
+    assert (
+        _normalize_url(
+            "HTTPS://Example.TEST/docs/guide/?q=1#intro",
+            ignore_query_links=False,
+        )
+        == "https://example.test/docs/guide?q=1"
     )
 
 
@@ -90,7 +100,23 @@ def test_extract_links_marks_anchors_and_skips_non_http_targets():
 
     assert links == [
         ("https://example.test/docs/guide", True),
-        ("https://example.test/docs/install", False),
+    ]
+
+
+def test_extract_links_skips_or_preserves_query_links_based_on_setting():
+    link_elements = [
+        {"href": "/docs/guide?tab=api#details"},
+        {"href": "/docs/install?source=nav"},
+    ]
+
+    assert _extract_links("https://example.test/docs/guide?tab=api", link_elements) == []
+    assert _extract_links(
+        "https://example.test/docs/guide?tab=api",
+        link_elements,
+        ignore_query_links=False,
+    ) == [
+        ("https://example.test/docs/guide?tab=api", True),
+        ("https://example.test/docs/install?source=nav", False),
     ]
 
 
@@ -468,3 +494,101 @@ def test_crawl_site_headful_redirects_to_final_url_and_indexes_that_url(
         "Guide",
     )
     assert "Guide" in indexed[0][3]
+
+
+def test_crawl_site_headful_preserves_query_start_url_and_indexes_query_links(
+    monkeypatch, tmp_path, capsys
+):
+    indexed = []
+    visited_urls = []
+
+    class FakePage:
+        def __init__(self):
+            self.url = ""
+
+        async def goto(self, url, wait_until, timeout):
+            visited_urls.append(url)
+            self.url = url
+
+        async def title(self):
+            return "Guide" if "tab=api" in self.url else "Docs"
+
+        async def content(self):
+            return "<html><body><main><h1>Guide</h1></main></body></html>"
+
+        async def query_selector(self, selector):
+            return None
+
+        async def eval_on_selector_all(self, selector, script):
+            if self.url.endswith("/docs?page=1"):
+                return [{"href": "/docs/guide?tab=api"}]
+            return []
+
+    class FakeContext:
+        async def new_page(self):
+            return FakePage()
+
+    class FakeBrowser:
+        async def new_context(self, **kwargs):
+            return FakeContext()
+
+        async def close(self):
+            return None
+
+    class FakeChromium:
+        async def launch(self, headless):
+            return FakeBrowser()
+
+    class FakePlaywrightManager:
+        async def __aenter__(self):
+            return types.SimpleNamespace(chromium=FakeChromium())
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    async def fake_sleep(delay):
+        return None
+
+    def fake_upsert_page(index_file, url, title, content_md):
+        indexed.append((index_file, url, title, content_md))
+
+    monkeypatch.setitem(
+        sys.modules,
+        "playwright.async_api",
+        types.SimpleNamespace(async_playwright=lambda: FakePlaywrightManager()),
+    )
+    monkeypatch.setattr(crawl_cli.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(crawl_cli, "upsert_page", fake_upsert_page)
+
+    site = {
+        "name": "Example Docs",
+        "url": "https://example.test/docs",
+        "index_file": str(tmp_path / "docs.db"),
+        "crawl": {
+            "start_url": "https://example.test/docs?page=1",
+            "max_depth": 1,
+            "delay_seconds": 0,
+            "ignore_query_links": False,
+        },
+    }
+
+    import asyncio
+
+    asyncio.run(crawl_cli.crawl_site_headful(site, headless=True, debug=True))
+
+    output = capsys.readouterr()
+    assert visited_urls == [
+        "https://example.test/docs?page=1",
+        "https://example.test/docs/guide?tab=api",
+    ]
+    assert "[crawl][debug] Navigating to https://example.test/docs?page=1" in output.err
+    assert indexed[0][:3] == (
+        str(tmp_path / "docs.db"),
+        "https://example.test/docs?page=1",
+        "Docs",
+    )
+    assert indexed[1][:3] == (
+        str(tmp_path / "docs.db"),
+        "https://example.test/docs/guide?tab=api",
+        "Guide",
+    )
