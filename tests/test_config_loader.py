@@ -39,6 +39,36 @@ def test_load_config_resolves_runtime_paths_and_env(monkeypatch, tmp_path):
     assert "DOCS_URL" not in os.environ
 
 
+def test_load_config_resolves_config_file_relative_to_runtime_root(monkeypatch, tmp_path):
+    runtime_root = tmp_path / "runtime"
+    (runtime_root / "custom").mkdir(parents=True)
+    (runtime_root / ".env").write_text("DOCS_URL=https://example.test/docs\n", encoding="utf-8")
+    (runtime_root / "custom" / "sites.yaml").write_text(
+        textwrap.dedent(
+            """
+            sites:
+              - name: "Relative Config"
+                url: "${DOCS_URL}"
+                auth_required: false
+                session_file: "storage/relative.json"
+                index_file: "index/relative.db"
+            """
+        ).strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("DOC_MCP_HOME", str(runtime_root))
+    monkeypatch.setenv("CONFIG_FILE", "custom/sites.yaml")
+    monkeypatch.delenv("DOCS_URL", raising=False)
+
+    config = load_config()
+
+    assert config["sites"][0]["url"] == "https://example.test/docs"
+    assert config["sites"][0]["session_file"] == str(runtime_root / "storage" / "relative.json")
+    assert config["sites"][0]["index_file"] == str(runtime_root / "index" / "relative.db")
+
+
 def test_load_config_does_not_mutate_process_env_between_workspace_loads(monkeypatch, tmp_path):
     runtime_a = tmp_path / "runtime-a"
     runtime_b = tmp_path / "runtime-b"

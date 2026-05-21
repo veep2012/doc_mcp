@@ -1,5 +1,6 @@
 import logging
 import sys
+import types
 
 import pytest
 
@@ -47,3 +48,28 @@ def test_server_cli_version_and_help_include_current_version(monkeypatch, capsys
     assert excinfo.value.code == 0
     help_text = capsys.readouterr().out
     assert f"Version: {__version__}" in help_text
+
+
+def test_server_cli_uses_mcp_log_level_environment_variable(monkeypatch):
+    captured = {}
+
+    def fake_basic_config(**kwargs):
+        captured.update(kwargs)
+
+    fake_tools = types.ModuleType("docmcp.tools")
+    fake_tools.mcp = types.SimpleNamespace(run=lambda transport: None)
+
+    monkeypatch.setenv("MCP_LOG_LEVEL", "DEBUG")
+    monkeypatch.setattr(main_cli, "_configure_stdio", lambda: None)
+    monkeypatch.setattr(main_cli, "load_dotenv", lambda: None)
+    monkeypatch.setattr(main_cli, "validate_config", lambda: {"sites": []})
+    monkeypatch.setattr(main_cli, "_log_startup_configuration", lambda config: None)
+    monkeypatch.setattr(main_cli.logging, "basicConfig", fake_basic_config)
+    monkeypatch.setitem(sys.modules, "docmcp.tools", fake_tools)
+    monkeypatch.setitem(sys.modules, "src.docmcp.tools", fake_tools)
+    monkeypatch.setattr(sys, "argv", ["docmcp-server"])
+
+    main_cli.main()
+
+    assert captured["level"] == logging.DEBUG
+    assert captured["format"] == "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
