@@ -90,6 +90,9 @@ _STATIC_EXTENSIONS = {
 }
 
 
+_REDIRECT_POLICIES = frozenset({"final", "requested", "skip"})
+
+
 def _is_page_url(url: str) -> bool:
     """Return False if the URL points to a static asset (image, font, archive, etc.)."""
     path = urlparse(url).path.lower()
@@ -247,6 +250,17 @@ def _link_discovery_decision(
     return True, "eligible for crawl"
 
 
+def _get_redirect_policy(crawl_cfg: dict) -> str:
+    """Return the normalized redirect policy for a site crawl config."""
+    policy = crawl_cfg.get("redirect_policy", "final")
+    if not isinstance(policy, str):
+        raise ConfigError("Invalid crawl.redirect_policy: expected one of final, requested, skip")
+    normalized_policy = policy.strip().lower()
+    if normalized_policy not in _REDIRECT_POLICIES:
+        raise ConfigError("Invalid crawl.redirect_policy: expected one of final, requested, skip")
+    return normalized_policy
+
+
 def _authenticate_site(site: dict, force: bool = False) -> None:
     """Authenticate a site using the lazy-loaded auth session helper."""
     from .auth.session import authenticate
@@ -277,6 +291,7 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
     ignore_query_links = crawl_cfg.get("ignore_query_links", True)
     ignore_anchor_links = crawl_cfg.get("ignore_anchor_links", True)
     ignore_https_errors = crawl_cfg.get("ignore_https_errors", False)
+    redirect_policy = _get_redirect_policy(crawl_cfg)
     index_file = site["index_file"]
     session_file = site.get("session_file")
 
@@ -372,7 +387,8 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
                         page.url,
                         strip_query=strip_query,
                     )
-                    if current_url != url:
+                    redirected = current_url != url
+                    if redirected:
                         _debug(f"Navigation redirected to {current_url}")
                     else:
                         _debug(f"Navigation stayed on {current_url}")
@@ -383,6 +399,19 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
                         print(f'[crawl]   Run: docmcp-auth --site "{name}" --force')
                         stop_crawl = True
                         break
+
+                    if redirected:
+                        if redirect_policy == "requested":
+                            index_url = url
+                            _debug(f"Redirect policy=requested -> indexing requested URL {index_url}")
+                        elif redirect_policy == "skip":
+                            index_url = None
+                            _debug("Redirect policy=skip -> skipping redirected page")
+                        else:
+                            index_url = current_url
+                            _debug(f"Redirect policy=final -> indexing final URL {index_url}")
+                    else:
+                        index_url = current_url
 
                     # Extract title
                     title = await page.title() or url
@@ -396,9 +425,12 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
                     )
 
                     # Save to index
-                    upsert_page(index_file, current_url, title, content_md)
-                    page_count += 1
-                    print(f"[crawl]   ✓ Indexed: {title[:70]}")
+                    if index_url is None:
+                        print("[crawl]   ↷ Skipped: redirect_policy=skip")
+                    else:
+                        upsert_page(index_file, index_url, title, content_md)
+                        page_count += 1
+                        print(f"[crawl]   ✓ Indexed: {title[:70]}")
 
                     # Discover links for next depth
                     if depth < max_depth:
@@ -512,7 +544,11 @@ def main():
         _authenticate_site(site, force=args.force_auth)
 
     # Then crawl
-    asyncio.run(crawl_site_headful(site, headless=args.headless, debug=args.debug))
+    try:
+        asyncio.run(crawl_site_headful(site, headless=args.headless, debug=args.debug))
+    except ConfigError as exc:
+        print(f"[docmcp-crawl] Configuration error:\n{exc}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

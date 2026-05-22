@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-05-21
-- Version: v1.4
+- Last Updated: 2026-05-22
+- Version: v1.5
 
 ## Change Log
+- 2026-05-22 | v1.5 | Documented `crawl.redirect_policy`, updated site examples, and aligned the configuration reference with the v0.1.4 crawler redirect behavior.
 - 2026-05-21 | v1.4 | Documented `MCP_LOG_LEVEL`, clarified workspace `.env` resolution, and aligned runtime path notes with the loader.
 - 2026-04-25 | v1.1 | Documented runtime root resolution through DOC_MCP_HOME and updated implementation references.
 - 2026-04-24 | v1.0 | Reformatted the configuration reference and documented the live loader behavior.
@@ -54,6 +55,7 @@ SITE1_PASSWORD=replace-me
 - `crawl.max_depth`: breadth-first crawl depth
 - `crawl.delay_seconds`: pause between page fetches
 - `crawl.block_images`: block image, font, and media requests
+- `crawl.redirect_policy`: handle redirected pages as `final`, `requested`, or `skip`
 - `crawl.ignore_query_links`: skip discovered links that contain a query string
 - `crawl.ignore_anchor_links`: skip fragment-only links
 - `crawl.ignore_https_errors`: ignore TLS errors for that site
@@ -73,6 +75,7 @@ sites:
       max_depth: 5
       delay_seconds: 1.0
       block_images: true
+      redirect_policy: final
       ignore_query_links: true
       ignore_anchor_links: true
       ignore_https_errors: false
@@ -86,6 +89,7 @@ The sample config file also includes a few future-facing keys such as `auth_mode
 - `auth_mode` is currently informational only.
 - `auth_type` is currently informational only.
 - `respect_robots_txt` is not consumed by the current crawler implementation.
+- `crawl.redirect_policy` defaults to `final`, which preserves the existing behavior of indexing the landing URL after a redirect.
 
 ## Edge Cases
 - Unset placeholders resolve to an empty string instead of crashing.
@@ -93,6 +97,7 @@ The sample config file also includes a few future-facing keys such as `auth_mode
 - `CONFIG_FILE` can override the default config path.
 - Relative `CONFIG_FILE`, `session_file`, and `index_file` values should be interpreted from `DOC_MCP_HOME` or the process working directory.
 - `crawl.start_url` is used as the initial crawl seed and is preserved exactly as configured, including any query string.
+- `crawl.redirect_policy: requested` stores the original requested URL when a page redirects, while `skip` leaves redirected pages out of the index.
 - `crawl.ignore_query_links: true` skips discovered links that contain a query string, while `false` allows them to be crawled and indexed as distinct URLs.
 - Informational keys should not be treated as enforced runtime behavior.
 

@@ -323,6 +323,29 @@ def test_crawl_cli_version_rejects_other_arguments(monkeypatch, capsys):
     assert "--version cannot be combined with other arguments" in capsys.readouterr().err
 
 
+def test_main_reports_invalid_redirect_policy_as_configuration_error(monkeypatch, tmp_path, capsys):
+    site = {
+        "name": "Example Docs",
+        "url": "https://example.test/docs",
+        "index_file": str(tmp_path / "docs.db"),
+        "crawl": {
+            "start_url": "https://example.test/docs",
+            "redirect_policy": "unexpected",
+        },
+    }
+
+    monkeypatch.setattr(crawl_cli, "get_sites", lambda: [site])
+    monkeypatch.setattr(sys, "argv", ["docmcp-crawl", "--site", "Example Docs"])
+
+    with pytest.raises(SystemExit) as excinfo:
+        crawl_cli.main()
+
+    assert excinfo.value.code == 1
+    err = capsys.readouterr().err
+    assert "[docmcp-crawl] Configuration error:" in err
+    assert "Invalid crawl.redirect_policy" in err
+
+
 def test_crawl_site_headful_debug_outputs_queue_and_link_reasons(monkeypatch, tmp_path, capsys):
     class FakeElement:
         def __init__(self, html):
@@ -438,8 +461,17 @@ def test_crawl_site_headful_debug_outputs_queue_and_link_reasons(monkeypatch, tm
     )
 
 
-def test_crawl_site_headful_redirects_to_final_url_and_indexes_that_url(
-    monkeypatch, tmp_path, capsys
+@pytest.mark.parametrize(
+    ("redirect_policy", "expected_indexed_url", "expected_debug_line", "expect_skip"),
+    [
+        (None, "https://example.test/docs/guide", "Redirect policy=final -> indexing final URL https://example.test/docs/guide", False),
+        ("final", "https://example.test/docs/guide", "Redirect policy=final -> indexing final URL https://example.test/docs/guide", False),
+        ("requested", "https://example.test/docs", "Redirect policy=requested -> indexing requested URL https://example.test/docs", False),
+        ("skip", None, "Redirect policy=skip -> skipping redirected page", True),
+    ],
+)
+def test_crawl_site_headful_applies_redirect_policy_to_redirected_pages(
+    monkeypatch, tmp_path, capsys, redirect_policy, expected_indexed_url, expected_debug_line, expect_skip
 ):
     indexed = []
 
@@ -498,15 +530,19 @@ def test_crawl_site_headful_redirects_to_final_url_and_indexes_that_url(
     monkeypatch.setattr(crawl_cli.asyncio, "sleep", fake_sleep)
     monkeypatch.setattr(crawl_cli, "upsert_page", fake_upsert_page)
 
+    crawl_cfg = {
+        "start_url": "https://example.test/docs",
+        "max_depth": 0,
+        "delay_seconds": 0,
+    }
+    if redirect_policy is not None:
+        crawl_cfg["redirect_policy"] = redirect_policy
+
     site = {
         "name": "Example Docs",
         "url": "https://example.test/docs",
         "index_file": str(tmp_path / "docs.db"),
-        "crawl": {
-            "start_url": "https://example.test/docs",
-            "max_depth": 0,
-            "delay_seconds": 0,
-        },
+        "crawl": crawl_cfg,
     }
 
     import asyncio
@@ -516,12 +552,104 @@ def test_crawl_site_headful_redirects_to_final_url_and_indexes_that_url(
     output = capsys.readouterr()
     assert "[crawl][debug] Navigating to https://example.test/docs" in output.err
     assert "[crawl][debug] Navigation redirected to https://example.test/docs/guide" in output.err
+    assert f"[crawl][debug] {expected_debug_line}" in output.err
+    if expect_skip:
+        assert indexed == []
+        assert "[crawl]   ↷ Skipped: redirect_policy=skip" in output.out
+    else:
+        assert indexed[0][:3] == (
+            str(tmp_path / "docs.db"),
+            expected_indexed_url,
+            "Guide",
+        )
+        assert "Guide" in indexed[0][3]
+
+
+@pytest.mark.parametrize("redirect_policy", ["final", "requested", "skip"])
+def test_crawl_site_headful_non_redirected_pages_ignore_redirect_policy(
+    monkeypatch, tmp_path, capsys, redirect_policy
+):
+    indexed = []
+
+    class FakePage:
+        def __init__(self):
+            self.url = ""
+
+        async def goto(self, url, wait_until, timeout):
+            self.url = url
+
+        async def title(self):
+            return "Docs"
+
+        async def content(self):
+            return "<html><body><main><h1>Docs</h1></main></body></html>"
+
+        async def query_selector(self, selector):
+            return None
+
+        async def eval_on_selector_all(self, selector, script):
+            return []
+
+    class FakeContext:
+        async def new_page(self):
+            return FakePage()
+
+    class FakeBrowser:
+        async def new_context(self, **kwargs):
+            return FakeContext()
+
+        async def close(self):
+            return None
+
+    class FakeChromium:
+        async def launch(self, headless):
+            return FakeBrowser()
+
+    class FakePlaywrightManager:
+        async def __aenter__(self):
+            return types.SimpleNamespace(chromium=FakeChromium())
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    async def fake_sleep(delay):
+        return None
+
+    def fake_upsert_page(index_file, url, title, content_md):
+        indexed.append((index_file, url, title, content_md))
+
+    monkeypatch.setitem(
+        sys.modules,
+        "playwright.async_api",
+        types.SimpleNamespace(async_playwright=lambda: FakePlaywrightManager()),
+    )
+    monkeypatch.setattr(crawl_cli.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(crawl_cli, "upsert_page", fake_upsert_page)
+
+    site = {
+        "name": "Example Docs",
+        "url": "https://example.test/docs",
+        "index_file": str(tmp_path / "docs.db"),
+        "crawl": {
+            "start_url": "https://example.test/docs",
+            "max_depth": 0,
+            "delay_seconds": 0,
+            "redirect_policy": redirect_policy,
+        },
+    }
+
+    import asyncio
+
+    asyncio.run(crawl_cli.crawl_site_headful(site, headless=True, debug=True))
+
+    output = capsys.readouterr()
+    assert "[crawl][debug] Navigation stayed on https://example.test/docs" in output.err
+    assert "Redirect policy=" not in output.err
     assert indexed[0][:3] == (
         str(tmp_path / "docs.db"),
-        "https://example.test/docs/guide",
-        "Guide",
+        "https://example.test/docs",
+        "Docs",
     )
-    assert "Guide" in indexed[0][3]
 
 
 def test_crawl_site_headful_preserves_query_start_url_and_indexes_query_links(
