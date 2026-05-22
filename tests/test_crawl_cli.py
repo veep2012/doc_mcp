@@ -1,3 +1,4 @@
+import asyncio
 import sys
 import types
 from collections import deque
@@ -426,8 +427,6 @@ def test_crawl_site_headful_debug_outputs_queue_and_link_reasons(monkeypatch, tm
         },
     }
 
-    import asyncio
-
     asyncio.run(crawl_cli.crawl_site_headful(site, headless=True, debug=True))
 
     captured = capsys.readouterr()
@@ -545,8 +544,6 @@ def test_crawl_site_headful_applies_redirect_policy_to_redirected_pages(
         "crawl": crawl_cfg,
     }
 
-    import asyncio
-
     asyncio.run(crawl_cli.crawl_site_headful(site, headless=True, debug=True))
 
     output = capsys.readouterr()
@@ -638,8 +635,6 @@ def test_crawl_site_headful_non_redirected_pages_ignore_redirect_policy(
         },
     }
 
-    import asyncio
-
     asyncio.run(crawl_cli.crawl_site_headful(site, headless=True, debug=True))
 
     output = capsys.readouterr()
@@ -727,8 +722,6 @@ def test_crawl_site_headful_preserves_query_start_url_and_indexes_query_links(
             "ignore_query_links": False,
         },
     }
-
-    import asyncio
 
     asyncio.run(crawl_cli.crawl_site_headful(site, headless=True, debug=True))
 
@@ -827,8 +820,6 @@ def test_crawl_site_headful_keeps_query_anchor_links_as_current_page_targets(
             "ignore_anchor_links": True,
         },
     }
-
-    import asyncio
 
     asyncio.run(crawl_cli.crawl_site_headful(site, headless=True, debug=True))
 
@@ -977,8 +968,6 @@ def test_crawl_site_headful_runtime_config_matrix(monkeypatch, tmp_path, crawl_c
         "index_file": str(tmp_path / "docs.db"),
         "crawl": crawl_cfg,
     }
-
-    import asyncio
 
     asyncio.run(crawl_cli.crawl_site_headful(site, headless=True, debug=False))
 
