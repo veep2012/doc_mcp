@@ -1,0 +1,4 @@
+interface:
+  display_name: "Release Note Writer"
+  short_description: "Draft user-friendly release notes from PRs and version changes"
+  default_prompt: "Use $release-note-writer to draft a concise user-facing release note in the repo's versioned template."
