@@ -55,7 +55,9 @@ def main() -> None:
             print(f"  - {site['name']} -> {resolve_vector_index_file(site)}")
         return
 
-    site = next((candidate for candidate in sites if candidate["name"].lower() == args.site.lower()), None)
+    site = next(
+        (candidate for candidate in sites if candidate["name"].lower() == args.site.lower()), None
+    )
     if not site:
         print(
             f"[vectorize] Site '{args.site}' not found. Use --list to see available sites.",

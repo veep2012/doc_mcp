@@ -26,6 +26,6 @@ def test_load_version_falls_back_to_package_metadata(monkeypatch, tmp_path):
     monkeypatch.setattr(
         docmcp, "_read_version_from_pyproject", lambda: (_ for _ in ()).throw(FileNotFoundError())
     )
-    monkeypatch.setattr(docmcp, "package_version", lambda name: "0.99.1")
+    monkeypatch.setattr(docmcp, "package_version", lambda name: "0.99.2")
 
-    assert docmcp._load_version() == "0.99.1"
+    assert docmcp._load_version() == "0.99.2"

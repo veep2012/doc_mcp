@@ -136,7 +136,9 @@ def _normalize_text(text: str) -> str:
     return re.sub(r"\s+", " ", text or "").strip()
 
 
-def chunk_markdown(text: str, *, chunk_size: int = DEFAULT_CHUNK_SIZE, chunk_overlap: int = DEFAULT_CHUNK_OVERLAP) -> list[str]:
+def chunk_markdown(
+    text: str, *, chunk_size: int = DEFAULT_CHUNK_SIZE, chunk_overlap: int = DEFAULT_CHUNK_OVERLAP
+) -> list[str]:
     """Split Markdown text into deterministic overlapping chunks."""
     normalized = _normalize_text(text)
     if not normalized:
@@ -400,4 +402,3 @@ def rebuild_vector_index(site: dict) -> VectorBuildSummary:
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
     )
-

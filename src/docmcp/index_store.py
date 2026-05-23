@@ -148,9 +148,7 @@ def list_page_documents(index_file: str) -> list[dict]:
         rows = conn.execute(
             "SELECT url, title, content_md, last_crawled FROM pages ORDER BY url"
         ).fetchall()
-    return [
-        {"url": r[0], "title": r[1], "content_md": r[2], "last_crawled": r[3]} for r in rows
-    ]
+    return [{"url": r[0], "title": r[1], "content_md": r[2], "last_crawled": r[3]} for r in rows]
 
 
 def count_pages(index_file: str) -> int:

@@ -45,20 +45,23 @@ def test_build_vector_records_shapes_stable_chunk_records():
     assert len(records[0].embedding) == 8
     assert records[0].chunk_id
     assert records[0].chunk_text
-    assert build_vector_records(
-        "Example Docs",
-        [
-            {
-                "url": "https://example.test/guide",
-                "title": "Guide",
-                "content_md": "Alpha beta gamma delta epsilon zeta eta theta",
-                "last_crawled": "2026-05-23T00:00:00+00:00",
-            }
-        ],
-        chunk_size=20,
-        chunk_overlap=5,
-        embedding_dimensions=8,
-    ) == records
+    assert (
+        build_vector_records(
+            "Example Docs",
+            [
+                {
+                    "url": "https://example.test/guide",
+                    "title": "Guide",
+                    "content_md": "Alpha beta gamma delta epsilon zeta eta theta",
+                    "last_crawled": "2026-05-23T00:00:00+00:00",
+                }
+            ],
+            chunk_size=20,
+            chunk_overlap=5,
+            embedding_dimensions=8,
+        )
+        == records
+    )
 
 
 def test_vector_backend_status_reports_missing_dependency(monkeypatch):
