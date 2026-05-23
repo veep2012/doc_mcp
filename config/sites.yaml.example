@@ -23,6 +23,11 @@ sites:
       allow_patterns: []            # e.g. ["https://docs.example.com/documentation/*"]
       deny_patterns: []             # e.g. ["*/changelog/*", "*/print/*"]
     index_file: "index/my_private_docs.db"
+    vector_index_file: "index/my_private_docs.vec.db"
+    vectorizer:
+      chunk_size: 800
+      chunk_overlap: 120
+      embedding_dimensions: 32
 
   # ---------------------------------------------------------------------------
   # Public site (no auth required)
@@ -43,3 +48,8 @@ sites:
       allow_patterns: []
       deny_patterns: ["https://public-docs.example.com/auth/*"]
     index_file: "index/my_public_docs.db"
+    vector_index_file: "index/my_public_docs.vec.db"
+    vectorizer:
+      chunk_size: 800
+      chunk_overlap: 120
+      embedding_dimensions: 32

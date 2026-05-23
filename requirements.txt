@@ -12,3 +12,6 @@ PyYAML>=6.0.1
 
 # Utilities
 python-dotenv>=1.0.0
+
+# Local vector index
+sqlite-vec>=0.1.9

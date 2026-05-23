@@ -19,6 +19,7 @@ def test_load_config_resolves_runtime_paths_and_env(monkeypatch, tmp_path):
                 auth_required: false
                 session_file: "storage/example.json"
                 index_file: "index/example.db"
+                vector_index_file: "index/example.vec.db"
             """
         ).strip()
         + "\n",
@@ -35,6 +36,7 @@ def test_load_config_resolves_runtime_paths_and_env(monkeypatch, tmp_path):
     assert site["url"] == "https://example.test/docs"
     assert site["session_file"] == str(runtime_root / "storage" / "example.json")
     assert site["index_file"] == str(runtime_root / "index" / "example.db")
+    assert site["vector_index_file"] == str(runtime_root / "index" / "example.vec.db")
     assert get_site_by_name("Example Docs") == site
     assert "DOCS_URL" not in os.environ
 
@@ -52,6 +54,7 @@ def test_load_config_resolves_config_file_relative_to_runtime_root(monkeypatch, 
                 auth_required: false
                 session_file: "storage/relative.json"
                 index_file: "index/relative.db"
+                vector_index_file: "index/relative.vec.db"
             """
         ).strip()
         + "\n",
@@ -67,6 +70,9 @@ def test_load_config_resolves_config_file_relative_to_runtime_root(monkeypatch, 
     assert config["sites"][0]["url"] == "https://example.test/docs"
     assert config["sites"][0]["session_file"] == str(runtime_root / "storage" / "relative.json")
     assert config["sites"][0]["index_file"] == str(runtime_root / "index" / "relative.db")
+    assert config["sites"][0]["vector_index_file"] == str(
+        runtime_root / "index" / "relative.vec.db"
+    )
 
 
 def test_load_config_does_not_mutate_process_env_between_workspace_loads(monkeypatch, tmp_path):

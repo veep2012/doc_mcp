@@ -114,35 +114,32 @@ Acceptance criteria:
 - Missing vector configuration causes no errors.
 - Empty keyword results return a valid response with `keyword_hits: 0`.
 
-### Stage 3: Define Local Vector Index Boundary
-Goal: Specify the repo-owned local vector store, its record shape, and the interfaces needed by later stages.
+### Stage 3: Define And Build The Local Vector Index
+Goal: Own a repo-local sqlite-vec sidecar and rebuild it from crawled SQLite content without introducing vector writes into MCP query handling.
+
+Stage 3 is implemented in the current code path through the dedicated `docmcp-vectorize`
+CLI and the local sqlite-vec sidecar stored next to each site's keyword index by default.
+The vectorizer reads the existing crawl index, chunks Markdown deterministically, generates
+deterministic local embeddings, and rewrites the configured vector sidecar after each run.
+MCP remains read-only at query time and continues to operate without any vector data.
 
 Deliverables:
 - Add configuration for the local vector index path and vectorizer settings.
-- Define the local vector record schema, including site partitioning, page URL, title, chunk identity, chunk text, and embedding payload.
-- Define a read interface for MCP and a write interface for the vectorizer.
-- Make local vector index initialization optional so the MCP server can start without vector data.
-- Keep vector writes out of MCP query code.
+- Define the local vector record schema, including site name, page URL, title, chunk identity, chunk order, chunk text, source timestamps, and embedding payload.
+- Partition vector data per site using a site-specific vector sidecar file (`vector_index_file`, or `<index_file stem>.vec.db` when omitted).
+- Define the write boundary at `docmcp-vectorize` and keep MCP query code free of vector writes.
+- Add deterministic rebuild behavior so recrawls can refresh the vector sidecar without stale records.
+- Package the Python runtime dependency needed for the local vector store (`sqlite-vec`).
 
 Acceptance criteria:
-- MCP starts successfully with no local vector index present.
-- MCP can detect missing or unreadable vector data and fall back to keyword search.
-- The vector index layout is documented well enough for the vectorizer stage to write compatible records.
+- The repo owns a documented local vector sidecar alongside each keyword SQLite index.
+- `docmcp-vectorize` can build the vector sidecar from crawled pages and rebuild it after recrawl.
+- MCP still starts and answers keyword-only requests when vector data is missing, unreadable, or never built.
+- Vectorizer/backend failures do not break keyword search.
+- Optional crawl-chain vectorizer execution remains deferred technical debt rather than current behavior.
 
-### Stage 4: Add Post-Crawl Vectorizer
-Goal: Build or refresh the local vector index from crawled content in a dedicated step.
-
-Deliverables:
-- Add a separate vectorizer command or job that runs after crawl.
-- Read crawled content from the existing SQLite source data or crawler outputs.
-- Chunk documents, generate embeddings, and write the local vector index.
-- Support full rebuilds and repeatable refreshes after recrawl.
-- Keep the vectorizer separate from the MCP server runtime.
-
-Acceptance criteria:
-- The local vector index can be built from crawled content without starting MCP search tooling.
-- Re-running the vectorizer after recrawl updates changed pages.
-- Vectorizer failure does not break keyword search in MCP.
+### Stage 4: Reserved
+The standalone post-crawl vectorizer work was merged into Stage 3 so later stages can build on a stable local vector lifecycle without reworking the boundary.
 
 ### Stage 5: Implement Semantic Search Tool
 Goal: Expose semantic retrieval when vector data and query embedding are available.

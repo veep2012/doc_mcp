@@ -139,6 +139,20 @@ def list_pages(index_file: str) -> list[dict]:
     return [{"url": r[0], "title": r[1], "last_crawled": r[2]} for r in rows]
 
 
+def list_page_documents(index_file: str) -> list[dict]:
+    """List all indexed page documents with full Markdown content."""
+    conn = _get_ro_conn(index_file)
+    if conn is None:
+        return []
+    with conn as conn:
+        rows = conn.execute(
+            "SELECT url, title, content_md, last_crawled FROM pages ORDER BY url"
+        ).fetchall()
+    return [
+        {"url": r[0], "title": r[1], "content_md": r[2], "last_crawled": r[3]} for r in rows
+    ]
+
+
 def count_pages(index_file: str) -> int:
     """Return total number of indexed pages."""
     conn = _get_ro_conn(index_file)
