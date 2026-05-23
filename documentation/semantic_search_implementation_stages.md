@@ -10,8 +10,7 @@
 - Related Tickets: https://github.com/veep2012/doc_mcp/issues/1
 
 ## Change Log
-- 2026-05-17 | v1.0.0 | Reframed the epic around a repo-owned local vector index and a separate post-crawl vectorizer step, replacing the external vector DB assumption.
-- 2026-05-17 | v0.99.1 | Marked Stage 2 keyword-only hardening as implemented for the current `search_docs` path, including safe empty-result fallbacks for missing, empty, or failing SQLite keyword indexes.
+- 2026-05-17 | v1.0.0 | Reframed the epic around a repo-owned local vector index and a separate post-crawl vectorizer step, replacing the external vector DB assumption, and marked Stage 2 keyword-only hardening as implemented for the current `search_docs` path, including safe empty-result fallbacks for missing, empty, or failing SQLite keyword indexes.
 - 2026-05-09 | v0.99.0 | Finalized the Stage 1 keyword search response contract, canonical JSON schema, examples, and experimental release status.
 - 2026-04-25 | v0.2 | Added the staged semantic, keyword, and hybrid search plan and updated implementation references for package entry points.
 

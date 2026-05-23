@@ -6,10 +6,10 @@
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
 - Last Updated: 2026-05-21
-- Version: v1.4
+- Version: v1.5
 
 ## Change Log
-- 2026-05-21 | v1.4 | Documented the server log-level environment variable, added current server version/help guidance, and clarified startup diagnostics.
+- 2026-05-21 | v1.5 | Documented the server log-level environment variable, added current server version/help guidance, and clarified startup diagnostics.
 - 2026-05-17 | v1.4 | Clarified that `search_docs` is keyword-only today, that the vector search counters remain zero until a vector backend is added, that `score` is an ordinal value derived from result order rather than a semantic relevance score, and that lookup failures return structured JSON.
 - 2026-05-09 | v1.3 | Documented the experimental `0.99.1` JSON response contract for `search_docs`.
 - 2026-04-25 | v1.2 | Added VS Code GitHub Copilot MCP setup instructions with the stable wheel-installed docmcp-server entry point and workspace runtime env values.
