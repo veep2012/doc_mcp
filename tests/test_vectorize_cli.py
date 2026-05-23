@@ -46,6 +46,13 @@ def test_vectorize_cli_builds_local_vector_index(monkeypatch, tmp_path, capsys):
 
     captured = capsys.readouterr()
     assert vector_index.exists()
+    assert "[vectorize] Loaded 1 pages from source index" in captured.out
+    assert "[vectorize] Initializing vector index" in captured.out
+    assert "[vectorize] Page 1/1 start:" in captured.out
+    assert "[vectorize] Page 1/1 chunk 1" in captured.out
+    assert "[vectorize] Page 1/1 done: 1 chunks" in captured.out
+    assert "[vectorize] Wrote temporary index" in captured.out
+    assert "[vectorize] Replaced vector index" in captured.out
     assert "[vectorize] Done." in captured.out
     assert captured.err == ""
 

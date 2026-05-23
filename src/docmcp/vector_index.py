@@ -7,6 +7,7 @@ import math
 import os
 import re
 import sqlite3
+import time
 from contextlib import suppress
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -17,7 +18,7 @@ try:
 except ImportError:  # pragma: no cover - exercised via backend availability checks
     sqlite_vec = None
 
-from .index_store import list_page_documents
+from .index_store import count_pages, iter_page_documents, list_page_documents
 
 DEFAULT_EMBEDDING_DIMENSIONS = 32
 DEFAULT_CHUNK_SIZE = 800
@@ -145,37 +146,36 @@ def chunk_markdown(
         return []
 
     words = normalized.split(" ")
+    if len(words) == 1:
+        return [normalized]
+
+    word_lengths = [len(word) for word in words]
+    prefix_lengths = [0]
+    for length in word_lengths:
+        prefix_lengths.append(prefix_lengths[-1] + length)
+
+    def chunk_length(start: int, end: int) -> int:
+        return (prefix_lengths[end] - prefix_lengths[start]) + (end - start - 1)
+
     chunks: list[str] = []
     start = 0
     while start < len(words):
-        end = start
-        current_words: list[str] = []
-        current_length = 0
-        while end < len(words):
-            word = words[end]
-            next_length = current_length + len(word) + (1 if current_words else 0)
-            if current_words and next_length > chunk_size:
-                break
-            current_words.append(word)
-            current_length = next_length
+        end = start + 1
+        while end <= len(words) and chunk_length(start, end) <= chunk_size:
             end += 1
 
-        if not current_words:
-            current_words.append(words[end])
-            end += 1
+        if end == start + 1:
+            end = start + 2
 
-        chunks.append(" ".join(current_words))
+        chunks.append(" ".join(words[start : end - 1]))
         if end >= len(words):
             break
 
-        overlap_chars = 0
-        overlap_start = end
-        while overlap_start > start:
-            overlap_start -= 1
-            overlap_chars += len(words[overlap_start]) + (0 if overlap_start == end - 1 else 1)
-            if overlap_chars >= chunk_overlap:
-                break
-        start = overlap_start if overlap_start < end else end
+        overlap_target = chunk_overlap
+        overlap_start = start
+        while overlap_start < end - 1 and chunk_length(overlap_start, end - 1) > overlap_target:
+            overlap_start += 1
+        start = overlap_start if overlap_start < end - 1 else end - 1
 
     return chunks
 
@@ -220,34 +220,84 @@ def build_vector_records(
     embedding_dimensions: int = DEFAULT_EMBEDDING_DIMENSIONS,
 ) -> list[VectorRecord]:
     """Convert crawled page documents into vector records."""
-    records: list[VectorRecord] = []
-    for page in pages:
-        source_text = _normalize_text(page.get("content_md") or "") or _normalize_text(
-            page.get("title") or ""
+    return [
+        record
+        for page in pages
+        for record in _build_vector_records_for_page(
+            site_name,
+            page,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            embedding_dimensions=embedding_dimensions,
         )
-        if not source_text:
-            continue
+    ]
 
-        for chunk_index, chunk_text in enumerate(
-            chunk_markdown(source_text, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-        ):
-            records.append(
-                VectorRecord(
-                    site_name=site_name,
-                    page_url=page["url"],
-                    title=page.get("title") or "",
-                    chunk_id=_chunk_id(site_name, page["url"], chunk_index, chunk_text),
-                    chunk_text=chunk_text,
-                    embedding=_embed_text(chunk_text, embedding_dimensions),
-                    source_last_crawled=page.get("last_crawled"),
-                    chunk_index=chunk_index,
-                )
-            )
-    return records
+
+def _build_vector_records_for_page(
+    site_name: str,
+    page: dict,
+    *,
+    chunk_size: int,
+    chunk_overlap: int,
+    embedding_dimensions: int,
+) -> list[VectorRecord]:
+    source_text = _normalize_text(page.get("content_md") or "") or _normalize_text(
+        page.get("title") or ""
+    )
+    if not source_text:
+        return []
+
+    return list(
+        _iter_vector_records_for_page(
+            site_name,
+            page,
+            source_text,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            embedding_dimensions=embedding_dimensions,
+        )
+    )
+
+
+def _iter_vector_records_for_page(
+    site_name: str,
+    page: dict,
+    source_text: str,
+    *,
+    chunk_size: int,
+    chunk_overlap: int,
+    embedding_dimensions: int,
+):
+    for chunk_index, chunk_text in enumerate(
+        chunk_markdown(source_text, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+    ):
+        yield VectorRecord(
+            site_name=site_name,
+            page_url=page["url"],
+            title=page.get("title") or "",
+            chunk_id=_chunk_id(site_name, page["url"], chunk_index, chunk_text),
+            chunk_text=chunk_text,
+            embedding=_embed_text(chunk_text, embedding_dimensions),
+            source_last_crawled=page.get("last_crawled"),
+            chunk_index=chunk_index,
+        )
+
+
+def _emit_progress(message: str) -> None:
+    print(f"[vectorize] {message}", flush=True)
+
+
+def _format_duration(seconds: float) -> str:
+    if seconds < 1:
+        return f"{seconds * 1000:.0f}ms"
+    return f"{seconds:.2f}s"
 
 
 def _init_vector_db(conn: sqlite3.Connection, *, embedding_dimensions: int) -> None:
     conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA journal_mode=OFF")
+    conn.execute("PRAGMA synchronous=OFF")
+    conn.execute("PRAGMA temp_store=MEMORY")
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS vector_meta (
@@ -307,14 +357,14 @@ def rebuild_vector_index(site: dict) -> VectorBuildSummary:
         vectorizer_cfg.get("embedding_dimensions"),
     )
 
-    pages = _source_pages(site["index_file"])
-    records = build_vector_records(
-        site["name"],
-        pages,
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap,
-        embedding_dimensions=embedding_dimensions,
-    )
+    source_index_path = Path(site["index_file"])
+    if not source_index_path.exists():
+        raise VectorSourceError(
+            f"Keyword index not found: {site['index_file']}. Run docmcp-crawl before docmcp-vectorize."
+        )
+
+    total_pages = count_pages(site["index_file"])
+    _emit_progress(f"Loaded {total_pages} pages from source index")
 
     vector_index_file = resolve_vector_index_file(site)
     target_path = Path(vector_index_file)
@@ -322,44 +372,79 @@ def rebuild_vector_index(site: dict) -> VectorBuildSummary:
     if temp_path.exists():
         temp_path.unlink()
 
+    _emit_progress("Initializing vector index")
     conn = _connect_vector_index(str(temp_path))
     try:
         _init_vector_db(conn, embedding_dimensions=embedding_dimensions)
-        for record in records:
-            cursor = conn.execute(
-                "INSERT INTO chunk_embeddings(embedding) VALUES (?)",
-                (sqlite_vec.serialize_float32(record.embedding),),
-            )
-            conn.execute(
-                """
-                INSERT INTO vector_chunks(
-                    chunk_id,
-                    site_name,
-                    page_url,
-                    title,
-                    chunk_index,
-                    chunk_text,
-                    source_last_crawled,
-                    vec_rowid
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    record.chunk_id,
-                    record.site_name,
-                    record.page_url,
-                    record.title,
-                    record.chunk_index,
-                    record.chunk_text,
-                    record.source_last_crawled,
-                    cursor.lastrowid,
-                ),
+        chunk_count = 0
+        page_count = 0
+        source_max_last_crawled = None
+        started_at = time.perf_counter()
+        for page_index, page in enumerate(iter_page_documents(site["index_file"]), start=1):
+            page_started_at = time.perf_counter()
+            page_count += 1
+            page_title = page.get("title") or page["url"]
+            if page.get("last_crawled"):
+                source_max_last_crawled = (
+                    max(source_max_last_crawled, page["last_crawled"])
+                    if source_max_last_crawled
+                    else page["last_crawled"]
+                )
+            _emit_progress(f"Page {page_index}/{total_pages} start: {page_title}")
+
+            page_chunk_count = 0
+            for record in _iter_vector_records_for_page(
+                site["name"],
+                page,
+                page.get("content_md") or page.get("title") or "",
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                embedding_dimensions=embedding_dimensions,
+            ):
+                cursor = conn.execute(
+                    "INSERT INTO chunk_embeddings(embedding) VALUES (?)",
+                    (sqlite_vec.serialize_float32(record.embedding),),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO vector_chunks(
+                        chunk_id,
+                        site_name,
+                        page_url,
+                        title,
+                        chunk_index,
+                        chunk_text,
+                        source_last_crawled,
+                        vec_rowid
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        record.chunk_id,
+                        record.site_name,
+                        record.page_url,
+                        record.title,
+                        record.chunk_index,
+                        record.chunk_text,
+                        record.source_last_crawled,
+                        cursor.lastrowid,
+                    ),
+                )
+                chunk_count += 1
+                page_chunk_count += 1
+
+                if page_chunk_count == 1 or page_chunk_count % 10 == 0:
+                    _emit_progress(
+                        f"Page {page_index}/{total_pages} chunk {page_chunk_count} "
+                        f"(global chunk {chunk_count}, {_format_duration(time.perf_counter() - started_at)} elapsed)"
+                    )
+
+            _emit_progress(
+                f"Page {page_index}/{total_pages} done: {page_chunk_count} chunks in "
+                f"{_format_duration(time.perf_counter() - page_started_at)} "
+                f"({chunk_count} total, {_format_duration(time.perf_counter() - started_at)} elapsed)"
             )
 
         built_at = datetime.now(timezone.utc).isoformat()
-        source_max_last_crawled = max(
-            (page.get("last_crawled") for page in pages if page.get("last_crawled")),
-            default=None,
-        )
         conn.execute(
             """
             INSERT INTO vector_meta(
@@ -378,8 +463,8 @@ def rebuild_vector_index(site: dict) -> VectorBuildSummary:
                 site["name"],
                 site["index_file"],
                 built_at,
-                len(pages),
-                len(records),
+                page_count,
+                chunk_count,
                 embedding_dimensions,
                 chunk_size,
                 chunk_overlap,
@@ -390,13 +475,19 @@ def rebuild_vector_index(site: dict) -> VectorBuildSummary:
     finally:
         conn.close()
 
+    _emit_progress(
+        f"Wrote temporary index {temp_path} in {_format_duration(time.perf_counter() - started_at)}"
+    )
     os.replace(temp_path, target_path)
+    _emit_progress(
+        f"Replaced vector index {target_path} in {_format_duration(time.perf_counter() - started_at)}"
+    )
     return VectorBuildSummary(
         site_name=site["name"],
         source_index_file=site["index_file"],
         vector_index_file=str(target_path),
-        page_count=len(pages),
-        chunk_count=len(records),
+        page_count=page_count,
+        chunk_count=chunk_count,
         built_at=built_at,
         embedding_dimensions=embedding_dimensions,
         chunk_size=chunk_size,
