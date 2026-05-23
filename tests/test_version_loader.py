@@ -3,11 +3,12 @@ import pytest
 import docmcp
 
 
-def test_read_version_from_pyproject_falls_back_when_file_is_missing(monkeypatch, tmp_path):
+def test_read_version_from_pyproject_raises_when_file_is_missing(monkeypatch, tmp_path):
     fake_module_file = tmp_path / "src" / "docmcp" / "__init__.py"
     monkeypatch.setattr(docmcp, "__file__", str(fake_module_file))
 
-    assert docmcp._read_version_from_pyproject() == "0.0.0"
+    with pytest.raises(FileNotFoundError):
+        docmcp._read_version_from_pyproject()
 
 
 def test_read_version_from_pyproject_raises_on_invalid_toml(monkeypatch, tmp_path):
@@ -17,3 +18,14 @@ def test_read_version_from_pyproject_raises_on_invalid_toml(monkeypatch, tmp_pat
 
     with pytest.raises(RuntimeError, match="Invalid TOML"):
         docmcp._read_version_from_pyproject()
+
+
+def test_load_version_falls_back_to_package_metadata(monkeypatch, tmp_path):
+    fake_module_file = tmp_path / "dist" / "docmcp" / "__init__.py"
+    monkeypatch.setattr(docmcp, "__file__", str(fake_module_file))
+    monkeypatch.setattr(
+        docmcp, "_read_version_from_pyproject", lambda: (_ for _ in ()).throw(FileNotFoundError())
+    )
+    monkeypatch.setattr(docmcp, "package_version", lambda name: "0.99.1")
+
+    assert docmcp._load_version() == "0.99.1"
