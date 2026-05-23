@@ -1,6 +1,3 @@
-"""docmcp package metadata."""
-
-__version__ = "0.99.1"
 """docmcp package metadata and shared helpers."""
 
 from importlib.metadata import PackageNotFoundError, version as package_version
@@ -8,7 +5,7 @@ from pathlib import Path
 
 
 def _read_version_from_pyproject() -> str:
-    """Fallback to the project version when the package is run from source."""
+    """Read the project version from the source-tree pyproject.toml."""
     try:
         import tomllib
     except ModuleNotFoundError:
@@ -36,6 +33,9 @@ def _read_version_from_pyproject() -> str:
 
 
 try:
-    __version__ = package_version("doc-mcp")
-except PackageNotFoundError:
     __version__ = _read_version_from_pyproject()
+except RuntimeError:
+    try:
+        __version__ = package_version("doc-mcp")
+    except PackageNotFoundError:
+        __version__ = "0.0.0"
