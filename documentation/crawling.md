@@ -10,8 +10,8 @@
 
 ## Change Log
 - 2026-05-24 | v1.8 | Documented the optional `--vectorize` crawl flag for chained post-crawl vector index refreshes.
-- 2026-05-21 | v1.6 | Tightened query-link wording so start URLs are preserved exactly and discovered query links are described consistently.
 - 2026-05-23 | v1.7 | Documented the separate post-crawl vectorizer sidecar and clarified that crawling still only writes the keyword SQLite index.
+- 2026-05-21 | v1.6 | Tightened query-link wording so start URLs are preserved exactly and discovered query links are described consistently.
 - 2026-05-20 | v1.4 | Clarified debug output routing, queue preview formatting, redirected URL indexing, and crawler trace expectations.
 - 2026-04-25 | v1.1 | Updated commands and references for installed docmcp-crawl package entry point and moved index store.
 - 2026-04-24 | v1.0 | Reformatted the crawl guide and documented the current Playwright and SQLite flow.
@@ -91,7 +91,7 @@ docmcp-crawl --version
 - The SQLite index stores page URL, page title, Markdown content, and last crawled timestamp.
 - The database also includes SQLite FTS5 tables for full-text keyword search.
 - Repeated crawls update existing rows by URL, so re-running the crawler refreshes pages in place.
-- Crawling does not write vector data during page fetches. The local vector sidecar can be built later by `docmcp-vectorize` from the completed SQLite crawl index or chained immediately afterward with `docmcp-crawl --vectorize`.
+- Crawling does not write vector data during page fetches. The local vector sidecar can be built later by `docmcp-vectorize` or `docmcp_vectorizer` from the completed SQLite crawl index, or chained immediately afterward with `docmcp-crawl --vectorize`.
 
 ### Runtime Outputs
 - Session file: `storage/<site>.json`

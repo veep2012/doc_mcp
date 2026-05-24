@@ -27,7 +27,7 @@ Show how to inspect the local `sqlite-vec` sidecar with `sqlite3` and run a few 
 
 ## Design / Behavior
 ### Open The Vector Database
-Use the Homebrew SQLite shell, not the macOS system `sqlite3` build:
+Use a `sqlite3` build that supports extension loading, such as the Homebrew shell:
 
 ```bash
 sqlite3 index/<site>.vec.db

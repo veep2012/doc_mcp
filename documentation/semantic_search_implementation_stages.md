@@ -119,12 +119,13 @@ Acceptance criteria:
 Goal: Own a repo-local sqlite-vec sidecar and rebuild it from crawled SQLite content without introducing vector writes into MCP query handling.
 
 Stage 3 is implemented in the current code path through the dedicated `docmcp-vectorize`
-CLI and the local sqlite-vec sidecar stored next to each site's keyword index by default.
+and `docmcp_vectorizer` CLIs and the local sqlite-vec sidecar stored next to each site's keyword index by default.
 The vectorizer reads the existing crawl index, chunks Markdown deterministically, generates
 deterministic local embeddings, and rewrites the configured vector sidecar after each run.
 MCP remains read-only at query time and continues to operate without any vector data.
 The crawler can optionally chain the same rebuild immediately after a successful crawl with
-`docmcp-crawl --vectorize`, but the vectorizer remains an explicit post-crawl step.
+`docmcp-crawl --vectorize`, while the dedicated vectorizer CLI remains available for manual
+refreshes.
 
 Deliverables:
 - Add configuration for the local vector index path and vectorizer settings.
@@ -136,7 +137,7 @@ Deliverables:
 
 Acceptance criteria:
 - The repo owns a documented local vector sidecar alongside each keyword SQLite index.
-- `docmcp-vectorize` can build the vector sidecar from crawled pages and rebuild it after recrawl.
+- `docmcp-vectorize` and `docmcp_vectorizer` can build the vector sidecar from crawled pages and rebuild it after recrawl.
 - MCP still starts and answers keyword-only requests when vector data is missing, unreadable, or never built.
 - Vectorizer/backend failures do not break keyword search.
 - The crawler can optionally chain a vector rebuild after a successful crawl without changing MCP query behavior.

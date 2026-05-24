@@ -10,8 +10,8 @@
 
 ## Change Log
 - 2026-05-24 | v1.6 | Added the `docmcp_vectorizer` console script alias, clarified the vectorizer command references, and documented the chained `docmcp-crawl --vectorize` refresh option.
-- 2026-05-21 | v1.4 | Documented `MCP_LOG_LEVEL`, clarified workspace `.env` resolution, and aligned runtime path notes with the loader.
 - 2026-05-23 | v1.5 | Added local vector sidecar settings, documented the separate vectorizer CLI, and clarified that crawl-time vectorization remains disabled in this stage.
+- 2026-05-21 | v1.4 | Documented `MCP_LOG_LEVEL`, clarified workspace `.env` resolution, and aligned runtime path notes with the loader.
 - 2026-04-25 | v1.1 | Documented runtime root resolution through DOC_MCP_HOME and updated implementation references.
 - 2026-04-24 | v1.0 | Reformatted the configuration reference and documented the live loader behavior.
 
@@ -100,13 +100,13 @@ The sample config file also includes a few future-facing keys such as `auth_mode
 
 ### Local Vector Sidecar Notes
 - `docmcp-crawl` still writes only the keyword SQLite index in this stage.
-- Build or refresh the local vector sidecar explicitly with `docmcp-vectorize --site "<Site Name>"` or `docmcp_vectorizer --site "<Site Name>"` after crawling.
+- Build or refresh the local vector sidecar explicitly with `docmcp-vectorize --site "<Site Name>"`, `docmcp_vectorizer --site "<Site Name>"`, or `docmcp-crawl --vectorize --site "<Site Name>"` after crawling.
 - The vectorizer reads the existing `index_file`, chunks page Markdown deterministically, generates deterministic local embeddings, and rewrites the configured `vector_index_file`.
 - Install the vector backend with `pip install sqlite-vec`. The packaged project now declares `sqlite-vec` as a runtime dependency.
 - To inspect the vector tables with `sqlite3`, use the Homebrew shell, then load `vec0` before running `.tables`:
   `sqlite3 index/<site>.vec.db`
   and `.load <path-to-sqlite_vec>/vec0.dylib`
-- Crawl-time vectorization chaining remains disabled by default and is still deferred technical debt rather than active runtime behavior.
+- Crawl-time vectorization chaining is available as an explicit opt-in via `docmcp-crawl --vectorize`, while the vectorizer still remains a separate post-crawl step.
 
 ## Edge Cases
 - Unset placeholders resolve to an empty string instead of crashing.

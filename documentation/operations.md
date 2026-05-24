@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-04-25
-- Version: v1.1
+- Last Updated: 2026-05-24
+- Version: v1.2
 
 ## Change Log
+- 2026-05-24 | v1.2 | Documented the optional crawl-and-vectorize chain alongside the standalone crawl, vectorize, and server workflow.
 - 2026-04-25 | v1.1 | Updated implementation references for package entry points.
 - 2026-04-24 | v1.0 | Reformatted the operations guide and kept the normal workflow, recovery, and logging steps.
 
@@ -28,8 +29,9 @@ Describe the day-to-day operational workflow for refreshing a site, rebuilding i
 1. Configure a site in `config/sites.yaml`.
 2. Authenticate the site with `docmcp-auth`.
 3. Crawl the site with `docmcp-crawl`.
-4. Start `docmcp-server`.
-5. Connect an MCP client and use `search_docs`, `list_pages`, or `fetch_page`.
+4. Optionally chain the vector rebuild with `docmcp-crawl --vectorize` or run `docmcp-vectorize` / `docmcp_vectorizer` afterward if you want the local vector sidecar refreshed.
+5. Start `docmcp-server`.
+6. Connect an MCP client and use `search_docs`, `list_pages`, or `fetch_page`.
 
 ### File Layout
 - `storage/` holds session state and can be deleted if you want to re-authenticate.
@@ -41,6 +43,7 @@ Describe the day-to-day operational workflow for refreshing a site, rebuilding i
 - Remove the site's SQLite database from `index/`.
 - Re-authenticate if the session expired.
 - Re-run the crawler.
+- If you use semantic search, rebuild the vector sidecar with `docmcp-vectorize`, `docmcp_vectorizer`, or `docmcp-crawl --vectorize` after the crawl completes.
 
 ### Backups
 - The two important runtime artifacts are the session JSON under `storage/` and the SQLite index under `index/`.

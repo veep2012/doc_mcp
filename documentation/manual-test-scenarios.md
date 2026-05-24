@@ -5,13 +5,13 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-26
-- Last Updated: 2026-05-23
-- Version: v1.0
+- Last Updated: 2026-05-24
+- Version: v1.1
 
 ## Change Log
-- 2026-05-24 | v1.1 | Documented the chained crawl-and-vectorize command path alongside the standalone vectorizer CLI.
-- 2026-05-20 | v0.9 | Aligned the manual checklist with the current CLI wrappers, version commands, and crawler debug behavior.
+- 2026-05-24 | v1.1 | Documented the standalone vectorizer CLI, the `docmcp_vectorizer` alias, and the chained crawl-and-vectorize command path.
 - 2026-05-23 | v1.0 | Added explicit vectorizer verification steps and documented that crawl and vector refresh remain separate commands.
+- 2026-05-20 | v0.9 | Aligned the manual checklist with the current CLI wrappers, version commands, and crawler debug behavior.
 - 2026-05-03 | v0.8 | Linked the automated pytest scenario document and clarified that this manual checklist remains the source coverage baseline.
 - 2026-04-26 | v0.3 | Added manual verification scenarios with separate development and installed-wheel runtime flows.
 
@@ -66,7 +66,7 @@ Run this block first when validating the repository checkout directly.
 ### Development Command Set
 - Auth command: `python auth_cli.py` or `docmcp-auth` once installed
 - Crawl command: `python crawl_cli.py` or `docmcp-crawl` once installed
-- Vectorize command: `python vectorize_cli.py` or `docmcp-vectorize` once installed
+- Vectorize command: `python vectorize_cli.py` or `docmcp-vectorize` / `docmcp_vectorizer` once installed
 - Crawl + vectorize chain: `python crawl_cli.py --vectorize` or `docmcp-crawl --vectorize` once installed
 - Server command: `python -m src.main` or `docmcp-server` once installed; stop it with `Ctrl+C` after startup is verified.
 
@@ -136,7 +136,7 @@ Run this block after the development environment passes, using a separate runtim
 ### Runtime Command Set
 - Auth command: `docmcp-auth`
 - Crawl command: `docmcp-crawl`
-- Vectorize command: `docmcp-vectorize`
+- Vectorize command: `docmcp-vectorize` or `docmcp_vectorizer`
 - Crawl + vectorize chain: `docmcp-crawl --vectorize`
 - Server command: `docmcp-server`; stop it with `Ctrl+C` after startup is verified.
 
@@ -159,9 +159,9 @@ Run this block after the development environment passes, using a separate runtim
      - Windows PowerShell: `python -m playwright install chromium`
   6. Run `docmcp-auth --help`.
   7. Run `docmcp-crawl --help`.
-  8. Run `docmcp-vectorize --help`.
+  8. Run `docmcp-vectorize --help` and `docmcp_vectorizer --help`.
   9. Run `command -v docmcp-server` to verify the server console script is installed.
-  10. Run `docmcp-auth --version`, `docmcp-crawl --version`, and `docmcp-vectorize --version`.
+  10. Run `docmcp-auth --version`, `docmcp-crawl --version`, `docmcp-vectorize --version`, and `docmcp_vectorizer --version`.
 - Expected result:
   - The wheel installs into an environment that does not depend on the repository source tree.
   - The `docmcp-auth`, `docmcp-crawl`, and `docmcp-server` console commands are available.
@@ -377,7 +377,7 @@ Run these scenarios after either `MT-003A` or `MT-003B`, using the command set f
 - If the selected site requires MFA, pause the manual run until login completes and record the login path used.
 - If a crawl starts from a redirected URL, verify indexed URLs still belong to the configured site and path scope.
 - If a command is run outside the repository or runtime workspace, set `DOC_MCP_HOME` and `CONFIG_FILE` explicitly before treating failures as product defects.
-- If `docmcp-vectorize` reports that sqlite-vec cannot be loaded, verify the active environment has the packaged dependency installed before treating it as an application defect.
+- If `docmcp-vectorize` or `docmcp_vectorizer` reports that sqlite-vec cannot be loaded, verify the active environment has the packaged dependency installed before treating it as an application defect.
 
 ## Risks and Mitigations
 - Risk: Site-specific authentication behavior may make tests inconsistent.
