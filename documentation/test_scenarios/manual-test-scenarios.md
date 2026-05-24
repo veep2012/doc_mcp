@@ -6,10 +6,10 @@
 - Reviewers: Repository maintainers
 - Created: 2026-04-26
 - Last Updated: 2026-05-24
-- Version: v1.1
+- Version: v1.2
 
 ## Change Log
-- 2026-05-24 | v1.1 | Documented the standalone vectorizer CLI, the `docmcp_vectorizer` alias, and the chained crawl-and-vectorize command path.
+- 2026-05-24 | v1.2 | Documented the standalone vectorizer CLI, the `docmcp_vectorizer` alias, the vectorizer `--debug` option, and the chained crawl-and-vectorize command path with inherited debug mode.
 - 2026-05-23 | v1.0 | Added explicit vectorizer verification steps and documented that crawl and vector refresh remain separate commands.
 - 2026-05-20 | v0.9 | Aligned the manual checklist with the current CLI wrappers, version commands, and crawler debug behavior.
 - 2026-05-03 | v0.8 | Linked the automated pytest scenario document and clarified that this manual checklist remains the source coverage baseline.
@@ -34,7 +34,7 @@ Provide a repeatable manual test checklist for validating that `doc-mcp` can be 
 ## Design / Behavior
 The checklist separates source-tree development checks from installed-wheel runtime checks, then validates shared authentication, crawling, server startup, MCP client configuration, search, fetch, and failure-mode behavior.
 
-The manual scenarios remain the source coverage checklist for the repository. Automated coverage derived from this checklist is tracked separately in [documentation/test_scenarios/testing_framework_test_scenarios.md](test_scenarios/testing_framework_test_scenarios.md).
+The manual scenarios remain the source coverage checklist for the repository. Automated coverage derived from this checklist is tracked separately in [testing_framework_test_scenarios.md](testing_framework_test_scenarios.md).
 
 ## Audience
 - Repository maintainers
@@ -67,7 +67,9 @@ Run this block first when validating the repository checkout directly.
 - Auth command: `python auth_cli.py` or `docmcp-auth` once installed
 - Crawl command: `python crawl_cli.py` or `docmcp-crawl` once installed
 - Vectorize command: `python vectorize_cli.py` or `docmcp-vectorize` / `docmcp_vectorizer` once installed
+- Vectorize command with debug diagnostics: `python vectorize_cli.py --debug` or `docmcp-vectorize --debug` / `docmcp_vectorizer --debug` once installed
 - Crawl + vectorize chain: `python crawl_cli.py --vectorize` or `docmcp-crawl --vectorize` once installed
+- Crawl + vectorize chain with inherited debug diagnostics: `python crawl_cli.py --debug --vectorize` or `docmcp-crawl --debug --vectorize` once installed
 - Server command: `python -m src.main` or `docmcp-server` once installed; stop it with `Ctrl+C` after startup is verified.
 
 ### MT-001A: Create Development Source-Tree Environment
@@ -137,7 +139,9 @@ Run this block after the development environment passes, using a separate runtim
 - Auth command: `docmcp-auth`
 - Crawl command: `docmcp-crawl`
 - Vectorize command: `docmcp-vectorize` or `docmcp_vectorizer`
+- Vectorize command with debug diagnostics: `docmcp-vectorize --debug` or `docmcp_vectorizer --debug`
 - Crawl + vectorize chain: `docmcp-crawl --vectorize`
+- Crawl + vectorize chain with inherited debug diagnostics: `docmcp-crawl --debug --vectorize`
 - Server command: `docmcp-server`; stop it with `Ctrl+C` after startup is verified.
 
 ### MT-001B: Create Separate Installed-Wheel Environment
@@ -165,6 +169,7 @@ Run this block after the development environment passes, using a separate runtim
 - Expected result:
   - The wheel installs into an environment that does not depend on the repository source tree.
   - The `docmcp-auth`, `docmcp-crawl`, and `docmcp-server` console commands are available.
+  - The `docmcp-vectorize` and `docmcp_vectorizer` console commands are available and accept `--debug`.
   - Help and version output print without importing the browser-heavy paths.
 - Pass/Fail:
   - Pass if the wheel installs and all console commands are available.
@@ -282,30 +287,32 @@ Run these scenarios after either `MT-003A` or `MT-003B`, using the command set f
   - Pass if login content is not indexed and the recovery instruction is clear.
   - Fail if the crawler stores login pages or continues with unauthenticated content.
 
-  ### MT-010: Build Local Vector Sidecar After Crawl
-  - Steps:
-    1. Run the selected vectorize command with `--site "My Docs"`.
-    2. Confirm the command prints the crawl index path and vector index path.
-    3. Confirm the command reaches the done message.
-    4. Confirm the configured vector index file exists.
-  - Expected result:
-    - The vectorizer reads the current SQLite crawl index.
-    - The vectorizer chunks crawled Markdown content and writes a local sqlite-vec sidecar.
-    - Re-running the command after the same crawl completes without duplicate or stale chunk rows.
-  - Pass/Fail:
-    - Pass if the vector sidecar file exists and the command reports the chunk count.
-    - Fail if the vectorizer tries to recrawl, writes through MCP, or crashes on a valid crawl index.
+### MT-010: Build Local Vector Sidecar After Crawl
+- Steps:
+  1. Run the selected vectorize command with `--site "My Docs"`.
+  2. Confirm the command prints the crawl index path and vector index path.
+  3. Confirm the command reaches the done message.
+  4. Confirm the configured vector index file exists.
+- Expected result:
+  - The vectorizer reads the current SQLite crawl index.
+  - The vectorizer chunks crawled Markdown content and writes a local sqlite-vec sidecar.
+  - Re-running the command after the same crawl completes without duplicate or stale chunk rows.
+  - `--debug` adds chunk-level vectorizer diagnostics; normal runs keep page-level progress only.
+- Pass/Fail:
+  - Pass if the vector sidecar file exists and the command reports the chunk count.
+  - Fail if the vectorizer tries to recrawl, writes through MCP, or crashes on a valid crawl index.
 
-  ### MT-011: Rebuild Local Vector Sidecar After Recrawl
-  - Steps:
-    1. Change or recrawl at least one known page for `My Docs`.
-    2. Run the selected crawl command again with `--site "My Docs"`.
-    3. Run the selected vectorize command again with `--site "My Docs"`.
-    4. Inspect the vector index file timestamp or contents.
-  - Expected result:
-    - The keyword SQLite index refreshes first.
-    - The vector sidecar rebuild then reflects the refreshed crawl data.
-    - No separate crawl-time vectorization toggle is required; the operator still runs the vectorizer explicitly.
+### MT-011: Rebuild Local Vector Sidecar After Recrawl
+- Steps:
+  1. Change or recrawl at least one known page for `My Docs`.
+  2. Run the selected crawl command again with `--site "My Docs"`.
+  3. Run the selected vectorize command again with `--site "My Docs"`.
+  4. Inspect the vector index file timestamp or contents.
+- Expected result:
+  - The keyword SQLite index refreshes first.
+  - The vector sidecar rebuild then reflects the refreshed crawl data.
+  - No separate crawl-time vectorization toggle is required; the operator still runs the vectorizer explicitly.
+  - If the crawl is run with `--debug --vectorize`, the chained vectorizer inherits the debug mode and emits chunk-level diagnostics.
   - Pass/Fail:
     - Pass if the sidecar updates after recrawl and keyword search remains usable throughout.
     - Fail if stale vector records remain after the rebuild or if crawl tries to invoke vectorization automatically.
@@ -388,12 +395,12 @@ Run these scenarios after either `MT-003A` or `MT-003B`, using the command set f
   - Mitigation: Run the forced-auth scenario before testing session reuse.
 
 ## References
-- [installation.md](installation.md)
-- [configuration.md](configuration.md)
-- [authentication.md](authentication.md)
-- [crawling.md](crawling.md)
-- [mcp-server.md](mcp-server.md)
-- [troubleshooting.md](troubleshooting.md)
+- [installation.md](../installation.md)
+- [configuration.md](../configuration.md)
+- [authentication.md](../authentication.md)
+- [crawling.md](../crawling.md)
+- [mcp-server.md](../mcp-server.md)
+- [troubleshooting.md](../troubleshooting.md)
 - [src/docmcp/auth_cli.py](../src/docmcp/auth_cli.py)
 - [src/docmcp/crawl_cli.py](../src/docmcp/crawl_cli.py)
 - [src/docmcp/main.py](../src/docmcp/main.py)

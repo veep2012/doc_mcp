@@ -6,10 +6,10 @@
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
 - Last Updated: 2026-05-24
-- Version: v1.3
+- Version: v1.4
 
 ## Change Log
-- 2026-05-24 | v1.3 | Added a direct link to the sqlite vector query reference.
+- 2026-05-24 | v1.4 | Added a direct link to the sqlite vector query reference and moved the manual test scenarios link under `test_scenarios/`.
 - 2026-04-26 | v1.2 | Added the manual test scenarios document to the documentation navigation.
 - 2026-04-25 | v1.1 | Added semantic search implementation stages to the documentation navigation.
 - 2026-04-24 | v1.0 | Reformatted the landing page to the repository documentation standard and refreshed navigation links.
@@ -34,7 +34,7 @@ Provide the entry point for the repository documentation set and link to the ope
 - [Crawling and Indexing](crawling.md)
 - [SQLite Vector Queries](sqlite_vector_queries.md)
 - [MCP Server](mcp-server.md)
-- [Manual Test Scenarios](manual-test-scenarios.md)
+- [Manual Test Scenarios](test_scenarios/manual-test-scenarios.md)
 - [Testing Framework Test Scenarios](test_scenarios/testing_framework_test_scenarios.md)
 - [Semantic Search Implementation Stages](semantic_search_implementation_stages.md)
 - [Operations](operations.md)

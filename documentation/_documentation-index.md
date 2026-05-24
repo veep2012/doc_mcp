@@ -6,10 +6,10 @@
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
 - Last Updated: 2026-05-24
-- Version: v1.4
+- Version: v1.5
 
 ## Change Log
-- 2026-05-24 | v1.4 | Added the sqlite vector query reference to the documentation index.
+- 2026-05-24 | v1.5 | Added the sqlite vector query reference to the documentation index and moved the manual test scenarios link under `test_scenarios/`.
 - 2026-05-09 | v1.3 | Added the story template to the documentation index.
 - 2026-04-26 | v1.2 | Added the manual test scenarios document and documentation actualization state to the index.
 - 2026-04-25 | v1.1 | Added the semantic search implementation stages document to the index.
@@ -35,7 +35,7 @@ Provide a single entry point for all files in `documentation/` and make it easy 
 - `crawling.md` - Crawler behavior, indexing flow, and crawl tuning.
 - `sqlite_vector_queries.md` - sqlite3 shell commands and SQL examples for inspecting the local vector index.
 - `mcp-server.md` - MCP server entry points and client connection details.
-- `manual-test-scenarios.md` - Manual QA checklist for setup, authentication, crawling, indexing, and MCP client smoke tests.
+- `test_scenarios/manual-test-scenarios.md` - Manual QA checklist for setup, authentication, crawling, indexing, and MCP client smoke tests.
 - `test_scenarios/testing_framework_test_scenarios.md` - Automated pytest and smoke scenario catalog for the repository test framework.
 - `semantic_search_implementation_stages.md` - Staged implementation plan for external vector index semantic and hybrid search.
 - `operations.md` - Operational workflow, maintenance, and runtime notes.

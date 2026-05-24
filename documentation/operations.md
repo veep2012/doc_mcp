@@ -6,10 +6,10 @@
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
 - Last Updated: 2026-05-24
-- Version: v1.2
+- Version: v1.3
 
 ## Change Log
-- 2026-05-24 | v1.2 | Documented the optional crawl-and-vectorize chain alongside the standalone crawl, vectorize, and server workflow.
+- 2026-05-24 | v1.3 | Documented the optional crawl-and-vectorize chain, the standalone vectorizer debug behavior, and the inherited `--debug` path for chained crawl/vectorize runs.
 - 2026-04-25 | v1.1 | Updated implementation references for package entry points.
 - 2026-04-24 | v1.0 | Reformatted the operations guide and kept the normal workflow, recovery, and logging steps.
 
@@ -30,8 +30,9 @@ Describe the day-to-day operational workflow for refreshing a site, rebuilding i
 2. Authenticate the site with `docmcp-auth`.
 3. Crawl the site with `docmcp-crawl`.
 4. Optionally chain the vector rebuild with `docmcp-crawl --vectorize` or run `docmcp-vectorize` / `docmcp_vectorizer` afterward if you want the local vector sidecar refreshed.
-5. Start `docmcp-server`.
-6. Connect an MCP client and use `search_docs`, `list_pages`, or `fetch_page`.
+5. Add `--debug` to either vectorizer command when you want chunk-level vector diagnostics. If you chain vectorization through `docmcp-crawl --debug --vectorize`, the vectorizer inherits the same debug mode.
+6. Start `docmcp-server`.
+7. Connect an MCP client and use `search_docs`, `list_pages`, or `fetch_page`.
 
 ### File Layout
 - `storage/` holds session state and can be deleted if you want to re-authenticate.

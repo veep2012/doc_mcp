@@ -6,10 +6,10 @@
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
 - Last Updated: 2026-05-24
-- Version: v1.8
+- Version: v1.9
 
 ## Change Log
-- 2026-05-24 | v1.8 | Documented the optional `--vectorize` crawl flag for chained post-crawl vector index refreshes.
+- 2026-05-24 | v1.9 | Documented the optional `--vectorize` crawl flag and clarified that chained vectorization inherits `--debug` output while keeping the crawl/vectorize command surface in sync with the current CLI behavior.
 - 2026-05-23 | v1.7 | Documented the separate post-crawl vectorizer sidecar and clarified that crawling still only writes the keyword SQLite index.
 - 2026-05-21 | v1.6 | Tightened query-link wording so start URLs are preserved exactly and discovered query links are described consistently.
 - 2026-05-20 | v1.4 | Clarified debug output routing, queue preview formatting, redirected URL indexing, and crawler trace expectations.
@@ -93,6 +93,7 @@ docmcp-crawl --version
 - Repeated crawls update existing rows by URL, so re-running the crawler refreshes pages in place.
 - Crawling does not write vector data during page fetches. The local vector sidecar can be built later by `docmcp-vectorize` or `docmcp_vectorizer` from the completed SQLite crawl index, or chained immediately afterward with `docmcp-crawl --vectorize`.
 - If you run `docmcp-crawl --debug --vectorize`, the chained vectorizer inherits the same debug mode and emits chunk-level diagnostics instead of page-only progress.
+- Standalone vectorizer runs keep page-level progress unless you add `--debug`.
 
 ### Runtime Outputs
 - Session file: `storage/<site>.json`

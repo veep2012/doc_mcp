@@ -6,10 +6,10 @@
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
 - Last Updated: 2026-05-24
-- Version: v1.6
+- Version: v1.7
 
 ## Change Log
-- 2026-05-24 | v1.6 | Added the `docmcp_vectorizer` console script alias, clarified the vectorizer command references, and documented the chained `docmcp-crawl --vectorize` refresh option.
+- 2026-05-24 | v1.7 | Added the `docmcp_vectorizer` console script alias, documented vectorizer `--debug` diagnostics, clarified that chained crawl/vectorize inherits debug output, and kept the vector table inspection guidance platform-neutral.
 - 2026-05-23 | v1.5 | Added local vector sidecar settings, documented the separate vectorizer CLI, and clarified that crawl-time vectorization remains disabled in this stage.
 - 2026-05-21 | v1.4 | Documented `MCP_LOG_LEVEL`, clarified workspace `.env` resolution, and aligned runtime path notes with the loader.
 - 2026-04-25 | v1.1 | Documented runtime root resolution through DOC_MCP_HOME and updated implementation references.
@@ -103,7 +103,8 @@ The sample config file also includes a few future-facing keys such as `auth_mode
 - Build or refresh the local vector sidecar explicitly with `docmcp-vectorize --site "<Site Name>"`, `docmcp_vectorizer --site "<Site Name>"`, or `docmcp-crawl --vectorize --site "<Site Name>"` after crawling.
 - The vectorizer reads the existing `index_file`, chunks page Markdown deterministically, generates deterministic local embeddings, and rewrites the configured `vector_index_file`.
 - Install the vector backend with `pip install sqlite-vec`. The packaged project now declares `sqlite-vec` as a runtime dependency.
-- `docmcp-vectorize --debug` and `docmcp_vectorizer --debug` enable chunk-level vectorizer diagnostics; when `docmcp-crawl --debug --vectorize` runs the vectorizer immediately after a successful crawl, that debug mode is inherited.
+- `docmcp-vectorize --debug` and `docmcp_vectorizer --debug` enable chunk-level vectorizer diagnostics; normal runs stay at page-level progress.
+- When `docmcp-crawl --debug --vectorize` runs the vectorizer immediately after a successful crawl, that debug mode is inherited.
 - To inspect the vector tables with `sqlite3`, use a shell that supports extension loading, open `index/<site>.vec.db`, and load the platform-appropriate `vec0` library before running `.tables`:
   - `sqlite3 index/<site>.vec.db`
   - `.load <path-to-sqlite_vec>/vec0.<platform-extension>` where the platform-specific filename is `vec0.dylib` on macOS, `vec0.so` on Linux, or `vec0.dll` on Windows
