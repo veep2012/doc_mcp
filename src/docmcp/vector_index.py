@@ -355,18 +355,6 @@ def _init_vector_db(conn: sqlite3.Connection, *, embedding_dimensions: int) -> N
     conn.commit()
 
 
-def _source_pages(index_file: str) -> list[dict]:
-    path = Path(index_file)
-    if not path.exists():
-        raise VectorSourceError(
-            f"Keyword index not found: {index_file}. Run docmcp-crawl before docmcp-vectorize."
-        )
-    try:
-        return list_page_documents(index_file)
-    except sqlite3.Error as exc:
-        raise VectorSourceError(f"Keyword index is unreadable: {index_file}\n{exc}") from exc
-
-
 def rebuild_vector_index(site: dict) -> VectorBuildSummary:
     """Rebuild a site's local vector sidecar from the current crawl index."""
     vectorizer_cfg = site.get("vectorizer", {})
