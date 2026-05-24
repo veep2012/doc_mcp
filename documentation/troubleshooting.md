@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-05-21
-- Version: v1.5
+- Last Updated: 2026-05-24
+- Version: v1.6
 
 ## Change Log
+- 2026-05-24 | v1.6 | Added Podman machine recovery guidance for smoke-test environments and documented the rootful connection option.
 - 2026-05-21 | v1.5 | Consolidated same-day crawl diagnostics updates and kept the startup and recovery guidance aligned with the current code.
 - 2026-05-20 | v1.4 | Clarified debug stderr routing, redirected-navigation diagnostics, and crawl debug guidance for queue, link, and page-level behavior.
 - 2026-04-27 | v1.2 | Added Windows Playwright module verification and recovery steps.
@@ -81,10 +82,28 @@ List the most common failure modes for `doc-mcp` and the first corrective step f
 - Site-specific output directories are created when that site is authenticated, crawled, or queried, so one unused site's paths do not block server startup.
 - For VS Code, check the `docs-mcp` output from `MCP: List Servers` to see the exact startup configuration error.
 
+### Podman Smoke Runtime Is Stale Or Unreachable
+- If `make test` reaches the smoke phase and Podman reports that the machine is already running but the socket refuses connections, treat the local Podman machine state as stale.
+- Reinitialize the default machine with:
+```bash
+podman machine stop
+podman machine rm -f podman-machine-default
+podman machine init
+podman machine start
+```
+- If you need the default connection to point at the rootful socket, run:
+```bash
+podman machine set --rootful
+podman system connection default podman-machine-default-root
+```
+- If you want to set the default Podman service connection explicitly after reinitialization, the rootful connection is typically named `podman-machine-default-root`.
+- If Podman is installed but unusable in the current environment, rerun the smoke target with `CONTAINER_BIN=docker`.
+
 ## Edge Cases
 - If a site uses a non-standard login redirect, the session validity check may classify it as expired.
 - If the crawler returns partial pages, the site may require a different content container or a manual browser review.
 - If search is empty after a crawl, check both the index path and the crawl start URL before re-running the job.
+- If Podman is reachable but the smoke container still fails to start, confirm the current remote connection with `podman system connection list` before retrying.
 
 ## References
 - [authentication.md](authentication.md)

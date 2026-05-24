@@ -9,6 +9,7 @@
 - Version: v1.0
 
 ## Change Log
+- 2026-05-24 | v1.1 | Documented the chained crawl-and-vectorize command path alongside the standalone vectorizer CLI.
 - 2026-05-20 | v0.9 | Aligned the manual checklist with the current CLI wrappers, version commands, and crawler debug behavior.
 - 2026-05-23 | v1.0 | Added explicit vectorizer verification steps and documented that crawl and vector refresh remain separate commands.
 - 2026-05-03 | v0.8 | Linked the automated pytest scenario document and clarified that this manual checklist remains the source coverage baseline.
@@ -66,6 +67,7 @@ Run this block first when validating the repository checkout directly.
 - Auth command: `python auth_cli.py` or `docmcp-auth` once installed
 - Crawl command: `python crawl_cli.py` or `docmcp-crawl` once installed
 - Vectorize command: `python vectorize_cli.py` or `docmcp-vectorize` once installed
+- Crawl + vectorize chain: `python crawl_cli.py --vectorize` or `docmcp-crawl --vectorize` once installed
 - Server command: `python -m src.main` or `docmcp-server` once installed; stop it with `Ctrl+C` after startup is verified.
 
 ### MT-001A: Create Development Source-Tree Environment
@@ -135,6 +137,7 @@ Run this block after the development environment passes, using a separate runtim
 - Auth command: `docmcp-auth`
 - Crawl command: `docmcp-crawl`
 - Vectorize command: `docmcp-vectorize`
+- Crawl + vectorize chain: `docmcp-crawl --vectorize`
 - Server command: `docmcp-server`; stop it with `Ctrl+C` after startup is verified.
 
 ### MT-001B: Create Separate Installed-Wheel Environment

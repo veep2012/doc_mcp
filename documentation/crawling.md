@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-05-23
-- Version: v1.7
+- Last Updated: 2026-05-24
+- Version: v1.8
 
 ## Change Log
+- 2026-05-24 | v1.8 | Documented the optional `--vectorize` crawl flag for chained post-crawl vector index refreshes.
 - 2026-05-21 | v1.6 | Tightened query-link wording so start URLs are preserved exactly and discovered query links are described consistently.
 - 2026-05-23 | v1.7 | Documented the separate post-crawl vectorizer sidecar and clarified that crawling still only writes the keyword SQLite index.
 - 2026-05-20 | v1.4 | Clarified debug output routing, queue preview formatting, redirected URL indexing, and crawler trace expectations.
@@ -36,6 +37,11 @@ docmcp-crawl --list
 - Crawl a site:
 ```bash
 docmcp-crawl --site "My Docs"
+```
+
+- Crawl a site and refresh the vector sidecar after a successful crawl:
+```bash
+docmcp-crawl --site "My Docs" --vectorize
 ```
 
 - Force re-authentication before crawling:
@@ -85,7 +91,7 @@ docmcp-crawl --version
 - The SQLite index stores page URL, page title, Markdown content, and last crawled timestamp.
 - The database also includes SQLite FTS5 tables for full-text keyword search.
 - Repeated crawls update existing rows by URL, so re-running the crawler refreshes pages in place.
-- Crawling does not write vector data. The local vector sidecar is built later by `docmcp-vectorize` from the completed SQLite crawl index.
+- Crawling does not write vector data during page fetches. The local vector sidecar can be built later by `docmcp-vectorize` from the completed SQLite crawl index or chained immediately afterward with `docmcp-crawl --vectorize`.
 
 ### Runtime Outputs
 - Session file: `storage/<site>.json`
@@ -98,7 +104,7 @@ docmcp-crawl --version
 
 ### Useful Behavior To Know
 - A site can be crawled again after content changes without creating duplicate rows.
-- A crawl can succeed without any vector sidecar present; run the vectorizer explicitly when you want to refresh semantic-search data.
+- A crawl can succeed without any vector sidecar present; run the vectorizer explicitly when you want to refresh semantic-search data, or pass `--vectorize` to chain the refresh after a successful crawl.
 - If a session expires during a crawl, the crawler stops and tells you to re-authenticate.
 - Anchor-heavy documentation sites remain indexed as canonical pages instead of fragment-only records.
 - Query-driven documentation can opt into separate records for distinct query URLs by setting `crawl.ignore_query_links: false`.

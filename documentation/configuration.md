@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-05-23
-- Version: v1.5
+- Last Updated: 2026-05-24
+- Version: v1.6
 
 ## Change Log
+- 2026-05-24 | v1.6 | Added the `docmcp_vectorizer` console script alias, clarified the vectorizer command references, and documented the chained `docmcp-crawl --vectorize` refresh option.
 - 2026-05-21 | v1.4 | Documented `MCP_LOG_LEVEL`, clarified workspace `.env` resolution, and aligned runtime path notes with the loader.
 - 2026-05-23 | v1.5 | Added local vector sidecar settings, documented the separate vectorizer CLI, and clarified that crawl-time vectorization remains disabled in this stage.
 - 2026-04-25 | v1.1 | Documented runtime root resolution through DOC_MCP_HOME and updated implementation references.
@@ -99,7 +100,7 @@ The sample config file also includes a few future-facing keys such as `auth_mode
 
 ### Local Vector Sidecar Notes
 - `docmcp-crawl` still writes only the keyword SQLite index in this stage.
-- Build or refresh the local vector sidecar explicitly with `docmcp-vectorize --site "<Site Name>"` after crawling.
+- Build or refresh the local vector sidecar explicitly with `docmcp-vectorize --site "<Site Name>"` or `docmcp_vectorizer --site "<Site Name>"` after crawling.
 - The vectorizer reads the existing `index_file`, chunks page Markdown deterministically, generates deterministic local embeddings, and rewrites the configured `vector_index_file`.
 - Install the vector backend with `pip install sqlite-vec`. The packaged project now declares `sqlite-vec` as a runtime dependency.
 - To inspect the vector tables with `sqlite3`, use the Homebrew shell, then load `vec0` before running `.tables`:
@@ -115,7 +116,7 @@ The sample config file also includes a few future-facing keys such as `auth_mode
 - `crawl.start_url` is used as the initial crawl seed and is preserved exactly as configured, including any query string.
 - `crawl.ignore_query_links: true` skips discovered links that contain a query string, while `false` allows them to be crawled and indexed as distinct URLs.
 - If `vector_index_file` is omitted, the vectorizer writes `<index_file stem>.vec.db` alongside the keyword SQLite index.
-- If sqlite-vec cannot be loaded, `docmcp-vectorize` fails clearly but crawl and keyword-only MCP search still work.
+- If sqlite-vec cannot be loaded, `docmcp-vectorize` and `docmcp_vectorizer` fail clearly but crawl and keyword-only MCP search still work.
 - Informational keys should not be treated as enforced runtime behavior.
 
 ## References
