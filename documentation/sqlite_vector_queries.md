@@ -33,10 +33,10 @@ Use a `sqlite3` build that supports extension loading, such as the Homebrew shel
 sqlite3 index/<site>.vec.db
 ```
 
-Inside the shell, load the extension that defines `vec0`:
+Inside the shell, load the extension that defines `vec0`, using the platform-appropriate library suffix (for example, `.so` on Linux, `.dylib` on macOS, or `.dll` on Windows):
 
 ```sql
-.load <path-to-sqlite_vec>/vec0.dylib
+.load <path-to-sqlite_vec>/vec0.<platform extension>
 ```
 
 ### Inspect The Tables
