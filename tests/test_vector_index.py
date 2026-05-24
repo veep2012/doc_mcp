@@ -10,6 +10,7 @@ from docmcp.vector_index import (
     chunk_markdown,
     rebuild_vector_index,
     resolve_vector_index_file,
+    _normalize_chunk_settings,
     vector_backend_status,
 )
 
@@ -96,6 +97,20 @@ def test_resolve_vector_index_file_defaults_to_sidecar_name(tmp_path):
     site = {"index_file": str(tmp_path / "index" / "docs.db")}
 
     assert resolve_vector_index_file(site) == str(tmp_path / "index" / "docs.vec.db")
+
+
+@pytest.mark.parametrize(
+    "chunk_size, chunk_overlap, embedding_dimensions, expected",
+    [
+        (0, 5, 8, "chunk_size must be positive"),
+        (18, 5, 0, "embedding_dimensions must be positive"),
+    ],
+)
+def test_normalize_chunk_settings_rejects_explicit_zero_values(
+    chunk_size, chunk_overlap, embedding_dimensions, expected
+):
+    with pytest.raises(ValueError, match=expected):
+        _normalize_chunk_settings(chunk_size, chunk_overlap, embedding_dimensions)
 
 
 def test_rebuild_vector_index_creates_and_refreshes_sidecar(tmp_path):
