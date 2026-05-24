@@ -40,7 +40,7 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 ### Non-Functional Requirements
 - NFR-1: Test commands should use the active virtual-environment Python.
 - NFR-2: Smoke tests should remain isolated from checked-in runtime data.
-- NFR-3: Scenario documentation should stay aligned with `documentation/manual-test-scenarios.md`.
+- NFR-3: Scenario documentation should stay aligned with `documentation/test_scenarios/manual-test-scenarios.md`.
 
 ## Design / Behavior
 ### Scenario Catalog
@@ -115,7 +115,7 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - [README.md](../../README.md)
 - [Makefile](../../Makefile)
 - [pytest.ini](../../pytest.ini)
-- [documentation/manual-test-scenarios.md](../manual-test-scenarios.md)
+- [documentation/test_scenarios/manual-test-scenarios.md](manual-test-scenarios.md)
 - [src/docmcp/config/loader.py](../../src/docmcp/config/loader.py)
 - [src/docmcp/crawl_cli.py](../../src/docmcp/crawl_cli.py)
 - [src/docmcp/tools.py](../../src/docmcp/tools.py)

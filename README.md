@@ -105,6 +105,7 @@ The repository includes smoke tests that exercise crawl and MCP behavior end to 
 Common limitations:
 
 - Rootless Podman can fail in CI or locked-down environments if user namespaces or port forwarding are restricted.
+- If Podman reports that the machine is running but the socket refuses connections, reinitialize it or switch the default connection to `podman-machine-default-root`.
 - Docker may work where Podman does not, and vice versa.
 - If no container runtime is available, smoke tests should be skipped rather than expected to pass.
 - If Chromium is missing, Playwright-based auth, crawl, and smoke paths will fail before the first site run.

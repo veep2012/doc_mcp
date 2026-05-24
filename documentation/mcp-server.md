@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-05-21
-- Version: v1.5
+- Last Updated: 2026-05-24
+- Version: v1.6
 
 ## Change Log
+- 2026-05-24 | v1.6 | Corrected the historical search_docs contract entry, kept the current `0.99.2` response contract documentation, and bumped the document control record.
 - 2026-05-21 | v1.5 | Documented the server log-level environment variable, added current server version/help guidance, and clarified startup diagnostics.
 - 2026-05-17 | v1.4 | Clarified that `search_docs` is keyword-only today, that the vector search counters remain zero until a vector backend is added, that `score` is an ordinal value derived from result order rather than a semantic relevance score, and that lookup failures return structured JSON.
 - 2026-05-09 | v1.3 | Documented the experimental `0.99.1` JSON response contract for `search_docs`.
@@ -55,10 +56,10 @@ python -m src.main
 - `get_sites` lists each configured site and counts pages in its SQLite index.
 - `get_version` returns the MCP server name and code-embedded package version for runtime checks.
 - `list_pages` returns indexed page titles, URLs, and last crawled timestamps.
-- `search_docs` runs SQLite FTS5 keyword search and returns the current `0.99.1` JSON response contract.
+- `search_docs` runs SQLite FTS5 keyword search and returns the current `0.99.2` JSON response contract.
 - `fetch_page` returns the full Markdown content for a single indexed page.
 
-### Experimental Search Contract (`0.99.1`)
+### Experimental Search Contract (`0.99.2`)
 `search_docs(site_name, query, limit=10)` currently returns a JSON string with this
 shape:
 

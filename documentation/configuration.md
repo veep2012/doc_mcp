@@ -5,10 +5,12 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-05-21
-- Version: v1.4
+- Last Updated: 2026-05-24
+- Version: v1.7
 
 ## Change Log
+- 2026-05-24 | v1.7 | Added the `docmcp_vectorizer` console script alias, documented vectorizer `--debug` diagnostics, clarified that chained crawl/vectorize inherits debug output, and kept the vector table inspection guidance platform-neutral.
+- 2026-05-23 | v1.5 | Added local vector sidecar settings, documented the separate vectorizer CLI, and clarified that crawl-time vectorization remains disabled in this stage.
 - 2026-05-21 | v1.4 | Documented `MCP_LOG_LEVEL`, clarified workspace `.env` resolution, and aligned runtime path notes with the loader.
 - 2026-04-25 | v1.1 | Documented runtime root resolution through DOC_MCP_HOME and updated implementation references.
 - 2026-04-24 | v1.0 | Reformatted the configuration reference and documented the live loader behavior.
@@ -60,6 +62,10 @@ SITE1_PASSWORD=replace-me
 - `crawl.allow_patterns`: optional allow-list glob patterns
 - `crawl.deny_patterns`: optional deny-list glob patterns
 - `index_file`: SQLite database path for the site index
+- `vector_index_file`: local sqlite-vec sidecar path for that site's chunk embeddings; if omitted, the runtime uses the same directory and file stem as `index_file` with a `.vec.db` suffix
+- `vectorizer.chunk_size`: maximum normalized chunk length in characters for post-crawl vector records
+- `vectorizer.chunk_overlap`: overlapping trailing characters reused when the vectorizer creates the next chunk
+- `vectorizer.embedding_dimensions`: deterministic local embedding size written into the sqlite-vec sidecar
 
 Example:
 ```yaml
@@ -79,6 +85,11 @@ sites:
       allow_patterns: []
       deny_patterns: []
     index_file: "index/my_docs.db"
+    vector_index_file: "index/my_docs.vec.db"
+    vectorizer:
+      chunk_size: 800
+      chunk_overlap: 120
+      embedding_dimensions: 32
 ```
 
 ### Notes On Example Fields
@@ -87,13 +98,27 @@ The sample config file also includes a few future-facing keys such as `auth_mode
 - `auth_type` is currently informational only.
 - `respect_robots_txt` is not consumed by the current crawler implementation.
 
+### Local Vector Sidecar Notes
+- `docmcp-crawl` still writes only the keyword SQLite index in this stage.
+- Build or refresh the local vector sidecar explicitly with `docmcp-vectorize --site "<Site Name>"`, `docmcp_vectorizer --site "<Site Name>"`, or `docmcp-crawl --vectorize --site "<Site Name>"` after crawling.
+- The vectorizer reads the existing `index_file`, chunks page Markdown deterministically, generates deterministic local embeddings, and rewrites the configured `vector_index_file`.
+- Install the vector backend with `pip install sqlite-vec`. The packaged project now declares `sqlite-vec` as a runtime dependency.
+- `docmcp-vectorize --debug` and `docmcp_vectorizer --debug` enable chunk-level vectorizer diagnostics; normal runs stay at page-level progress.
+- When `docmcp-crawl --debug --vectorize` runs the vectorizer immediately after a successful crawl, that debug mode is inherited.
+- To inspect the vector tables with `sqlite3`, use a shell that supports extension loading, open `index/<site>.vec.db`, and load the platform-appropriate `vec0` library before running `.tables`:
+  - `sqlite3 index/<site>.vec.db`
+  - `.load <path-to-sqlite_vec>/vec0.<platform-extension>` where the platform-specific filename is `vec0.dylib` on macOS, `vec0.so` on Linux, or `vec0.dll` on Windows
+- Crawl-time vectorization chaining is available as an explicit opt-in via `docmcp-crawl --vectorize`, while the vectorizer still remains a separate post-crawl step.
+
 ## Edge Cases
 - Unset placeholders resolve to an empty string instead of crashing.
 - Workspace `.env` values are only used for config resolution; loading config does not mutate process env.
 - `CONFIG_FILE` can override the default config path.
-- Relative `CONFIG_FILE`, `session_file`, and `index_file` values should be interpreted from `DOC_MCP_HOME` or the process working directory.
+- Relative `CONFIG_FILE`, `session_file`, `index_file`, and `vector_index_file` values should be interpreted from `DOC_MCP_HOME` or the process working directory.
 - `crawl.start_url` is used as the initial crawl seed and is preserved exactly as configured, including any query string.
 - `crawl.ignore_query_links: true` skips discovered links that contain a query string, while `false` allows them to be crawled and indexed as distinct URLs.
+- If `vector_index_file` is omitted, the vectorizer writes `<index_file stem>.vec.db` alongside the keyword SQLite index.
+- If sqlite-vec cannot be loaded, `docmcp-vectorize` and `docmcp_vectorizer` fail clearly but crawl and keyword-only MCP search still work.
 - Informational keys should not be treated as enforced runtime behavior.
 
 ## References

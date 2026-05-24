@@ -5,10 +5,12 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-05-21
-- Version: v1.6
+- Last Updated: 2026-05-24
+- Version: v1.9
 
 ## Change Log
+- 2026-05-24 | v1.9 | Documented the optional `--vectorize` crawl flag and clarified that chained vectorization inherits `--debug` output while keeping the crawl/vectorize command surface in sync with the current CLI behavior.
+- 2026-05-23 | v1.7 | Documented the separate post-crawl vectorizer sidecar and clarified that crawling still only writes the keyword SQLite index.
 - 2026-05-21 | v1.6 | Tightened query-link wording so start URLs are preserved exactly and discovered query links are described consistently.
 - 2026-05-20 | v1.4 | Clarified debug output routing, queue preview formatting, redirected URL indexing, and crawler trace expectations.
 - 2026-04-25 | v1.1 | Updated commands and references for installed docmcp-crawl package entry point and moved index store.
@@ -35,6 +37,11 @@ docmcp-crawl --list
 - Crawl a site:
 ```bash
 docmcp-crawl --site "My Docs"
+```
+
+- Crawl a site and refresh the vector sidecar after a successful crawl:
+```bash
+docmcp-crawl --site "My Docs" --vectorize
 ```
 
 - Force re-authentication before crawling:
@@ -84,10 +91,14 @@ docmcp-crawl --version
 - The SQLite index stores page URL, page title, Markdown content, and last crawled timestamp.
 - The database also includes SQLite FTS5 tables for full-text keyword search.
 - Repeated crawls update existing rows by URL, so re-running the crawler refreshes pages in place.
+- Crawling does not write vector data during page fetches. The local vector sidecar can be built later by `docmcp-vectorize` or `docmcp_vectorizer` from the completed SQLite crawl index, or chained immediately afterward with `docmcp-crawl --vectorize`.
+- If you run `docmcp-crawl --debug --vectorize`, the chained vectorizer inherits the same debug mode and emits chunk-level diagnostics instead of page-only progress.
+- Standalone vectorizer runs keep page-level progress unless you add `--debug`.
 
 ### Runtime Outputs
 - Session file: `storage/<site>.json`
 - SQLite index: `index/<site>.db`
+- Optional vector sidecar after a separate vectorizer run: `index/<site>.vec.db`
 - Normal runs keep the existing progress output focused on page indexing progress.
 - `--debug` adds crawler-only trace lines for navigation, extracted content sizes, discovered links, skip reasons, queued URLs, and the next breadth-first queue preview before the crawler descends to the next level.
 - Debug traces are written to `stderr`, which keeps them separate from the normal crawl progress stream.
@@ -95,6 +106,7 @@ docmcp-crawl --version
 
 ### Useful Behavior To Know
 - A site can be crawled again after content changes without creating duplicate rows.
+- A crawl can succeed without any vector sidecar present; run the vectorizer explicitly when you want to refresh semantic-search data, or pass `--vectorize` to chain the refresh after a successful crawl.
 - If a session expires during a crawl, the crawler stops and tells you to re-authenticate.
 - Anchor-heavy documentation sites remain indexed as canonical pages instead of fragment-only records.
 - Query-driven documentation can opt into separate records for distinct query URLs by setting `crawl.ignore_query_links: false`.

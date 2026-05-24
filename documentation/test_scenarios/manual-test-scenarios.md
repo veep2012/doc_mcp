@@ -5,10 +5,12 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-26
-- Last Updated: 2026-05-20
-- Version: v0.9
+- Last Updated: 2026-05-24
+- Version: v1.2
 
 ## Change Log
+- 2026-05-24 | v1.2 | Documented the standalone vectorizer CLI, the `docmcp_vectorizer` alias, the vectorizer `--debug` option, and the chained crawl-and-vectorize command path with inherited debug mode.
+- 2026-05-23 | v1.0 | Added explicit vectorizer verification steps and documented that crawl and vector refresh remain separate commands.
 - 2026-05-20 | v0.9 | Aligned the manual checklist with the current CLI wrappers, version commands, and crawler debug behavior.
 - 2026-05-03 | v0.8 | Linked the automated pytest scenario document and clarified that this manual checklist remains the source coverage baseline.
 - 2026-04-26 | v0.3 | Added manual verification scenarios with separate development and installed-wheel runtime flows.
@@ -32,7 +34,7 @@ Provide a repeatable manual test checklist for validating that `doc-mcp` can be 
 ## Design / Behavior
 The checklist separates source-tree development checks from installed-wheel runtime checks, then validates shared authentication, crawling, server startup, MCP client configuration, search, fetch, and failure-mode behavior.
 
-The manual scenarios remain the source coverage checklist for the repository. Automated coverage derived from this checklist is tracked separately in [documentation/test_scenarios/testing_framework_test_scenarios.md](test_scenarios/testing_framework_test_scenarios.md).
+The manual scenarios remain the source coverage checklist for the repository. Automated coverage derived from this checklist is tracked separately in [testing_framework_test_scenarios.md](testing_framework_test_scenarios.md).
 
 ## Audience
 - Repository maintainers
@@ -64,6 +66,10 @@ Run this block first when validating the repository checkout directly.
 ### Development Command Set
 - Auth command: `python auth_cli.py` or `docmcp-auth` once installed
 - Crawl command: `python crawl_cli.py` or `docmcp-crawl` once installed
+- Vectorize command: `python vectorize_cli.py` or `docmcp-vectorize` / `docmcp_vectorizer` once installed
+- Vectorize command with debug diagnostics: `python vectorize_cli.py --debug` or `docmcp-vectorize --debug` / `docmcp_vectorizer --debug` once installed
+- Crawl + vectorize chain: `python crawl_cli.py --vectorize` or `docmcp-crawl --vectorize` once installed
+- Crawl + vectorize chain with inherited debug diagnostics: `python crawl_cli.py --debug --vectorize` or `docmcp-crawl --debug --vectorize` once installed
 - Server command: `python -m src.main` or `docmcp-server` once installed; stop it with `Ctrl+C` after startup is verified.
 
 ### MT-001A: Create Development Source-Tree Environment
@@ -87,8 +93,9 @@ Run this block first when validating the repository checkout directly.
      - Windows PowerShell: `.venv\Scripts\Activate.ps1`
   4. Run `python auth_cli.py --help`.
   5. Run `python crawl_cli.py --help`.
-  6. Run `python auth_cli.py --version` and `python crawl_cli.py --version`.
-  7. Run `python -c "import src.docmcp.main"` to verify the server module imports.
+  6. Run `python vectorize_cli.py --help`.
+  7. Run `python auth_cli.py --version`, `python crawl_cli.py --version`, and `python vectorize_cli.py --version`.
+  8. Run `python -c "import src.docmcp.main"` to verify the server module imports.
 - Expected result:
   - The virtual environment is created.
   - Chromium is installed by Playwright.
@@ -131,6 +138,10 @@ Run this block after the development environment passes, using a separate runtim
 ### Runtime Command Set
 - Auth command: `docmcp-auth`
 - Crawl command: `docmcp-crawl`
+- Vectorize command: `docmcp-vectorize` or `docmcp_vectorizer`
+- Vectorize command with debug diagnostics: `docmcp-vectorize --debug` or `docmcp_vectorizer --debug`
+- Crawl + vectorize chain: `docmcp-crawl --vectorize`
+- Crawl + vectorize chain with inherited debug diagnostics: `docmcp-crawl --debug --vectorize`
 - Server command: `docmcp-server`; stop it with `Ctrl+C` after startup is verified.
 
 ### MT-001B: Create Separate Installed-Wheel Environment
@@ -152,11 +163,13 @@ Run this block after the development environment passes, using a separate runtim
      - Windows PowerShell: `python -m playwright install chromium`
   6. Run `docmcp-auth --help`.
   7. Run `docmcp-crawl --help`.
-  8. Run `command -v docmcp-server` to verify the server console script is installed.
-  9. Run `docmcp-auth --version` and `docmcp-crawl --version`.
+  8. Run `docmcp-vectorize --help` and `docmcp_vectorizer --help`.
+  9. Run `command -v docmcp-server` to verify the server console script is installed.
+  10. Run `docmcp-auth --version`, `docmcp-crawl --version`, `docmcp-vectorize --version`, and `docmcp_vectorizer --version`.
 - Expected result:
   - The wheel installs into an environment that does not depend on the repository source tree.
   - The `docmcp-auth`, `docmcp-crawl`, and `docmcp-server` console commands are available.
+  - The `docmcp-vectorize` and `docmcp_vectorizer` console commands are available and accept `--debug`.
   - Help and version output print without importing the browser-heavy paths.
 - Pass/Fail:
   - Pass if the wheel installs and all console commands are available.
@@ -274,12 +287,42 @@ Run these scenarios after either `MT-003A` or `MT-003B`, using the command set f
   - Pass if login content is not indexed and the recovery instruction is clear.
   - Fail if the crawler stores login pages or continues with unauthenticated content.
 
-## MCP Server
-### MT-010: Start MCP Server From Shell
+### MT-010: Build Local Vector Sidecar After Crawl
 - Steps:
-  1. From the repository root, leave `DOC_MCP_HOME` and `CONFIG_FILE` unset unless you need to override the defaults.
-  2. If running from another directory or a wheel runtime directory, run `export DOC_MCP_HOME="/path/to/runtime-workspace"` and `export CONFIG_FILE="config/sites.yaml"`.
-  3. Development source tree: run `python -m src.main`.
+  1. Run the selected vectorize command with `--site "My Docs"`.
+  2. Confirm the command prints the crawl index path and vector index path.
+  3. Confirm the command reaches the done message.
+  4. Confirm the configured vector index file exists.
+- Expected result:
+  - The vectorizer reads the current SQLite crawl index.
+  - The vectorizer chunks crawled Markdown content and writes a local sqlite-vec sidecar.
+  - Re-running the command after the same crawl completes without duplicate or stale chunk rows.
+  - `--debug` adds chunk-level vectorizer diagnostics; normal runs keep page-level progress only.
+- Pass/Fail:
+  - Pass if the vector sidecar file exists and the command reports the chunk count.
+  - Fail if the vectorizer tries to recrawl, writes through MCP, or crashes on a valid crawl index.
+
+### MT-011: Rebuild Local Vector Sidecar After Recrawl
+- Steps:
+  1. Change or recrawl at least one known page for `My Docs`.
+  2. Run the selected crawl command again with `--site "My Docs"`.
+  3. Run the selected vectorize command again with `--site "My Docs"`.
+  4. Inspect the vector index file timestamp or contents.
+- Expected result:
+  - The keyword SQLite index refreshes first.
+  - The vector sidecar rebuild then reflects the refreshed crawl data.
+  - No separate crawl-time vectorization toggle is required; the operator still runs the vectorizer explicitly.
+  - If the crawl is run with `--debug --vectorize`, the chained vectorizer inherits the debug mode and emits chunk-level diagnostics.
+  - Pass/Fail:
+    - Pass if the sidecar updates after recrawl and keyword search remains usable throughout.
+    - Fail if stale vector records remain after the rebuild or if crawl tries to invoke vectorization automatically.
+
+  ## MCP Server
+  ### MT-012: Start MCP Server From Shell
+  - Steps:
+    1. From the repository root, leave `DOC_MCP_HOME` and `CONFIG_FILE` unset unless you need to override the defaults.
+    2. If running from another directory or a wheel runtime directory, run `export DOC_MCP_HOME="/path/to/runtime-workspace"` and `export CONFIG_FILE="config/sites.yaml"`.
+    3. Development source tree: run `python -m src.main`.
   4. Installed wheel: run `docmcp-server`.
   5. Stop the server with `Ctrl+C` after startup completes or after confirming it is waiting on stdio.
 - Expected result:
@@ -290,7 +333,7 @@ Run these scenarios after either `MT-003A` or `MT-003B`, using the command set f
   - Pass if startup succeeds and no missing-config error appears.
   - Fail if startup cannot find `config/sites.yaml`, fails to load sites, or exits unexpectedly.
 
-### MT-011: Verify VS Code MCP Configuration
+### MT-013: Verify VS Code MCP Configuration
 - Steps:
   1. Create or update `.vscode/mcp.json` with the documented `docs-mcp` server config.
   2. Development source tree: ensure `command` points to the active environment's `python` executable and `args` includes `-m` and `src.main`.
@@ -307,7 +350,7 @@ Run these scenarios after either `MT-003A` or `MT-003B`, using the command set f
   - Fail if VS Code reports missing `config/sites.yaml` or uses the wrong working directory.
 
 ## Search And Fetch Smoke Test
-### MT-012: Search Indexed Content Through MCP Client
+### MT-014: Search Indexed Content Through MCP Client
 - Steps:
   1. Start the MCP server in the client.
   2. Use the MCP search tool for `My Docs`.
@@ -321,7 +364,7 @@ Run these scenarios after either `MT-003A` or `MT-003B`, using the command set f
   - Pass if search and fetch both return expected documentation content.
   - Fail if the site is missing, search is empty for known content, or fetch cannot find a returned URL.
 
-### MT-013: Unknown Site Fails Clearly
+### MT-015: Unknown Site Fails Clearly
 - Steps:
   1. Use the MCP client to search a site name that is not in `config/sites.yaml`.
 - Expected result:
@@ -341,6 +384,7 @@ Run these scenarios after either `MT-003A` or `MT-003B`, using the command set f
 - If the selected site requires MFA, pause the manual run until login completes and record the login path used.
 - If a crawl starts from a redirected URL, verify indexed URLs still belong to the configured site and path scope.
 - If a command is run outside the repository or runtime workspace, set `DOC_MCP_HOME` and `CONFIG_FILE` explicitly before treating failures as product defects.
+- If `docmcp-vectorize` or `docmcp_vectorizer` reports that sqlite-vec cannot be loaded, verify the active environment has the packaged dependency installed before treating it as an application defect.
 
 ## Risks and Mitigations
 - Risk: Site-specific authentication behavior may make tests inconsistent.
@@ -351,12 +395,12 @@ Run these scenarios after either `MT-003A` or `MT-003B`, using the command set f
   - Mitigation: Run the forced-auth scenario before testing session reuse.
 
 ## References
-- [installation.md](installation.md)
-- [configuration.md](configuration.md)
-- [authentication.md](authentication.md)
-- [crawling.md](crawling.md)
-- [mcp-server.md](mcp-server.md)
-- [troubleshooting.md](troubleshooting.md)
+- [installation.md](../installation.md)
+- [configuration.md](../configuration.md)
+- [authentication.md](../authentication.md)
+- [crawling.md](../crawling.md)
+- [mcp-server.md](../mcp-server.md)
+- [troubleshooting.md](../troubleshooting.md)
 - [src/docmcp/auth_cli.py](../src/docmcp/auth_cli.py)
 - [src/docmcp/crawl_cli.py](../src/docmcp/crawl_cli.py)
 - [src/docmcp/main.py](../src/docmcp/main.py)

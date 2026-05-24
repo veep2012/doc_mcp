@@ -5,11 +5,12 @@
 - Owner: Repository maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-25
-- Last Updated: 2026-05-17
-- Version: v1.0.0
+- Last Updated: 2026-05-24
+- Version: v1.0.1
 - Related Tickets: https://github.com/veep2012/doc_mcp/issues/1
 
 ## Change Log
+- 2026-05-24 | v1.0.1 | Documented that the crawler can optionally chain the vector rebuild after a successful crawl while keeping the vectorizer boundary explicit.
 - 2026-05-17 | v1.0.0 | Reframed the epic around a repo-owned local vector index and a separate post-crawl vectorizer step, replacing the external vector DB assumption, and marked Stage 2 keyword-only hardening as implemented for the current `search_docs` path, including safe empty-result fallbacks for missing, empty, or failing SQLite keyword indexes.
 - 2026-05-09 | v0.99.0 | Finalized the Stage 1 keyword search response contract, canonical JSON schema, examples, and experimental release status.
 - 2026-04-25 | v0.2 | Added the staged semantic, keyword, and hybrid search plan and updated implementation references for package entry points.
@@ -70,7 +71,7 @@ The main architectural constraint is that MCP must not own indexing at query tim
 ### Stage 1: Define Search Contracts
 Goal: Establish the stable result schema before adding vector behavior.
 
-Stage 1 is the experimental `0.99.1` contract-definition release. In this stage,
+Stage 1 is the experimental `0.99.2` contract-definition release. In this stage,
 `search_docs(site_name, query, limit=10)` changes from Markdown output to a JSON
 string that matches the canonical schema below.
 
@@ -87,13 +88,13 @@ Deliverables:
   - `vector_hits`
   - `keyword_hits`
 - Change `search_docs` to return the canonical JSON contract immediately for keyword-only search.
-- Document the Stage 1 release as experimental `0.99.1`.
+- Document the Stage 1 release as experimental `0.99.2`.
 
 Acceptance criteria:
 - A documented schema exists for all search modes.
 - Keyword search can return the new metadata without requiring a vector index.
 - Empty or missing keyword indexes still produce a valid JSON response.
-- The Stage 1 response shape is documented as the experimental `0.99.1` contract.
+- The Stage 1 response shape is documented as the experimental `0.99.2` contract.
 
 ### Stage 2: Harden Keyword-Only Best-Effort Search
 Goal: Make the existing SQLite path the reliable fallback for every later stage.
@@ -114,35 +115,35 @@ Acceptance criteria:
 - Missing vector configuration causes no errors.
 - Empty keyword results return a valid response with `keyword_hits: 0`.
 
-### Stage 3: Define Local Vector Index Boundary
-Goal: Specify the repo-owned local vector store, its record shape, and the interfaces needed by later stages.
+### Stage 3: Define And Build The Local Vector Index
+Goal: Own a repo-local sqlite-vec sidecar and rebuild it from crawled SQLite content without introducing vector writes into MCP query handling.
+
+Stage 3 is implemented in the current code path through the dedicated `docmcp-vectorize`
+and `docmcp_vectorizer` CLIs and the local sqlite-vec sidecar stored next to each site's keyword index by default.
+The vectorizer reads the existing crawl index, chunks Markdown deterministically, generates
+deterministic local embeddings, and rewrites the configured vector sidecar after each run.
+MCP remains read-only at query time and continues to operate without any vector data.
+The crawler can optionally chain the same rebuild immediately after a successful crawl with
+`docmcp-crawl --vectorize`, while the dedicated vectorizer CLI remains available for manual
+refreshes.
 
 Deliverables:
 - Add configuration for the local vector index path and vectorizer settings.
-- Define the local vector record schema, including site partitioning, page URL, title, chunk identity, chunk text, and embedding payload.
-- Define a read interface for MCP and a write interface for the vectorizer.
-- Make local vector index initialization optional so the MCP server can start without vector data.
-- Keep vector writes out of MCP query code.
+- Define the local vector record schema, including site name, page URL, title, chunk identity, chunk order, chunk text, source timestamps, and embedding payload.
+- Partition vector data per site using a site-specific vector sidecar file (`vector_index_file`, or `<index_file stem>.vec.db` when omitted).
+- Define the write boundary at `docmcp-vectorize` and keep MCP query code free of vector writes.
+- Add deterministic rebuild behavior so recrawls can refresh the vector sidecar without stale records.
+- Package the Python runtime dependency needed for the local vector store (`sqlite-vec`).
 
 Acceptance criteria:
-- MCP starts successfully with no local vector index present.
-- MCP can detect missing or unreadable vector data and fall back to keyword search.
-- The vector index layout is documented well enough for the vectorizer stage to write compatible records.
+- The repo owns a documented local vector sidecar alongside each keyword SQLite index.
+- `docmcp-vectorize` and `docmcp_vectorizer` can build the vector sidecar from crawled pages and rebuild it after recrawl.
+- MCP still starts and answers keyword-only requests when vector data is missing, unreadable, or never built.
+- Vectorizer/backend failures do not break keyword search.
+- The crawler can optionally chain a vector rebuild after a successful crawl without changing MCP query behavior.
 
-### Stage 4: Add Post-Crawl Vectorizer
-Goal: Build or refresh the local vector index from crawled content in a dedicated step.
-
-Deliverables:
-- Add a separate vectorizer command or job that runs after crawl.
-- Read crawled content from the existing SQLite source data or crawler outputs.
-- Chunk documents, generate embeddings, and write the local vector index.
-- Support full rebuilds and repeatable refreshes after recrawl.
-- Keep the vectorizer separate from the MCP server runtime.
-
-Acceptance criteria:
-- The local vector index can be built from crawled content without starting MCP search tooling.
-- Re-running the vectorizer after recrawl updates changed pages.
-- Vectorizer failure does not break keyword search in MCP.
+### Stage 4: Reserved
+The standalone post-crawl vectorizer work was merged into Stage 3 so later stages can build on a stable local vector lifecycle without reworking the boundary.
 
 ### Stage 5: Implement Semantic Search Tool
 Goal: Expose semantic retrieval when vector data and query embedding are available.
@@ -312,7 +313,7 @@ semantic_search_docs(site_name: str, query: str, limit: int)
 - Keep keyword search as the first stable fallback before exposing vector features.
 - Introduce the local vector index as optional and disabled by default until local verification is reliable.
 - Add the vectorizer as a separate post-crawl step so indexing remains explicit and inspectable.
-- Document the `search_docs` response migration from Markdown text to the experimental JSON contract in `0.99.1`.
+- Document the `search_docs` response migration from Markdown text to the experimental JSON contract in `0.99.2`.
 - Update user-facing docs in the same change that exposes new MCP tools.
 
 ## Risks and Mitigations
@@ -340,6 +341,6 @@ semantic_search_docs(site_name: str, query: str, limit: int)
 - [documentation/mcp-server.md](./mcp-server.md)
 - [documentation/crawling.md](./crawling.md)
 - [documentation/configuration.md](./configuration.md)
-- [documentation/manual-test-scenarios.md](./manual-test-scenarios.md)
+- [documentation/test_scenarios/manual-test-scenarios.md](./test_scenarios/manual-test-scenarios.md)
 - [src/docmcp/tools.py](../src/docmcp/tools.py)
 - [src/docmcp/index_store.py](../src/docmcp/index_store.py)
