@@ -105,7 +105,7 @@ The sample config file also includes a few future-facing keys such as `auth_mode
 - Install the vector backend with `pip install sqlite-vec`. The packaged project now declares `sqlite-vec` as a runtime dependency.
 - To inspect the vector tables with `sqlite3`, use the Homebrew shell, then load `vec0` before running `.tables`:
   `sqlite3 index/<site>.vec.db`
-  and `.load <path-to-sqlite_vec>/vec0.dylib`
+  and `.load <path-to-sqlite_vec>/vec0.<dylib|so|dll>` using the platform-specific library filename (`vec0.dylib` on macOS, `vec0.so` on Linux, or `vec0.dll` on Windows)
 - Crawl-time vectorization chaining is available as an explicit opt-in via `docmcp-crawl --vectorize`, while the vectorizer still remains a separate post-crawl step.
 
 ## Edge Cases
