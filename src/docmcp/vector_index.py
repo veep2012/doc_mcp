@@ -117,9 +117,13 @@ def _normalize_chunk_settings(
     chunk_overlap: int | None,
     embedding_dimensions: int | None,
 ) -> tuple[int, int, int]:
-    chunk_size = chunk_size or DEFAULT_CHUNK_SIZE
+    chunk_size = chunk_size if chunk_size is not None else DEFAULT_CHUNK_SIZE
     chunk_overlap = chunk_overlap if chunk_overlap is not None else DEFAULT_CHUNK_OVERLAP
-    embedding_dimensions = embedding_dimensions or DEFAULT_EMBEDDING_DIMENSIONS
+    embedding_dimensions = (
+        embedding_dimensions
+        if embedding_dimensions is not None
+        else DEFAULT_EMBEDDING_DIMENSIONS
+    )
 
     if chunk_size <= 0:
         raise ValueError("chunk_size must be positive")
