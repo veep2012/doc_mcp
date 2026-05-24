@@ -29,6 +29,9 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--site", type=str, help="Name of the site to vectorize (as in sites.yaml)")
+    parser.add_argument(
+        "--debug", action="store_true", help="Print detailed vectorizer diagnostics"
+    )
     parser.add_argument("--list", action="store_true", help="List configured vectorizer targets")
     parser.add_argument("--version", action="store_true", help="Show the current version and exit")
     args = parser.parse_args()
@@ -70,7 +73,7 @@ def main() -> None:
     print(f"[vectorize] Vector index : {resolve_vector_index_file(site)}")
 
     try:
-        summary = rebuild_vector_index(site)
+        summary = rebuild_vector_index(site, debug=args.debug)
     except VectorBackendUnavailableError as exc:
         print(f"[vectorize] sqlite-vec backend unavailable:\n{exc}", file=sys.stderr)
         sys.exit(1)

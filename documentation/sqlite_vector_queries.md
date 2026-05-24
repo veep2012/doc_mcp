@@ -151,7 +151,7 @@ ORDER BY chunk_index;
 ```
 
 ## Edge Cases
-- If `.load` fails, confirm you are using a `sqlite3` build that supports extension loading and the `vec0.dylib` path from the active Python environment.
+- If `.load` fails, confirm you are using a `sqlite3` build that supports extension loading and the platform-appropriate `vec0` library from the active Python environment (`vec0.dylib` on macOS, `vec0.so` on Linux, or `vec0.dll` on Windows).
 - If `MATCH` reports a JSON parsing error, the query vector is not valid JSON or does not have the correct number of dimensions.
 - If a `k` query returns no rows, confirm the vector table was built and the query vector dimension matches the table definition.
 - The brute-force closest-pair query gets expensive as the vector index grows.

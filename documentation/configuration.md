@@ -103,9 +103,10 @@ The sample config file also includes a few future-facing keys such as `auth_mode
 - Build or refresh the local vector sidecar explicitly with `docmcp-vectorize --site "<Site Name>"`, `docmcp_vectorizer --site "<Site Name>"`, or `docmcp-crawl --vectorize --site "<Site Name>"` after crawling.
 - The vectorizer reads the existing `index_file`, chunks page Markdown deterministically, generates deterministic local embeddings, and rewrites the configured `vector_index_file`.
 - Install the vector backend with `pip install sqlite-vec`. The packaged project now declares `sqlite-vec` as a runtime dependency.
-- To inspect the vector tables with `sqlite3`, use the Homebrew shell, then load `vec0` before running `.tables`:
-  `sqlite3 index/<site>.vec.db`
-  and `.load <path-to-sqlite_vec>/vec0.<dylib|so|dll>` using the platform-specific library filename (`vec0.dylib` on macOS, `vec0.so` on Linux, or `vec0.dll` on Windows)
+- `docmcp-vectorize --debug` and `docmcp_vectorizer --debug` enable chunk-level vectorizer diagnostics; when `docmcp-crawl --debug --vectorize` runs the vectorizer immediately after a successful crawl, that debug mode is inherited.
+- To inspect the vector tables with `sqlite3`, use a shell that supports extension loading, open `index/<site>.vec.db`, and load the platform-appropriate `vec0` library before running `.tables`:
+  - `sqlite3 index/<site>.vec.db`
+  - `.load <path-to-sqlite_vec>/vec0.<platform-extension>` where the platform-specific filename is `vec0.dylib` on macOS, `vec0.so` on Linux, or `vec0.dll` on Windows
 - Crawl-time vectorization chaining is available as an explicit opt-in via `docmcp-crawl --vectorize`, while the vectorizer still remains a separate post-crawl step.
 
 ## Edge Cases

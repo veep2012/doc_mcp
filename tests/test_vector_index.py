@@ -1,7 +1,11 @@
 import sqlite3
 
 import pytest
-import sqlite_vec
+
+try:
+    import sqlite_vec
+except ImportError:  # pragma: no cover - exercised only when the backend is unavailable
+    sqlite_vec = None
 
 from docmcp.index_store import init_db, upsert_page
 from docmcp.vector_index import (
@@ -104,9 +108,12 @@ def test_resolve_vector_index_file_defaults_to_sidecar_name(tmp_path):
     [
         (0, 5, 8, "chunk_size must be positive"),
         (18, 5, 0, "embedding_dimensions must be positive"),
+        (18, -1, 8, "chunk_overlap must be non-negative"),
+        (18, 18, 8, "chunk_overlap must be smaller than chunk_size"),
+        (18, 19, 8, "chunk_overlap must be smaller than chunk_size"),
     ],
 )
-def test_normalize_chunk_settings_rejects_explicit_zero_values(
+def test_normalize_chunk_settings_rejects_invalid_values(
     chunk_size, chunk_overlap, embedding_dimensions, expected
 ):
     with pytest.raises(ValueError, match=expected):
@@ -178,4 +185,19 @@ def test_rebuild_vector_index_requires_existing_keyword_index(tmp_path):
     }
 
     with pytest.raises(VectorSourceError, match="Run docmcp-crawl before docmcp-vectorize"):
+        rebuild_vector_index(site)
+
+
+def test_rebuild_vector_index_rejects_corrupt_source_index(tmp_path):
+    source_index = tmp_path / "index" / "docs.db"
+    source_index.parent.mkdir(parents=True, exist_ok=True)
+    source_index.write_bytes(b"not a sqlite database")
+
+    site = {
+        "name": "Example Docs",
+        "index_file": str(source_index),
+        "vector_index_file": str(tmp_path / "index" / "docs.vec.db"),
+    }
+
+    with pytest.raises(VectorSourceError, match="Keyword index unreadable"):
         rebuild_vector_index(site)

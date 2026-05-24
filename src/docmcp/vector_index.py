@@ -353,7 +353,7 @@ def _init_vector_db(conn: sqlite3.Connection, *, embedding_dimensions: int) -> N
     conn.commit()
 
 
-def rebuild_vector_index(site: dict) -> VectorBuildSummary:
+def rebuild_vector_index(site: dict, *, debug: bool = False) -> VectorBuildSummary:
     """Rebuild a site's local vector sidecar from the current crawl index."""
     vectorizer_cfg = site.get("vectorizer", {})
     chunk_size, chunk_overlap, embedding_dimensions = _normalize_chunk_settings(
@@ -368,7 +368,12 @@ def rebuild_vector_index(site: dict) -> VectorBuildSummary:
             f"Keyword index not found: {site['index_file']}. Run docmcp-crawl before docmcp-vectorize."
         )
 
-    total_pages = count_pages(site["index_file"])
+    try:
+        total_pages = count_pages(site["index_file"])
+    except sqlite3.Error as exc:
+        raise VectorSourceError(
+            f"Keyword index unreadable: {site['index_file']}. Run docmcp-crawl before docmcp-vectorize."
+        ) from exc
     _emit_progress(f"Loaded {total_pages} pages from source index")
 
     vector_index_file = resolve_vector_index_file(site)
@@ -385,58 +390,63 @@ def rebuild_vector_index(site: dict) -> VectorBuildSummary:
         page_count = 0
         source_max_last_crawled = None
         started_at = time.perf_counter()
-        for page_index, page in enumerate(iter_page_documents(site["index_file"]), start=1):
-            page_started_at = time.perf_counter()
-            page_count += 1
-            page_title = page.get("title") or page["url"]
-            if page.get("last_crawled"):
-                source_max_last_crawled = (
-                    max(source_max_last_crawled, page["last_crawled"])
-                    if source_max_last_crawled
-                    else page["last_crawled"]
-                )
-            _emit_progress(f"Page {page_index}/{total_pages} start: {page_title}")
-
-            page_chunk_count = 0
-            embedding_rows: list[tuple[int, bytes]] = []
-            chunk_rows: list[tuple[str, str, str, str, int, str, str | None, int]] = []
-            for page_offset, record in enumerate(
-                _iter_vector_records_for_page(
-                    site["name"],
-                    page,
-                    page.get("content_md") or page.get("title") or "",
-                    chunk_size=chunk_size,
-                    chunk_overlap=chunk_overlap,
-                    embedding_dimensions=embedding_dimensions,
-                ),
-                start=1,
-            ):
-                vec_rowid = chunk_count + page_offset
-                embedding_rows.append((vec_rowid, sqlite_vec.serialize_float32(record.embedding)))
-                chunk_rows.append(
-                    (
-                        record.chunk_id,
-                        record.site_name,
-                        record.page_url,
-                        record.title,
-                        record.chunk_index,
-                        record.chunk_text,
-                        record.source_last_crawled,
-                        vec_rowid,
+        try:
+            source_pages = iter_page_documents(site["index_file"])
+            for page_index, page in enumerate(source_pages, start=1):
+                page_started_at = time.perf_counter()
+                page_count += 1
+                page_title = page.get("title") or page["url"]
+                if page.get("last_crawled"):
+                    source_max_last_crawled = (
+                        max(source_max_last_crawled, page["last_crawled"])
+                        if source_max_last_crawled
+                        else page["last_crawled"]
                     )
-                )
+                _emit_progress(f"Page {page_index}/{total_pages} start: {page_title}")
 
-                page_chunk_count += 1
-                if page_chunk_count == 1 or page_chunk_count % 10 == 0:
+                page_chunk_count = 0
+                embedding_rows: list[tuple[int, bytes]] = []
+                chunk_rows: list[tuple[str, str, str, str, int, str, str | None, int]] = []
+                for page_offset, record in enumerate(
+                    _iter_vector_records_for_page(
+                        site["name"],
+                        page,
+                        page.get("content_md") or page.get("title") or "",
+                        chunk_size=chunk_size,
+                        chunk_overlap=chunk_overlap,
+                        embedding_dimensions=embedding_dimensions,
+                    ),
+                    start=1,
+                ):
+                    vec_rowid = chunk_count + page_offset
+                    embedding_rows.append(
+                        (vec_rowid, sqlite_vec.serialize_float32(record.embedding))
+                    )
+                    chunk_rows.append(
+                        (
+                            record.chunk_id,
+                            record.site_name,
+                            record.page_url,
+                            record.title,
+                            record.chunk_index,
+                            record.chunk_text,
+                            record.source_last_crawled,
+                            vec_rowid,
+                        )
+                    )
+
+                    page_chunk_count += 1
+                if debug and (page_chunk_count == 1 or page_chunk_count % 10 == 0):
                     _emit_progress(
                         f"Page {page_index}/{total_pages} chunk {page_chunk_count} "
                         f"(global chunk {chunk_count + page_chunk_count}, {_format_duration(time.perf_counter() - started_at)} elapsed)"
                     )
 
-            _emit_progress(
-                f"Page {page_index}/{total_pages} chunking complete: {page_chunk_count} chunks "
-                f"({_format_duration(time.perf_counter() - page_started_at)} elapsed)"
-            )
+            if debug:
+                _emit_progress(
+                    f"Page {page_index}/{total_pages} chunking complete: {page_chunk_count} chunks "
+                    f"({_format_duration(time.perf_counter() - page_started_at)} elapsed)"
+                )
             conn.executemany(
                 """
                 INSERT INTO chunk_embeddings(rowid, embedding)
@@ -444,29 +454,31 @@ def rebuild_vector_index(site: dict) -> VectorBuildSummary:
                 """,
                 embedding_rows,
             )
-            _emit_progress(
-                f"Page {page_index}/{total_pages} embeddings written: {page_chunk_count} rows "
-                f"({_format_duration(time.perf_counter() - page_started_at)} elapsed)"
-            )
+            if debug:
+                _emit_progress(
+                    f"Page {page_index}/{total_pages} embeddings written: {page_chunk_count} rows "
+                    f"({_format_duration(time.perf_counter() - page_started_at)} elapsed)"
+                )
             conn.executemany(
                 """
                 INSERT INTO vector_chunks(
-                    chunk_id,
-                    site_name,
-                    page_url,
-                    title,
-                    chunk_index,
-                    chunk_text,
-                    source_last_crawled,
-                    vec_rowid
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        chunk_id,
+                        site_name,
+                        page_url,
+                        title,
+                        chunk_index,
+                        chunk_text,
+                        source_last_crawled,
+                        vec_rowid
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 chunk_rows,
             )
-            _emit_progress(
-                f"Page {page_index}/{total_pages} metadata written: {page_chunk_count} rows "
-                f"({_format_duration(time.perf_counter() - page_started_at)} elapsed)"
-            )
+            if debug:
+                _emit_progress(
+                    f"Page {page_index}/{total_pages} metadata written: {page_chunk_count} rows "
+                    f"({_format_duration(time.perf_counter() - page_started_at)} elapsed)"
+                )
             chunk_count += page_chunk_count
 
             _emit_progress(
@@ -475,6 +487,10 @@ def rebuild_vector_index(site: dict) -> VectorBuildSummary:
                 f"({chunk_count} total, {_format_duration(time.perf_counter() - started_at)} elapsed)"
             )
             conn.commit()
+        except sqlite3.Error as exc:
+            raise VectorSourceError(
+                f"Keyword index unreadable: {site['index_file']}. Run docmcp-crawl before docmcp-vectorize."
+            ) from exc
 
         built_at = datetime.now(timezone.utc).isoformat()
         conn.execute(

@@ -539,7 +539,7 @@ def main():
     if args.vectorize and crawl_completed:
         print("[crawl] Vectorize : enabled")
         try:
-            rebuild_vector_index(site)
+            rebuild_vector_index(site, debug=args.debug)
         except VectorBackendUnavailableError as exc:
             print(f"[vectorize] sqlite-vec backend unavailable:\n{exc}", file=sys.stderr)
             sys.exit(1)
