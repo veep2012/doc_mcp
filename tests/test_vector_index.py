@@ -14,7 +14,14 @@ from docmcp.vector_index import (
 )
 
 
+def _require_vector_backend():
+    available, message = vector_backend_status()
+    if not available:
+        pytest.skip(message or "sqlite-vec backend unavailable")
+
+
 def _read_vector_db(index_file):
+    _require_vector_backend()
     conn = sqlite3.connect(str(index_file))
     conn.enable_load_extension(True)
     sqlite_vec.load(conn)
@@ -92,6 +99,7 @@ def test_resolve_vector_index_file_defaults_to_sidecar_name(tmp_path):
 
 
 def test_rebuild_vector_index_creates_and_refreshes_sidecar(tmp_path):
+    _require_vector_backend()
     source_index = tmp_path / "index" / "docs.db"
     vector_index = tmp_path / "index" / "docs.vec.db"
     init_db(str(source_index))
