@@ -7,6 +7,7 @@ from docmcp.index_store import init_db, upsert_page
 from docmcp.vector_index import (
     VectorSourceError,
     build_vector_records,
+    chunk_markdown,
     rebuild_vector_index,
     resolve_vector_index_file,
     vector_backend_status,
@@ -62,6 +63,17 @@ def test_build_vector_records_shapes_stable_chunk_records():
         )
         == records
     )
+
+
+def test_chunk_markdown_handles_oversized_tokens():
+    text = "alpha " + ("x" * 1200) + " beta gamma"
+
+    chunks = chunk_markdown(text, chunk_size=800, chunk_overlap=120)
+
+    assert chunks
+    assert chunks[0].startswith("alpha")
+    assert any("x" * 1200 in chunk for chunk in chunks)
+    assert chunks[-1].endswith("gamma")
 
 
 def test_vector_backend_status_reports_missing_dependency(monkeypatch):

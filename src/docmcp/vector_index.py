@@ -149,33 +149,46 @@ def chunk_markdown(
     if len(words) == 1:
         return [normalized]
 
-    word_lengths = [len(word) for word in words]
-    prefix_lengths = [0]
-    for length in word_lengths:
-        prefix_lengths.append(prefix_lengths[-1] + length)
-
-    def chunk_length(start: int, end: int) -> int:
-        return (prefix_lengths[end] - prefix_lengths[start]) + (end - start - 1)
-
     chunks: list[str] = []
     start = 0
+    end = 0
+    window_len = 0
     while start < len(words):
-        end = start + 1
-        while end <= len(words) and chunk_length(start, end) <= chunk_size:
+        while end < len(words):
+            word_len = len(words[end])
+            add_len = word_len if end == start else word_len + 1
+            if window_len + add_len > chunk_size:
+                break
+            window_len += add_len
             end += 1
 
-        if end == start + 1:
-            end = start + 2
+        if end == start:
+            chunks.append(words[start])
+            start += 1
+            end = start
+            window_len = 0
+            continue
 
-        chunks.append(" ".join(words[start : end - 1]))
+        chunks.append(" ".join(words[start:end]))
         if end >= len(words):
             break
 
-        overlap_target = chunk_overlap
-        overlap_start = start
-        while overlap_start < end - 1 and chunk_length(overlap_start, end - 1) > overlap_target:
-            overlap_start += 1
-        start = overlap_start if overlap_start < end - 1 else end - 1
+        shrink_start = start
+        shrink_len = window_len
+        while shrink_start < end - 1 and shrink_len > chunk_overlap:
+            shrink_len -= len(words[shrink_start]) + 1
+            shrink_start += 1
+
+        if shrink_start == start:
+            if end == start + 1:
+                start = end
+                window_len = 0
+            else:
+                window_len -= len(words[start]) + 1
+                start += 1
+        else:
+            start = shrink_start
+            window_len = shrink_len
 
     return chunks
 
@@ -297,7 +310,9 @@ def _init_vector_db(conn: sqlite3.Connection, *, embedding_dimensions: int) -> N
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA journal_mode=OFF")
     conn.execute("PRAGMA synchronous=OFF")
-    conn.execute("PRAGMA temp_store=MEMORY")
+    conn.execute("PRAGMA temp_store=FILE")
+    conn.execute("PRAGMA cache_size=-2048")
+    conn.execute("PRAGMA mmap_size=0")
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS vector_meta (
@@ -393,31 +408,22 @@ def rebuild_vector_index(site: dict) -> VectorBuildSummary:
             _emit_progress(f"Page {page_index}/{total_pages} start: {page_title}")
 
             page_chunk_count = 0
-            for record in _iter_vector_records_for_page(
-                site["name"],
-                page,
-                page.get("content_md") or page.get("title") or "",
-                chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap,
-                embedding_dimensions=embedding_dimensions,
+            embedding_rows: list[tuple[int, bytes]] = []
+            chunk_rows: list[tuple[str, str, str, str, int, str, str | None, int]] = []
+            for page_offset, record in enumerate(
+                _iter_vector_records_for_page(
+                    site["name"],
+                    page,
+                    page.get("content_md") or page.get("title") or "",
+                    chunk_size=chunk_size,
+                    chunk_overlap=chunk_overlap,
+                    embedding_dimensions=embedding_dimensions,
+                ),
+                start=1,
             ):
-                cursor = conn.execute(
-                    "INSERT INTO chunk_embeddings(embedding) VALUES (?)",
-                    (sqlite_vec.serialize_float32(record.embedding),),
-                )
-                conn.execute(
-                    """
-                    INSERT INTO vector_chunks(
-                        chunk_id,
-                        site_name,
-                        page_url,
-                        title,
-                        chunk_index,
-                        chunk_text,
-                        source_last_crawled,
-                        vec_rowid
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
+                vec_rowid = chunk_count + page_offset
+                embedding_rows.append((vec_rowid, sqlite_vec.serialize_float32(record.embedding)))
+                chunk_rows.append(
                     (
                         record.chunk_id,
                         record.site_name,
@@ -426,23 +432,59 @@ def rebuild_vector_index(site: dict) -> VectorBuildSummary:
                         record.chunk_index,
                         record.chunk_text,
                         record.source_last_crawled,
-                        cursor.lastrowid,
-                    ),
+                        vec_rowid,
+                    )
                 )
-                chunk_count += 1
-                page_chunk_count += 1
 
+                page_chunk_count += 1
                 if page_chunk_count == 1 or page_chunk_count % 10 == 0:
                     _emit_progress(
                         f"Page {page_index}/{total_pages} chunk {page_chunk_count} "
-                        f"(global chunk {chunk_count}, {_format_duration(time.perf_counter() - started_at)} elapsed)"
+                        f"(global chunk {chunk_count + page_chunk_count}, {_format_duration(time.perf_counter() - started_at)} elapsed)"
                     )
+
+            _emit_progress(
+                f"Page {page_index}/{total_pages} chunking complete: {page_chunk_count} chunks "
+                f"({_format_duration(time.perf_counter() - page_started_at)} elapsed)"
+            )
+            conn.executemany(
+                """
+                INSERT INTO chunk_embeddings(rowid, embedding)
+                VALUES (?, ?)
+                """,
+                embedding_rows,
+            )
+            _emit_progress(
+                f"Page {page_index}/{total_pages} embeddings written: {page_chunk_count} rows "
+                f"({_format_duration(time.perf_counter() - page_started_at)} elapsed)"
+            )
+            conn.executemany(
+                """
+                INSERT INTO vector_chunks(
+                    chunk_id,
+                    site_name,
+                    page_url,
+                    title,
+                    chunk_index,
+                    chunk_text,
+                    source_last_crawled,
+                    vec_rowid
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                chunk_rows,
+            )
+            _emit_progress(
+                f"Page {page_index}/{total_pages} metadata written: {page_chunk_count} rows "
+                f"({_format_duration(time.perf_counter() - page_started_at)} elapsed)"
+            )
+            chunk_count += page_chunk_count
 
             _emit_progress(
                 f"Page {page_index}/{total_pages} done: {page_chunk_count} chunks in "
                 f"{_format_duration(time.perf_counter() - page_started_at)} "
                 f"({chunk_count} total, {_format_duration(time.perf_counter() - started_at)} elapsed)"
             )
+            conn.commit()
 
         built_at = datetime.now(timezone.utc).isoformat()
         conn.execute(
