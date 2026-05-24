@@ -18,7 +18,7 @@ try:
 except ImportError:  # pragma: no cover - exercised via backend availability checks
     sqlite_vec = None
 
-from .index_store import count_pages, iter_page_documents, list_page_documents
+from .index_store import count_pages, iter_page_documents
 
 DEFAULT_EMBEDDING_DIMENSIONS = 32
 DEFAULT_CHUNK_SIZE = 800
