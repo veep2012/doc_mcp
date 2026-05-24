@@ -436,57 +436,57 @@ def rebuild_vector_index(site: dict, *, debug: bool = False) -> VectorBuildSumma
                     )
 
                     page_chunk_count += 1
-                if debug and (page_chunk_count == 1 or page_chunk_count % 10 == 0):
+                    if debug and (page_chunk_count == 1 or page_chunk_count % 10 == 0):
+                        _emit_progress(
+                            f"Page {page_index}/{total_pages} chunk {page_chunk_count} "
+                            f"(global chunk {chunk_count + page_chunk_count}, {_format_duration(time.perf_counter() - started_at)} elapsed)"
+                        )
+
+                if debug:
                     _emit_progress(
-                        f"Page {page_index}/{total_pages} chunk {page_chunk_count} "
-                        f"(global chunk {chunk_count + page_chunk_count}, {_format_duration(time.perf_counter() - started_at)} elapsed)"
+                        f"Page {page_index}/{total_pages} chunking complete: {page_chunk_count} chunks "
+                        f"({_format_duration(time.perf_counter() - page_started_at)} elapsed)"
                     )
+                conn.executemany(
+                    """
+                    INSERT INTO chunk_embeddings(rowid, embedding)
+                    VALUES (?, ?)
+                    """,
+                    embedding_rows,
+                )
+                if debug:
+                    _emit_progress(
+                        f"Page {page_index}/{total_pages} embeddings written: {page_chunk_count} rows "
+                        f"({_format_duration(time.perf_counter() - page_started_at)} elapsed)"
+                    )
+                conn.executemany(
+                    """
+                    INSERT INTO vector_chunks(
+                            chunk_id,
+                            site_name,
+                            page_url,
+                            title,
+                            chunk_index,
+                            chunk_text,
+                            source_last_crawled,
+                            vec_rowid
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    chunk_rows,
+                )
+                if debug:
+                    _emit_progress(
+                        f"Page {page_index}/{total_pages} metadata written: {page_chunk_count} rows "
+                        f"({_format_duration(time.perf_counter() - page_started_at)} elapsed)"
+                    )
+                chunk_count += page_chunk_count
 
-            if debug:
                 _emit_progress(
-                    f"Page {page_index}/{total_pages} chunking complete: {page_chunk_count} chunks "
-                    f"({_format_duration(time.perf_counter() - page_started_at)} elapsed)"
+                    f"Page {page_index}/{total_pages} done: {page_chunk_count} chunks in "
+                    f"{_format_duration(time.perf_counter() - page_started_at)} "
+                    f"({chunk_count} total, {_format_duration(time.perf_counter() - started_at)} elapsed)"
                 )
-            conn.executemany(
-                """
-                INSERT INTO chunk_embeddings(rowid, embedding)
-                VALUES (?, ?)
-                """,
-                embedding_rows,
-            )
-            if debug:
-                _emit_progress(
-                    f"Page {page_index}/{total_pages} embeddings written: {page_chunk_count} rows "
-                    f"({_format_duration(time.perf_counter() - page_started_at)} elapsed)"
-                )
-            conn.executemany(
-                """
-                INSERT INTO vector_chunks(
-                        chunk_id,
-                        site_name,
-                        page_url,
-                        title,
-                        chunk_index,
-                        chunk_text,
-                        source_last_crawled,
-                        vec_rowid
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                chunk_rows,
-            )
-            if debug:
-                _emit_progress(
-                    f"Page {page_index}/{total_pages} metadata written: {page_chunk_count} rows "
-                    f"({_format_duration(time.perf_counter() - page_started_at)} elapsed)"
-                )
-            chunk_count += page_chunk_count
-
-            _emit_progress(
-                f"Page {page_index}/{total_pages} done: {page_chunk_count} chunks in "
-                f"{_format_duration(time.perf_counter() - page_started_at)} "
-                f"({chunk_count} total, {_format_duration(time.perf_counter() - started_at)} elapsed)"
-            )
-            conn.commit()
+                conn.commit()
         except sqlite3.Error as exc:
             raise VectorSourceError(
                 f"Keyword index unreadable: {site['index_file']}. Run docmcp-crawl before docmcp-vectorize."

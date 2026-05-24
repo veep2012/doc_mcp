@@ -201,3 +201,29 @@ def test_rebuild_vector_index_rejects_corrupt_source_index(tmp_path):
 
     with pytest.raises(VectorSourceError, match="Keyword index unreadable"):
         rebuild_vector_index(site)
+
+
+def test_rebuild_vector_index_handles_empty_source_index(tmp_path):
+    _require_vector_backend()
+    source_index = tmp_path / "index" / "docs.db"
+    vector_index = tmp_path / "index" / "docs.vec.db"
+    init_db(str(source_index))
+
+    site = {
+        "name": "Example Docs",
+        "index_file": str(source_index),
+        "vector_index_file": str(vector_index),
+    }
+
+    summary = rebuild_vector_index(site)
+
+    assert summary.page_count == 0
+    assert summary.chunk_count == 0
+    assert vector_index.exists()
+
+    with _read_vector_db(vector_index) as conn:
+        meta = conn.execute("SELECT site_name, page_count, chunk_count FROM vector_meta").fetchone()
+        chunk_rows = conn.execute("SELECT COUNT(*) FROM vector_chunks").fetchone()[0]
+
+    assert meta == ("Example Docs", 0, 0)
+    assert chunk_rows == 0
