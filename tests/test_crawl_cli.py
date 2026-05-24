@@ -312,6 +312,41 @@ def test_main_vectorizes_after_successful_crawl_when_requested(monkeypatch, caps
     assert "[crawl] Vectorize : enabled" in output.out
 
 
+def test_main_skips_vectorize_when_crawl_does_not_complete(monkeypatch, capsys):
+    site = {
+        "name": "Example Docs",
+        "url": "https://example.test",
+        "auth_required": False,
+        "index_file": "index/docs.db",
+    }
+    calls = []
+
+    async def fake_crawl(arg_site, headless=False, debug=False):
+        calls.append(("crawl", arg_site, headless, debug))
+        return False
+
+    def fake_vectorize(arg_site):
+        calls.append(("vectorize", arg_site))
+        raise AssertionError("vectorize should not run when the crawl does not complete")
+
+    monkeypatch.setattr(crawl_cli, "get_sites", lambda: [site])
+    monkeypatch.setattr(crawl_cli, "crawl_site_headful", fake_crawl)
+    monkeypatch.setattr(crawl_cli, "rebuild_vector_index", fake_vectorize)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["docmcp-crawl", "--site", "Example Docs", "--vectorize"],
+    )
+
+    crawl_cli.main()
+
+    output = capsys.readouterr()
+    assert calls == [
+        ("crawl", site, False, False),
+    ]
+    assert "[crawl] Skipping vectorize: crawl did not complete successfully" in output.out
+
+
 def test_main_authenticates_before_crawling_when_required(monkeypatch):
     site = {"name": "Example Docs", "url": "https://example.test", "auth_required": True}
     calls = []
@@ -333,6 +368,46 @@ def test_main_authenticates_before_crawling_when_required(monkeypatch):
         ("auth", site, False),
         ("crawl", site, False, False),
     ]
+
+
+def test_main_authenticates_and_vectorizes_after_successful_crawl(monkeypatch, capsys):
+    site = {
+        "name": "Example Docs",
+        "url": "https://example.test",
+        "auth_required": True,
+        "index_file": "index/docs.db",
+    }
+    calls = []
+
+    def fake_authenticate(arg_site, force=False):
+        calls.append(("auth", arg_site, force))
+
+    async def fake_crawl(arg_site, headless=False, debug=False):
+        calls.append(("crawl", arg_site, headless, debug))
+        return True
+
+    def fake_vectorize(arg_site):
+        calls.append(("vectorize", arg_site))
+
+    monkeypatch.setattr(crawl_cli, "get_sites", lambda: [site])
+    monkeypatch.setattr(crawl_cli, "_authenticate_site", fake_authenticate)
+    monkeypatch.setattr(crawl_cli, "crawl_site_headful", fake_crawl)
+    monkeypatch.setattr(crawl_cli, "rebuild_vector_index", fake_vectorize)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["docmcp-crawl", "--site", "Example Docs", "--vectorize"],
+    )
+
+    crawl_cli.main()
+
+    output = capsys.readouterr()
+    assert calls == [
+        ("auth", site, False),
+        ("crawl", site, False, False),
+        ("vectorize", site),
+    ]
+    assert "[crawl] Vectorize : enabled" in output.out
 
 
 def test_crawl_cli_version_and_help_include_current_version(monkeypatch, capsys):
