@@ -301,6 +301,24 @@ def test_main_authenticates_before_crawling_when_required(monkeypatch):
     ]
 
 
+def test_authenticate_site_awaits_async_authenticate(monkeypatch):
+    site = {"name": "Example Docs", "url": "https://example.test", "auth_required": True}
+    calls = []
+
+    async def fake_authenticate(arg_site, force=False):
+        calls.append(("auth", arg_site, force))
+
+    monkeypatch.setitem(
+        sys.modules,
+        "docmcp.auth.session",
+        types.SimpleNamespace(authenticate=fake_authenticate),
+    )
+
+    crawl_cli._authenticate_site(site, force=True)
+
+    assert calls == [("auth", site, True)]
+
+
 def test_crawl_cli_version_and_help_include_current_version(monkeypatch, capsys):
     monkeypatch.setattr(sys, "argv", ["docmcp-crawl", "--version"])
     with pytest.raises(SystemExit) as excinfo:
@@ -337,6 +355,11 @@ def test_main_reports_invalid_redirect_policy_as_configuration_error(monkeypatch
 
     monkeypatch.setattr(crawl_cli, "get_sites", lambda: [site])
     monkeypatch.setattr(sys, "argv", ["docmcp-crawl", "--site", "Example Docs"])
+    monkeypatch.setitem(
+        sys.modules,
+        "playwright.async_api",
+        types.SimpleNamespace(async_playwright=lambda: None),
+    )
 
     with pytest.raises(SystemExit) as excinfo:
         crawl_cli.main()
@@ -463,14 +486,35 @@ def test_crawl_site_headful_debug_outputs_queue_and_link_reasons(monkeypatch, tm
 @pytest.mark.parametrize(
     ("redirect_policy", "expected_indexed_url", "expected_debug_line", "expect_skip"),
     [
-        (None, "https://example.test/docs/guide", "Redirect policy=final -> indexing final URL https://example.test/docs/guide", False),
-        ("final", "https://example.test/docs/guide", "Redirect policy=final -> indexing final URL https://example.test/docs/guide", False),
-        ("requested", "https://example.test/docs", "Redirect policy=requested -> indexing requested URL https://example.test/docs", False),
+        (
+            None,
+            "https://example.test/docs/guide",
+            "Redirect policy=final -> indexing final URL https://example.test/docs/guide",
+            False,
+        ),
+        (
+            "final",
+            "https://example.test/docs/guide",
+            "Redirect policy=final -> indexing final URL https://example.test/docs/guide",
+            False,
+        ),
+        (
+            "requested",
+            "https://example.test/docs",
+            "Redirect policy=requested -> indexing requested URL https://example.test/docs",
+            False,
+        ),
         ("skip", None, "Redirect policy=skip -> skipping redirected page", True),
     ],
 )
 def test_crawl_site_headful_applies_redirect_policy_to_redirected_pages(
-    monkeypatch, tmp_path, capsys, redirect_policy, expected_indexed_url, expected_debug_line, expect_skip
+    monkeypatch,
+    tmp_path,
+    capsys,
+    redirect_policy,
+    expected_indexed_url,
+    expected_debug_line,
+    expect_skip,
 ):
     indexed = []
 

@@ -55,6 +55,7 @@ List the most common failure modes for `doc-mcp` and the first corrective step f
 - Run `docmcp-crawl --site "My Docs" --debug` to print crawler-only queue previews, per-page navigation details, discovered links, and skip reasons.
 - Compare the debug trace with your `allow_patterns`, `deny_patterns`, and `start_url` configuration when pages are unexpectedly skipped or queued.
 - If a page redirects before indexing, compare the requested URL, the final normalized URL, and the `crawl.redirect_policy` decision in the debug trace.
+- The crawler compares hosts exactly when it decides whether a discovered URL stays inside the site scope. If the site uses `www.example.com`, but `start_url` or `url` is set to `example.com`, links on the canonical host can be skipped as "outside start host". Use the canonical hostname consistently in the site config.
 
 ### Redirected Pages End Up Under The Wrong URL
 - `crawl.redirect_policy` defaults to `final`, which stores the landing URL after a redirect.

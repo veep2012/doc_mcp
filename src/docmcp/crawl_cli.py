@@ -268,7 +268,9 @@ def _authenticate_site(site: dict, force: bool = False) -> None:
     """Authenticate a site using the lazy-loaded auth session helper."""
     from .auth.session import authenticate
 
-    authenticate(site, force=force)
+    result = authenticate(site, force=force)
+    if asyncio.iscoroutine(result):
+        asyncio.run(result)
 
 
 # ---------------------------------------------------------------------------
@@ -406,7 +408,9 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
                     if redirected:
                         if redirect_policy == "requested":
                             index_url = url
-                            _debug(f"Redirect policy=requested -> indexing requested URL {index_url}")
+                            _debug(
+                                f"Redirect policy=requested -> indexing requested URL {index_url}"
+                            )
                         elif redirect_policy == "skip":
                             index_url = None
                             _debug("Redirect policy=skip -> skipping redirected page")
