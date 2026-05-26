@@ -290,6 +290,7 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
     start_url = crawl_cfg.get("start_url", site["url"])
     max_depth = crawl_cfg.get("max_depth", 3)
     delay_seconds = crawl_cfg.get("delay_seconds", 1.0)
+    start_delay_seconds = crawl_cfg.get("start_delay_seconds", 0.0)
     allow_patterns = crawl_cfg.get("allow_patterns", [])
     deny_patterns = crawl_cfg.get("deny_patterns", [])
     block_images = crawl_cfg.get("block_images", False)
@@ -355,6 +356,11 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
 
         try:
             stop_crawl = False
+            if start_delay_seconds and not headless:
+                print(f"[crawl] Start delay: {start_delay_seconds:g}s before crawl begins")
+                _debug(f"Pausing {start_delay_seconds:g}s before the first crawl request")
+                await asyncio.sleep(start_delay_seconds)
+
             while queue:
                 depth = queue[0][1]
                 level_total = sum(1 for _, item_depth in queue if item_depth == depth)

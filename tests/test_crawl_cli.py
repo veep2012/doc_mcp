@@ -1020,3 +1020,84 @@ def test_crawl_site_headful_runtime_config_matrix(monkeypatch, tmp_path, crawl_c
     assert sleep_calls == expected["sleep_calls"]
     assert visited_urls == expected["visited_urls"]
     assert [row[1] for row in indexed] == expected["indexed_urls"]
+
+
+def test_crawl_site_headful_start_delay_pauses_before_first_navigation(monkeypatch, tmp_path):
+    events = []
+
+    class FakePage:
+        def __init__(self):
+            self.url = ""
+
+        async def goto(self, url, wait_until, timeout):
+            events.append(("goto", url))
+            self.url = url
+
+        async def title(self):
+            return "Docs"
+
+        async def content(self):
+            return "<html><body><main><h1>Docs</h1></main></body></html>"
+
+        async def query_selector(self, selector):
+            return None
+
+        async def eval_on_selector_all(self, selector, script):
+            return []
+
+    class FakeContext:
+        async def new_page(self):
+            return FakePage()
+
+    class FakeBrowser:
+        async def new_context(self, **kwargs):
+            return FakeContext()
+
+        async def close(self):
+            return None
+
+    headless_flags = []
+
+    class FakeChromium:
+        async def launch(self, headless):
+            headless_flags.append(headless)
+            return FakeBrowser()
+
+    class FakePlaywrightManager:
+        async def __aenter__(self):
+            return types.SimpleNamespace(chromium=FakeChromium())
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    async def fake_sleep(delay):
+        events.append(("sleep", delay))
+
+    def fake_upsert_page(index_file, url, title, content_md):
+        events.append(("index", url))
+
+    monkeypatch.setitem(
+        sys.modules,
+        "playwright.async_api",
+        types.SimpleNamespace(async_playwright=lambda: FakePlaywrightManager()),
+    )
+    monkeypatch.setattr(crawl_cli.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(crawl_cli, "upsert_page", fake_upsert_page)
+
+    site = {
+        "name": "Example Docs",
+        "url": "https://example.test/docs",
+        "index_file": str(tmp_path / "docs.db"),
+        "crawl": {
+            "start_url": "https://example.test/docs",
+            "max_depth": 0,
+            "delay_seconds": 0,
+            "start_delay_seconds": 0.5,
+        },
+    }
+
+    asyncio.run(crawl_cli.crawl_site_headful(site, headless=False, debug=False))
+
+    assert headless_flags == [False]
+    assert events[0] == ("sleep", 0.5)
+    assert events[1] == ("goto", "https://example.test/docs")

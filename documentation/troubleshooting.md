@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-05-22
-- Version: v1.6
+- Last Updated: 2026-05-26
+- Version: v1.7
 
 ## Change Log
+- 2026-05-26 | v1.7 | Added guidance for `crawl.start_delay_seconds` as a headful-only setup window before crawling begins.
 - 2026-05-22 | v1.6 | Added redirect-policy troubleshooting guidance and aligned crawl diagnostics notes with the v0.1.4 release behavior.
 - 2026-05-21 | v1.5 | Consolidated same-day crawl diagnostics updates and kept the startup and recovery guidance aligned with the current code.
 - 2026-05-20 | v1.4 | Clarified debug stderr routing, redirected-navigation diagnostics, and crawl debug guidance for queue, link, and page-level behavior.
@@ -37,6 +38,11 @@ List the most common failure modes for `doc-mcp` and the first corrective step f
 - Re-run `docmcp-auth --site "My Docs" --force`.
 - Check whether the site redirects unauthenticated users to a login page.
 
+### I Need Time To Set Up The Page
+- Set `crawl.start_delay_seconds` for a headful crawl when you want the browser to sit on the start page before the first crawl request.
+- Use that window to click buttons, switch filters, or navigate to the exact page you want to scan.
+- `crawl.start_delay_seconds` is ignored when the crawl runs headless.
+
 ### Crawl Stops At Login
 - The crawler treats redirects to login-like URLs as a sign that the session expired.
 - Re-authenticate, then run the crawl again.
@@ -56,6 +62,7 @@ List the most common failure modes for `doc-mcp` and the first corrective step f
 - Compare the debug trace with your `allow_patterns`, `deny_patterns`, and `start_url` configuration when pages are unexpectedly skipped or queued.
 - If a page redirects before indexing, compare the requested URL, the final normalized URL, and the `crawl.redirect_policy` decision in the debug trace.
 - The crawler compares hosts exactly when it decides whether a discovered URL stays inside the site scope. If the site uses `www.example.com`, but `start_url` or `url` is set to `example.com`, links on the canonical host can be skipped as "outside start host". Use the canonical hostname consistently in the site config.
+- If you need to set up the browser manually before crawling starts, use `crawl.start_delay_seconds` instead of stretching `delay_seconds`.
 
 ### Redirected Pages End Up Under The Wrong URL
 - `crawl.redirect_policy` defaults to `final`, which stores the landing URL after a redirect.

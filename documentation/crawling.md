@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-05-22
-- Version: v1.7
+- Last Updated: 2026-05-26
+- Version: v1.8
 
 ## Change Log
+- 2026-05-26 | v1.8 | Documented `crawl.start_delay_seconds` as a headful-only pause before the first crawl request.
 - 2026-05-22 | v1.7 | Documented `crawl.redirect_policy`, expanded redirect diagnostics, and aligned the crawl behavior guide with the v0.1.4 release.
 - 2026-05-21 | v1.6 | Tightened query-link wording so start URLs are preserved exactly and discovered query links are described consistently.
 - 2026-05-20 | v1.4 | Clarified debug output routing, queue preview formatting, redirected URL indexing, and crawler trace expectations.
@@ -62,6 +63,7 @@ docmcp-crawl --version
 - The current crawler uses Playwright directly instead of Crawl4AI.
 - If `auth_required` is true for the site, the crawl command authenticates before crawling and reuses any still-valid saved session.
 - It starts from `crawl.start_url` and preserves that URL exactly as configured, including any query string.
+- If `crawl.start_delay_seconds` is set and the crawl is running headful, it waits before making the first crawl request so you can finish any manual setup in the browser.
 - It uses breadth-first traversal up to `crawl.max_depth`.
 - It normalizes URLs by stripping fragments.
 - It skips discovered links that contain a query string when `crawl.ignore_query_links` is `true`.
@@ -71,6 +73,7 @@ docmcp-crawl --version
 - It optionally skips discovered query links and anchor-only links independently.
 - It applies `allow_patterns` and `deny_patterns`.
 - It waits `delay_seconds` between pages.
+- It can wait `start_delay_seconds` before the first page only in headful mode.
 - It stops if it detects a redirect to a login page.
 - It applies `crawl.redirect_policy` when navigation lands on a different URL than the one that was requested.
 - `crawl.redirect_policy: final` indexes the final normalized landing URL and preserves the current default behavior.
@@ -103,12 +106,14 @@ docmcp-crawl --version
 - Anchor-heavy documentation sites remain indexed as canonical pages instead of fragment-only records.
 - Query-driven documentation can opt into separate records for distinct query URLs by setting `crawl.ignore_query_links: false`.
 - Redirected navigation defaults to indexing the final page URL, but `crawl.redirect_policy` can preserve the requested URL or skip redirected pages entirely in v0.1.4.
+- If you need time to click around in the browser before crawling starts, use `crawl.start_delay_seconds` in headful mode instead of increasing `delay_seconds`.
 
 ## Edge Cases
 - Static resources are filtered out before indexing so they do not pollute search results.
 - If the saved session becomes invalid while crawling, the run should stop rather than continue with partial content.
 - If a site uses fragment-heavy URLs, canonicalization strips the fragment before storage.
 - If a site needs query-based pages, `crawl.ignore_query_links` must be set to `false`; otherwise discovered query links are skipped while the configured `crawl.start_url` keeps its query string exactly as configured.
+- `crawl.start_delay_seconds` is ignored in headless mode.
 - If redirect behavior is surprising, check the debug trace for both the requested URL, the normalized landing URL, and the redirect policy line that was applied.
 
 ## References
