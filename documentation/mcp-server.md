@@ -105,6 +105,7 @@ sites:
       start_url: "https://docs.example.com/docs"
       max_depth: 5
       delay_seconds: 1.0
+      start_delay_seconds: 10.0
       block_images: true
       ignore_anchor_links: true
       ignore_https_errors: false
@@ -112,6 +113,8 @@ sites:
       deny_patterns: []
     index_file: "index/my_docs.db"
 ```
+
+If a site needs a manual setup window in the browser before crawling starts, add `crawl.start_delay_seconds` to that site and run the crawl headful.
 
 The VS Code MCP server receives `CONFIG_FILE` and `DOC_MCP_HOME` from `.vscode/mcp.json` in step 5.
 

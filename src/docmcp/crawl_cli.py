@@ -377,7 +377,7 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
             queued: set[str] = {seed_url}
             queue: deque[tuple[str, int]] = deque([(seed_url, 0)])
 
-            while queue:
+            while queue and not stop_crawl:
                 loaded_page_active = use_loaded_start_page
                 depth = queue[0][1]
                 level_total = sum(1 for _, item_depth in queue if item_depth == depth)
