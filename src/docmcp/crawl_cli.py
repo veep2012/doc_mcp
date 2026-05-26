@@ -15,6 +15,7 @@ Usage:
 
 import argparse
 import asyncio
+import math
 import re
 import sys
 from collections import deque
@@ -88,6 +89,54 @@ _STATIC_EXTENSIONS = {
     ".js",
     ".map",
 }
+
+
+_REDIRECT_POLICIES = frozenset({"final", "requested", "skip"})
+
+
+def _invalid_redirect_policy_message(received_value: str, site_name: str | None = None) -> str:
+    allowed_values = ", ".join(sorted(_REDIRECT_POLICIES))
+    site_context = f" for site {site_name!r}" if site_name is not None else ""
+    return (
+        f"Invalid crawl.redirect_policy{site_context}: received "
+        f"{received_value!r}; expected one of {allowed_values}"
+    )
+
+
+def _invalid_start_delay_message(received_value: object, site_name: str | None = None) -> str:
+    site_context = f" for site {site_name!r}" if site_name is not None else ""
+    return (
+        f"Invalid crawl.start_delay_seconds{site_context}: received "
+        f"{received_value!r}; expected a finite number >= 0"
+    )
+
+
+def _validate_start_delay_seconds(value: object, site_name: str | None = None) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ConfigError(_invalid_start_delay_message(value, site_name))
+
+    delay_seconds = float(value)
+    if not math.isfinite(delay_seconds) or delay_seconds < 0:
+        raise ConfigError(_invalid_start_delay_message(value, site_name))
+    return delay_seconds
+
+
+def _invalid_delay_message(received_value: object, site_name: str | None = None) -> str:
+    site_context = f" for site {site_name!r}" if site_name is not None else ""
+    return (
+        f"Invalid crawl.delay_seconds{site_context}: received "
+        f"{received_value!r}; expected a finite number >= 0"
+    )
+
+
+def _validate_delay_seconds(value: object, site_name: str | None = None) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ConfigError(_invalid_delay_message(value, site_name))
+
+    delay_seconds = float(value)
+    if not math.isfinite(delay_seconds) or delay_seconds < 0:
+        raise ConfigError(_invalid_delay_message(value, site_name))
+    return delay_seconds
 
 
 def _is_page_url(url: str) -> bool:
@@ -247,11 +296,24 @@ def _link_discovery_decision(
     return True, "eligible for crawl"
 
 
+def _get_redirect_policy(crawl_cfg: dict, site_name: str | None = None) -> str:
+    """Return the normalized redirect policy for a site crawl config."""
+    policy = crawl_cfg.get("redirect_policy", "final")
+    if not isinstance(policy, str):
+        raise ConfigError(_invalid_redirect_policy_message(policy, site_name))
+    normalized_policy = policy.strip().lower()
+    if normalized_policy not in _REDIRECT_POLICIES:
+        raise ConfigError(_invalid_redirect_policy_message(policy, site_name))
+    return normalized_policy
+
+
 def _authenticate_site(site: dict, force: bool = False) -> None:
     """Authenticate a site using the lazy-loaded auth session helper."""
     from .auth.session import authenticate
 
-    authenticate(site, force=force)
+    result = authenticate(site, force=force)
+    if asyncio.iscoroutine(result):
+        asyncio.run(result)
 
 
 # ---------------------------------------------------------------------------
@@ -264,19 +326,23 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
     Crawl a site using a real Playwright browser (headful by default).
     Uses the saved session from auth_cli.py, or prompts auth if missing.
     """
-    from playwright.async_api import async_playwright
-
     name = site["name"]
     crawl_cfg = site.get("crawl", {})
     start_url = crawl_cfg.get("start_url", site["url"])
     max_depth = crawl_cfg.get("max_depth", 3)
-    delay_seconds = crawl_cfg.get("delay_seconds", 1.0)
+    delay_seconds = _validate_delay_seconds(crawl_cfg.get("delay_seconds", 1.0), name)
+    start_delay_seconds = _validate_start_delay_seconds(
+        crawl_cfg.get("start_delay_seconds", 0.0), name
+    )
+    from playwright.async_api import async_playwright
+
     allow_patterns = crawl_cfg.get("allow_patterns", [])
     deny_patterns = crawl_cfg.get("deny_patterns", [])
     block_images = crawl_cfg.get("block_images", False)
     ignore_query_links = crawl_cfg.get("ignore_query_links", True)
     ignore_anchor_links = crawl_cfg.get("ignore_anchor_links", True)
     ignore_https_errors = crawl_cfg.get("ignore_https_errors", False)
+    redirect_policy = _get_redirect_policy(crawl_cfg, name)
     index_file = site["index_file"]
     session_file = site.get("session_file")
 
@@ -290,11 +356,6 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
     # Login indicators used to detect redirect to auth page
     login_indicators = ["login", "signin", "sign-in", "/auth", "/sso"]
 
-    visited: set[str] = set()
-    seed_url = _normalize_url(start_url, strip_query=False)
-    seed_preserves_query = "?" in seed_url
-    queued: set[str] = {seed_url}
-    queue: deque[tuple[str, int]] = deque([(seed_url, 0)])
     page_count = 0
 
     def _debug(message: str) -> None:
@@ -335,7 +396,34 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
 
         try:
             stop_crawl = False
-            while queue:
+            seed_url = _normalize_url(start_url, strip_query=False)
+            seed_preserves_query = "?" in seed_url
+            use_loaded_start_page = False
+
+            if start_delay_seconds and not headless:
+                use_loaded_start_page = True
+                _debug(f"Loading start page before crawl: {seed_url}")
+                try:
+                    await page.goto(seed_url, wait_until="networkidle", timeout=60000)
+                except Exception as e:
+                    print(f"[crawl]   ✗ Start page load error: {e}")
+                    stop_crawl = True
+                else:
+                    loaded_start_url = _normalize_url(page.url, strip_query=False)
+                    _debug(f"Start page loaded at {loaded_start_url}")
+                    print(f"[crawl] Start delay: {start_delay_seconds:g}s after start page loads")
+                    _debug(f"Pausing {start_delay_seconds:g}s before the first crawl request")
+                    await asyncio.sleep(start_delay_seconds)
+                    seed_url = _normalize_url(page.url, strip_query=False)
+                    seed_preserves_query = "?" in seed_url
+                    _debug(f"Start page selected for crawl: {seed_url}")
+
+            visited: set[str] = set()
+            queued: set[str] = {seed_url}
+            queue: deque[tuple[str, int]] = deque([(seed_url, 0)])
+
+            while queue and not stop_crawl:
+                loaded_page_active = use_loaded_start_page
                 depth = queue[0][1]
                 level_total = sum(1 for _, item_depth in queue if item_depth == depth)
                 level_number = depth + 1
@@ -353,17 +441,21 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
                     if url in visited:
                         continue
                     visited.add(url)
+                    used_preloaded_page = loaded_page_active and url == seed_url
 
                     print(
                         f"[crawl] [{index_in_level} of {level_total} level {level_number}/{total_levels}] {url}"
                     )
-                    _debug(f"Navigating to {url}")
-
-                    try:
-                        await page.goto(url, wait_until="networkidle", timeout=60000)
-                    except Exception as e:
-                        print(f"[crawl]   ✗ Navigation error: {e}")
-                        continue
+                    if used_preloaded_page:
+                        _debug(f"Using already loaded start page: {url}")
+                        use_loaded_start_page = False
+                    else:
+                        _debug(f"Navigating to {url}")
+                        try:
+                            await page.goto(url, wait_until="networkidle", timeout=60000)
+                        except Exception as e:
+                            print(f"[crawl]   ✗ Navigation error: {e}")
+                            continue
 
                     strip_query = ignore_query_links and not (
                         url == seed_url and seed_preserves_query
@@ -372,7 +464,13 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
                         page.url,
                         strip_query=strip_query,
                     )
-                    if current_url != url:
+                    redirected = current_url != url
+                    if used_preloaded_page:
+                        if redirected:
+                            _debug(f"Loaded page redirected to {current_url}")
+                        else:
+                            _debug(f"Loaded page stayed on {current_url}")
+                    elif redirected:
                         _debug(f"Navigation redirected to {current_url}")
                     else:
                         _debug(f"Navigation stayed on {current_url}")
@@ -383,6 +481,21 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
                         print(f'[crawl]   Run: docmcp-auth --site "{name}" --force')
                         stop_crawl = True
                         break
+
+                    if redirected:
+                        if redirect_policy == "requested":
+                            index_url = url
+                            _debug(
+                                f"Redirect policy=requested -> indexing requested URL {index_url}"
+                            )
+                        elif redirect_policy == "skip":
+                            index_url = None
+                            _debug("Redirect policy=skip -> skipping redirected page")
+                        else:
+                            index_url = current_url
+                            _debug(f"Redirect policy=final -> indexing final URL {index_url}")
+                    else:
+                        index_url = current_url
 
                     # Extract title
                     title = await page.title() or url
@@ -396,9 +509,12 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
                     )
 
                     # Save to index
-                    upsert_page(index_file, current_url, title, content_md)
-                    page_count += 1
-                    print(f"[crawl]   ✓ Indexed: {title[:70]}")
+                    if index_url is None:
+                        print("[crawl]   ↷ Skipped: redirect_policy=skip")
+                    else:
+                        upsert_page(index_file, index_url, title, content_md)
+                        page_count += 1
+                        print(f"[crawl]   ✓ Indexed: {title[:70]}")
 
                     # Discover links for next depth
                     if depth < max_depth:
@@ -512,7 +628,11 @@ def main():
         _authenticate_site(site, force=args.force_auth)
 
     # Then crawl
-    asyncio.run(crawl_site_headful(site, headless=args.headless, debug=args.debug))
+    try:
+        asyncio.run(crawl_site_headful(site, headless=args.headless, debug=args.debug))
+    except ConfigError as exc:
+        print(f"[docmcp-crawl] Configuration error:\n{exc}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

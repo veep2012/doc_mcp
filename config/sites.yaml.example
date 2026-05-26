@@ -15,8 +15,10 @@ sites:
       start_url: "https://docs.example.com/documentation"
       max_depth: 5
       delay_seconds: 1.0
+      start_delay_seconds: 10.0
       respect_robots_txt: true
       block_images: true            # skip image/font/media requests to speed up crawling
+      redirect_policy: final        # final | requested | skip
       ignore_query_links: true      # skip discovered links that contain a query string
       ignore_anchor_links: true     # skip links that only differ by #fragment
       ignore_https_errors: false    # set true for sites with bad/mismatched TLS certs
@@ -35,8 +37,10 @@ sites:
       start_url: "https://public-docs.example.com/"
       max_depth: 3
       delay_seconds: 0.5
+      start_delay_seconds: 0.0
       respect_robots_txt: true
       block_images: true
+      redirect_policy: final
       ignore_query_links: true
       ignore_anchor_links: true
       ignore_https_errors: false

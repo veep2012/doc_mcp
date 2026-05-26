@@ -1,3 +1,4 @@
+import asyncio
 import sys
 import types
 from collections import deque
@@ -15,6 +16,7 @@ from docmcp.crawl_cli import (
     _is_page_url,
     _link_discovery_decision,
     _normalize_url,
+    _get_redirect_policy,
 )
 
 
@@ -39,6 +41,19 @@ def test_is_page_url_filters_static_assets():
     assert _is_page_url("https://example.test/docs/guide.html")
     assert not _is_page_url("https://example.test/static/logo.png")
     assert not _is_page_url("https://example.test/assets/site.css")
+
+
+def test_get_redirect_policy_normalizes_case_and_whitespace():
+    assert _get_redirect_policy({"redirect_policy": "  FINAL  "}) == "final"
+    assert _get_redirect_policy({"redirect_policy": "Requested"}) == "requested"
+
+
+def test_get_redirect_policy_rejects_non_string_values_with_site_context():
+    with pytest.raises(
+        crawl_cli.ConfigError,
+        match=r"Invalid crawl\.redirect_policy for site 'Example Docs': received 123; expected one of final, requested, skip",
+    ):
+        _get_redirect_policy({"redirect_policy": 123}, "Example Docs")
 
 
 def test_is_allowed_enforces_host_path_allow_and_deny_rules():
@@ -300,6 +315,24 @@ def test_main_authenticates_before_crawling_when_required(monkeypatch):
     ]
 
 
+def test_authenticate_site_awaits_async_authenticate(monkeypatch):
+    site = {"name": "Example Docs", "url": "https://example.test", "auth_required": True}
+    calls = []
+
+    async def fake_authenticate(arg_site, force=False):
+        calls.append(("auth", arg_site, force))
+
+    monkeypatch.setitem(
+        sys.modules,
+        "docmcp.auth.session",
+        types.SimpleNamespace(authenticate=fake_authenticate),
+    )
+
+    crawl_cli._authenticate_site(site, force=True)
+
+    assert calls == [("auth", site, True)]
+
+
 def test_crawl_cli_version_and_help_include_current_version(monkeypatch, capsys):
     monkeypatch.setattr(sys, "argv", ["docmcp-crawl", "--version"])
     with pytest.raises(SystemExit) as excinfo:
@@ -321,6 +354,72 @@ def test_crawl_cli_version_rejects_other_arguments(monkeypatch, capsys):
         crawl_cli.main()
     assert excinfo.value.code == 2
     assert "--version cannot be combined with other arguments" in capsys.readouterr().err
+
+
+def test_main_reports_invalid_redirect_policy_as_configuration_error(monkeypatch, tmp_path, capsys):
+    site = {
+        "name": "Example Docs",
+        "url": "https://example.test/docs",
+        "index_file": str(tmp_path / "docs.db"),
+        "crawl": {
+            "start_url": "https://example.test/docs",
+            "redirect_policy": "unexpected",
+        },
+    }
+
+    monkeypatch.setattr(crawl_cli, "get_sites", lambda: [site])
+    monkeypatch.setattr(sys, "argv", ["docmcp-crawl", "--site", "Example Docs"])
+    monkeypatch.setitem(
+        sys.modules,
+        "playwright.async_api",
+        types.SimpleNamespace(async_playwright=lambda: None),
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        crawl_cli.main()
+
+    assert excinfo.value.code == 1
+    err = capsys.readouterr().err
+    assert "[docmcp-crawl] Configuration error:" in err
+    assert "Invalid crawl.redirect_policy for site 'Example Docs'" in err
+
+
+@pytest.mark.parametrize("start_delay_seconds", ["1", -0.1, float("inf"), float("nan"), True])
+def test_crawl_site_headful_rejects_invalid_start_delay_seconds(tmp_path, start_delay_seconds):
+    site = {
+        "name": "Example Docs",
+        "url": "https://example.test/docs",
+        "index_file": str(tmp_path / "docs.db"),
+        "crawl": {
+            "start_url": "https://example.test/docs",
+            "start_delay_seconds": start_delay_seconds,
+        },
+    }
+
+    with pytest.raises(
+        crawl_cli.ConfigError,
+        match=r"Invalid crawl\.start_delay_seconds.*expected a finite number >= 0",
+    ):
+        asyncio.run(crawl_cli.crawl_site_headful(site, headless=True))
+
+
+@pytest.mark.parametrize("delay_seconds", ["1", -0.1, float("inf"), float("nan"), True])
+def test_crawl_site_headful_rejects_invalid_delay_seconds(tmp_path, delay_seconds):
+    site = {
+        "name": "Example Docs",
+        "url": "https://example.test/docs",
+        "index_file": str(tmp_path / "docs.db"),
+        "crawl": {
+            "start_url": "https://example.test/docs",
+            "delay_seconds": delay_seconds,
+        },
+    }
+
+    with pytest.raises(
+        crawl_cli.ConfigError,
+        match=r"Invalid crawl\.delay_seconds.*expected a finite number >= 0",
+    ):
+        asyncio.run(crawl_cli.crawl_site_headful(site, headless=True))
 
 
 def test_crawl_site_headful_debug_outputs_queue_and_link_reasons(monkeypatch, tmp_path, capsys):
@@ -403,8 +502,6 @@ def test_crawl_site_headful_debug_outputs_queue_and_link_reasons(monkeypatch, tm
         },
     }
 
-    import asyncio
-
     asyncio.run(crawl_cli.crawl_site_headful(site, headless=True, debug=True))
 
     captured = capsys.readouterr()
@@ -438,8 +535,38 @@ def test_crawl_site_headful_debug_outputs_queue_and_link_reasons(monkeypatch, tm
     )
 
 
-def test_crawl_site_headful_redirects_to_final_url_and_indexes_that_url(
-    monkeypatch, tmp_path, capsys
+@pytest.mark.parametrize(
+    ("redirect_policy", "expected_indexed_url", "expected_debug_line", "expect_skip"),
+    [
+        (
+            None,
+            "https://example.test/docs/guide",
+            "Redirect policy=final -> indexing final URL https://example.test/docs/guide",
+            False,
+        ),
+        (
+            "final",
+            "https://example.test/docs/guide",
+            "Redirect policy=final -> indexing final URL https://example.test/docs/guide",
+            False,
+        ),
+        (
+            "requested",
+            "https://example.test/docs",
+            "Redirect policy=requested -> indexing requested URL https://example.test/docs",
+            False,
+        ),
+        ("skip", None, "Redirect policy=skip -> skipping redirected page", True),
+    ],
+)
+def test_crawl_site_headful_applies_redirect_policy_to_redirected_pages(
+    monkeypatch,
+    tmp_path,
+    capsys,
+    redirect_policy,
+    expected_indexed_url,
+    expected_debug_line,
+    expect_skip,
 ):
     indexed = []
 
@@ -498,6 +625,100 @@ def test_crawl_site_headful_redirects_to_final_url_and_indexes_that_url(
     monkeypatch.setattr(crawl_cli.asyncio, "sleep", fake_sleep)
     monkeypatch.setattr(crawl_cli, "upsert_page", fake_upsert_page)
 
+    crawl_cfg = {
+        "start_url": "https://example.test/docs",
+        "max_depth": 0,
+        "delay_seconds": 0,
+    }
+    if redirect_policy is not None:
+        crawl_cfg["redirect_policy"] = redirect_policy
+
+    site = {
+        "name": "Example Docs",
+        "url": "https://example.test/docs",
+        "index_file": str(tmp_path / "docs.db"),
+        "crawl": crawl_cfg,
+    }
+
+    asyncio.run(crawl_cli.crawl_site_headful(site, headless=True, debug=True))
+
+    output = capsys.readouterr()
+    assert "[crawl][debug] Navigating to https://example.test/docs" in output.err
+    assert "[crawl][debug] Navigation redirected to https://example.test/docs/guide" in output.err
+    assert f"[crawl][debug] {expected_debug_line}" in output.err
+    if expect_skip:
+        assert indexed == []
+        assert "[crawl]   ↷ Skipped: redirect_policy=skip" in output.out
+    else:
+        assert indexed[0][:3] == (
+            str(tmp_path / "docs.db"),
+            expected_indexed_url,
+            "Guide",
+        )
+        assert "Guide" in indexed[0][3]
+
+
+@pytest.mark.parametrize("redirect_policy", ["final", "requested", "skip"])
+def test_crawl_site_headful_non_redirected_pages_ignore_redirect_policy(
+    monkeypatch, tmp_path, capsys, redirect_policy
+):
+    indexed = []
+
+    class FakePage:
+        def __init__(self):
+            self.url = ""
+
+        async def goto(self, url, wait_until, timeout):
+            self.url = url
+
+        async def title(self):
+            return "Docs"
+
+        async def content(self):
+            return "<html><body><main><h1>Docs</h1></main></body></html>"
+
+        async def query_selector(self, selector):
+            return None
+
+        async def eval_on_selector_all(self, selector, script):
+            return []
+
+    class FakeContext:
+        async def new_page(self):
+            return FakePage()
+
+    class FakeBrowser:
+        async def new_context(self, **kwargs):
+            return FakeContext()
+
+        async def close(self):
+            return None
+
+    class FakeChromium:
+        async def launch(self, headless):
+            return FakeBrowser()
+
+    class FakePlaywrightManager:
+        async def __aenter__(self):
+            return types.SimpleNamespace(chromium=FakeChromium())
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    async def fake_sleep(delay):
+        return None
+
+    def fake_upsert_page(index_file, url, title, content_md):
+        indexed.append((index_file, url, title, content_md))
+
+    monkeypatch.setitem(
+        sys.modules,
+        "playwright.async_api",
+        types.SimpleNamespace(async_playwright=lambda: FakePlaywrightManager()),
+    )
+    monkeypatch.setattr(crawl_cli.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(crawl_cli, "upsert_page", fake_upsert_page)
+
     site = {
         "name": "Example Docs",
         "url": "https://example.test/docs",
@@ -506,22 +727,20 @@ def test_crawl_site_headful_redirects_to_final_url_and_indexes_that_url(
             "start_url": "https://example.test/docs",
             "max_depth": 0,
             "delay_seconds": 0,
+            "redirect_policy": redirect_policy,
         },
     }
-
-    import asyncio
 
     asyncio.run(crawl_cli.crawl_site_headful(site, headless=True, debug=True))
 
     output = capsys.readouterr()
-    assert "[crawl][debug] Navigating to https://example.test/docs" in output.err
-    assert "[crawl][debug] Navigation redirected to https://example.test/docs/guide" in output.err
+    assert "[crawl][debug] Navigation stayed on https://example.test/docs" in output.err
+    assert "Redirect policy=" not in output.err
     assert indexed[0][:3] == (
         str(tmp_path / "docs.db"),
-        "https://example.test/docs/guide",
-        "Guide",
+        "https://example.test/docs",
+        "Docs",
     )
-    assert "Guide" in indexed[0][3]
 
 
 def test_crawl_site_headful_preserves_query_start_url_and_indexes_query_links(
@@ -599,8 +818,6 @@ def test_crawl_site_headful_preserves_query_start_url_and_indexes_query_links(
             "ignore_query_links": False,
         },
     }
-
-    import asyncio
 
     asyncio.run(crawl_cli.crawl_site_headful(site, headless=True, debug=True))
 
@@ -699,8 +916,6 @@ def test_crawl_site_headful_keeps_query_anchor_links_as_current_page_targets(
             "ignore_anchor_links": True,
         },
     }
-
-    import asyncio
 
     asyncio.run(crawl_cli.crawl_site_headful(site, headless=True, debug=True))
 
@@ -850,8 +1065,6 @@ def test_crawl_site_headful_runtime_config_matrix(monkeypatch, tmp_path, crawl_c
         "crawl": crawl_cfg,
     }
 
-    import asyncio
-
     asyncio.run(crawl_cli.crawl_site_headful(site, headless=True, debug=False))
 
     assert context_kwargs["ignore_https_errors"] is expected["ignore_https_errors"]
@@ -859,3 +1072,259 @@ def test_crawl_site_headful_runtime_config_matrix(monkeypatch, tmp_path, crawl_c
     assert sleep_calls == expected["sleep_calls"]
     assert visited_urls == expected["visited_urls"]
     assert [row[1] for row in indexed] == expected["indexed_urls"]
+
+
+def test_crawl_site_headful_start_delay_pauses_after_start_page_loads(
+    monkeypatch, tmp_path, capsys
+):
+    events = []
+
+    class FakePage:
+        def __init__(self):
+            self.url = ""
+
+        async def goto(self, url, wait_until, timeout):
+            events.append(("goto", url))
+            self.url = url
+
+        async def title(self):
+            return "Docs"
+
+        async def content(self):
+            return "<html><body><main><h1>Docs</h1></main></body></html>"
+
+        async def query_selector(self, selector):
+            return None
+
+        async def eval_on_selector_all(self, selector, script):
+            return []
+
+    class FakeContext:
+        async def new_page(self):
+            return FakePage()
+
+    class FakeBrowser:
+        async def new_context(self, **kwargs):
+            return FakeContext()
+
+        async def close(self):
+            return None
+
+    headless_flags = []
+
+    class FakeChromium:
+        async def launch(self, headless):
+            headless_flags.append(headless)
+            return FakeBrowser()
+
+    class FakePlaywrightManager:
+        async def __aenter__(self):
+            return types.SimpleNamespace(chromium=FakeChromium())
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    async def fake_sleep(delay):
+        events.append(("sleep", delay))
+
+    def fake_upsert_page(index_file, url, title, content_md):
+        events.append(("index", url))
+
+    monkeypatch.setitem(
+        sys.modules,
+        "playwright.async_api",
+        types.SimpleNamespace(async_playwright=lambda: FakePlaywrightManager()),
+    )
+    monkeypatch.setattr(crawl_cli.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(crawl_cli, "upsert_page", fake_upsert_page)
+
+    site = {
+        "name": "Example Docs",
+        "url": "https://example.test/docs",
+        "index_file": str(tmp_path / "docs.db"),
+        "crawl": {
+            "start_url": "https://example.test/docs",
+            "max_depth": 0,
+            "delay_seconds": 0,
+            "start_delay_seconds": 0.5,
+        },
+    }
+
+    asyncio.run(crawl_cli.crawl_site_headful(site, headless=False, debug=True))
+
+    output = capsys.readouterr()
+
+    assert headless_flags == [False]
+    assert events[:2] == [
+        ("goto", "https://example.test/docs"),
+        ("sleep", 0.5),
+    ]
+    assert events[2] == ("index", "https://example.test/docs")
+    assert "[crawl][debug] Using already loaded start page: https://example.test/docs" in output.err
+    assert "[crawl][debug] Loaded page stayed on https://example.test/docs" in output.err
+
+
+def test_crawl_site_headless_ignores_start_delay(monkeypatch, tmp_path):
+    events = []
+
+    class FakePage:
+        def __init__(self):
+            self.url = ""
+
+        async def goto(self, url, wait_until, timeout):
+            events.append(("goto", url))
+            self.url = url
+
+        async def title(self):
+            return "Docs"
+
+        async def content(self):
+            return "<html><body><main><h1>Docs</h1></main></body></html>"
+
+        async def query_selector(self, selector):
+            return None
+
+        async def eval_on_selector_all(self, selector, script):
+            return []
+
+    class FakeContext:
+        async def new_page(self):
+            return FakePage()
+
+    class FakeBrowser:
+        async def new_context(self, **kwargs):
+            return FakeContext()
+
+        async def close(self):
+            return None
+
+    headless_flags = []
+
+    class FakeChromium:
+        async def launch(self, headless):
+            headless_flags.append(headless)
+            return FakeBrowser()
+
+    class FakePlaywrightManager:
+        async def __aenter__(self):
+            return types.SimpleNamespace(chromium=FakeChromium())
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    async def fake_sleep(delay):
+        events.append(("sleep", delay))
+
+    def fake_upsert_page(index_file, url, title, content_md):
+        events.append(("index", url))
+
+    monkeypatch.setitem(
+        sys.modules,
+        "playwright.async_api",
+        types.SimpleNamespace(async_playwright=lambda: FakePlaywrightManager()),
+    )
+    monkeypatch.setattr(crawl_cli.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(crawl_cli, "upsert_page", fake_upsert_page)
+
+    site = {
+        "name": "Example Docs",
+        "url": "https://example.test/docs",
+        "index_file": str(tmp_path / "docs.db"),
+        "crawl": {
+            "start_url": "https://example.test/docs",
+            "max_depth": 0,
+            "delay_seconds": 0,
+            "start_delay_seconds": 0.5,
+        },
+    }
+
+    asyncio.run(crawl_cli.crawl_site_headful(site, headless=True, debug=False))
+
+    assert headless_flags == [True]
+    assert events[:2] == [
+        ("goto", "https://example.test/docs"),
+        ("index", "https://example.test/docs"),
+    ]
+    assert events[-1] == ("sleep", 0)
+
+
+def test_crawl_site_headful_start_delay_load_error_stops_crawl(monkeypatch, tmp_path, capsys):
+    closed = []
+    events = []
+
+    class FakePage:
+        def __init__(self):
+            self.url = ""
+
+        async def goto(self, url, wait_until, timeout):
+            events.append(("goto", url))
+            raise RuntimeError("page load failed")
+
+        async def title(self):
+            return "Docs"
+
+        async def content(self):
+            return "<html><body><main><h1>Docs</h1></main></body></html>"
+
+        async def query_selector(self, selector):
+            return None
+
+        async def eval_on_selector_all(self, selector, script):
+            return []
+
+    class FakeContext:
+        async def new_page(self):
+            return FakePage()
+
+    class FakeBrowser:
+        async def new_context(self, **kwargs):
+            return FakeContext()
+
+        async def close(self):
+            closed.append(True)
+            return None
+
+    class FakeChromium:
+        async def launch(self, headless):
+            return FakeBrowser()
+
+    class FakePlaywrightManager:
+        async def __aenter__(self):
+            return types.SimpleNamespace(chromium=FakeChromium())
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    async def fake_sleep(delay):
+        events.append(("sleep", delay))
+
+    def fake_upsert_page(index_file, url, title, content_md):
+        events.append(("index", url))
+
+    monkeypatch.setitem(
+        sys.modules,
+        "playwright.async_api",
+        types.SimpleNamespace(async_playwright=lambda: FakePlaywrightManager()),
+    )
+    monkeypatch.setattr(crawl_cli.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(crawl_cli, "upsert_page", fake_upsert_page)
+
+    site = {
+        "name": "Example Docs",
+        "url": "https://example.test/docs",
+        "index_file": str(tmp_path / "docs.db"),
+        "crawl": {
+            "start_url": "https://example.test/docs",
+            "max_depth": 0,
+            "delay_seconds": 0,
+            "start_delay_seconds": 0.5,
+        },
+    }
+
+    asyncio.run(crawl_cli.crawl_site_headful(site, headless=False, debug=True))
+
+    output = capsys.readouterr()
+    assert events == [("goto", "https://example.test/docs")]
+    assert "[crawl][debug] Loading start page before crawl: https://example.test/docs" in output.err
+    assert "[crawl]   ✗ Start page load error: page load failed" in output.out
+    assert closed == [True]

@@ -5,10 +5,12 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-05-21
-- Version: v1.4
+- Last Updated: 2026-05-26
+- Version: v1.6
 
 ## Change Log
+- 2026-05-26 | v1.6 | Documented crawl timing constraints for `delay_seconds` and `start_delay_seconds`, and clarified redirect skip semantics.
+- 2026-05-22 | v1.5 | Documented `crawl.redirect_policy`, updated site examples, and aligned the configuration reference with the v0.1.4 crawler redirect behavior.
 - 2026-05-21 | v1.4 | Documented `MCP_LOG_LEVEL`, clarified workspace `.env` resolution, and aligned runtime path notes with the loader.
 - 2026-04-25 | v1.1 | Documented runtime root resolution through DOC_MCP_HOME and updated implementation references.
 - 2026-04-24 | v1.0 | Reformatted the configuration reference and documented the live loader behavior.
@@ -52,8 +54,10 @@ SITE1_PASSWORD=replace-me
 - `session_file`: where to save Playwright storage state
 - `crawl.start_url`: crawl entry point
 - `crawl.max_depth`: breadth-first crawl depth
-- `crawl.delay_seconds`: pause between page fetches
+- `crawl.delay_seconds`: pause between page fetches; must be a finite number greater than or equal to 0
+- `crawl.start_delay_seconds`: headful-only pause after the start page loads, before crawling begins; must be a finite number greater than or equal to 0
 - `crawl.block_images`: block image, font, and media requests
+- `crawl.redirect_policy`: handle redirected pages as `final`, `requested`, or `skip`
 - `crawl.ignore_query_links`: skip discovered links that contain a query string
 - `crawl.ignore_anchor_links`: skip fragment-only links
 - `crawl.ignore_https_errors`: ignore TLS errors for that site
@@ -72,7 +76,9 @@ sites:
       start_url: "https://docs.example.com/docs"
       max_depth: 5
       delay_seconds: 1.0
+      start_delay_seconds: 10.0
       block_images: true
+      redirect_policy: final
       ignore_query_links: true
       ignore_anchor_links: true
       ignore_https_errors: false
@@ -86,6 +92,8 @@ The sample config file also includes a few future-facing keys such as `auth_mode
 - `auth_mode` is currently informational only.
 - `auth_type` is currently informational only.
 - `respect_robots_txt` is not consumed by the current crawler implementation.
+- `crawl.redirect_policy` defaults to `final`, which preserves the existing behavior of indexing the landing URL after a redirect.
+- `crawl.start_delay_seconds` is off by default. Use it when you want a visible headful browser to load the start page, pause, and let you switch to the exact page you want to scan.
 
 ## Edge Cases
 - Unset placeholders resolve to an empty string instead of crashing.
@@ -93,6 +101,8 @@ The sample config file also includes a few future-facing keys such as `auth_mode
 - `CONFIG_FILE` can override the default config path.
 - Relative `CONFIG_FILE`, `session_file`, and `index_file` values should be interpreted from `DOC_MCP_HOME` or the process working directory.
 - `crawl.start_url` is used as the initial crawl seed and is preserved exactly as configured, including any query string.
+- `crawl.redirect_policy: requested` stores the original requested URL when a page redirects, while `skip` leaves redirected pages out of the index but still crawls the loaded page and discovers links from it.
+- `crawl.start_delay_seconds` only applies in headful mode; headless runs ignore it. When it is used, the crawl starts from the page that is open when the pause ends.
 - `crawl.ignore_query_links: true` skips discovered links that contain a query string, while `false` allows them to be crawled and indexed as distinct URLs.
 - Informational keys should not be treated as enforced runtime behavior.
 
