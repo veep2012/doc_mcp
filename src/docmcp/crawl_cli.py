@@ -121,6 +121,24 @@ def _validate_start_delay_seconds(value: object, site_name: str | None = None) -
     return delay_seconds
 
 
+def _invalid_delay_message(received_value: object, site_name: str | None = None) -> str:
+    site_context = f" for site {site_name!r}" if site_name is not None else ""
+    return (
+        f"Invalid crawl.delay_seconds{site_context}: received "
+        f"{received_value!r}; expected a finite number >= 0"
+    )
+
+
+def _validate_delay_seconds(value: object, site_name: str | None = None) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ConfigError(_invalid_delay_message(value, site_name))
+
+    delay_seconds = float(value)
+    if not math.isfinite(delay_seconds) or delay_seconds < 0:
+        raise ConfigError(_invalid_delay_message(value, site_name))
+    return delay_seconds
+
+
 def _is_page_url(url: str) -> bool:
     """Return False if the URL points to a static asset (image, font, archive, etc.)."""
     path = urlparse(url).path.lower()
@@ -312,7 +330,7 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
     crawl_cfg = site.get("crawl", {})
     start_url = crawl_cfg.get("start_url", site["url"])
     max_depth = crawl_cfg.get("max_depth", 3)
-    delay_seconds = crawl_cfg.get("delay_seconds", 1.0)
+    delay_seconds = _validate_delay_seconds(crawl_cfg.get("delay_seconds", 1.0), name)
     start_delay_seconds = _validate_start_delay_seconds(
         crawl_cfg.get("start_delay_seconds", 0.0), name
     )

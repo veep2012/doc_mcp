@@ -389,6 +389,25 @@ def test_crawl_site_headful_rejects_invalid_start_delay_seconds(tmp_path, start_
         asyncio.run(crawl_cli.crawl_site_headful(site, headless=True))
 
 
+@pytest.mark.parametrize("delay_seconds", ["1", -0.1, float("inf"), float("nan"), True])
+def test_crawl_site_headful_rejects_invalid_delay_seconds(tmp_path, delay_seconds):
+    site = {
+        "name": "Example Docs",
+        "url": "https://example.test/docs",
+        "index_file": str(tmp_path / "docs.db"),
+        "crawl": {
+            "start_url": "https://example.test/docs",
+            "delay_seconds": delay_seconds,
+        },
+    }
+
+    with pytest.raises(
+        crawl_cli.ConfigError,
+        match=r"Invalid crawl\.delay_seconds.*expected a finite number >= 0",
+    ):
+        asyncio.run(crawl_cli.crawl_site_headful(site, headless=True))
+
+
 def test_crawl_site_headful_debug_outputs_queue_and_link_reasons(monkeypatch, tmp_path, capsys):
     class FakeElement:
         def __init__(self, html):
