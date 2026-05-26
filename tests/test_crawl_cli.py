@@ -1041,7 +1041,9 @@ def test_crawl_site_headful_runtime_config_matrix(monkeypatch, tmp_path, crawl_c
     assert [row[1] for row in indexed] == expected["indexed_urls"]
 
 
-def test_crawl_site_headful_start_delay_pauses_after_start_navigation(monkeypatch, tmp_path):
+def test_crawl_site_headful_start_delay_pauses_after_start_navigation(
+    monkeypatch, tmp_path, capsys
+):
     events = []
 
     class FakePage:
@@ -1115,7 +1117,9 @@ def test_crawl_site_headful_start_delay_pauses_after_start_navigation(monkeypatc
         },
     }
 
-    asyncio.run(crawl_cli.crawl_site_headful(site, headless=False, debug=False))
+    asyncio.run(crawl_cli.crawl_site_headful(site, headless=False, debug=True))
+
+    output = capsys.readouterr()
 
     assert headless_flags == [False]
     assert events[:2] == [
@@ -1123,6 +1127,8 @@ def test_crawl_site_headful_start_delay_pauses_after_start_navigation(monkeypatc
         ("sleep", 0.5),
     ]
     assert events[2] == ("index", "https://example.test/docs")
+    assert "[crawl][debug] Using already loaded start page: https://example.test/docs" in output.err
+    assert "[crawl][debug] Loaded page stayed on https://example.test/docs" in output.err
 
 
 def test_crawl_site_headless_ignores_start_delay(monkeypatch, tmp_path):
