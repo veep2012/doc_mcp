@@ -93,9 +93,7 @@ _STATIC_EXTENSIONS = {
 _REDIRECT_POLICIES = frozenset({"final", "requested", "skip"})
 
 
-def _invalid_redirect_policy_message(
-    received_value: str, site_name: str | None = None
-) -> str:
+def _invalid_redirect_policy_message(received_value: str, site_name: str | None = None) -> str:
     allowed_values = ", ".join(sorted(_REDIRECT_POLICIES))
     site_context = f" for site {site_name!r}" if site_name is not None else ""
     return (
@@ -265,10 +263,10 @@ def _get_redirect_policy(crawl_cfg: dict) -> str:
     """Return the normalized redirect policy for a site crawl config."""
     policy = crawl_cfg.get("redirect_policy", "final")
     if not isinstance(policy, str):
-        raise ConfigError(_INVALID_REDIRECT_POLICY_MESSAGE)
+        raise ConfigError(_invalid_redirect_policy_message(policy))
     normalized_policy = policy.strip().lower()
     if normalized_policy not in _REDIRECT_POLICIES:
-        raise ConfigError(_INVALID_REDIRECT_POLICY_MESSAGE)
+        raise ConfigError(_invalid_redirect_policy_message(policy))
     return normalized_policy
 
 
