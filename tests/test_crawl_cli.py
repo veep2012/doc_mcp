@@ -1060,7 +1060,7 @@ def test_crawl_site_headful_runtime_config_matrix(monkeypatch, tmp_path, crawl_c
     assert [row[1] for row in indexed] == expected["indexed_urls"]
 
 
-def test_crawl_site_headful_start_delay_pauses_after_start_navigation(
+def test_crawl_site_headful_start_delay_pauses_after_start_page_loads(
     monkeypatch, tmp_path, capsys
 ):
     events = []
