@@ -91,9 +91,17 @@ _STATIC_EXTENSIONS = {
 
 
 _REDIRECT_POLICIES = frozenset({"final", "requested", "skip"})
-_INVALID_REDIRECT_POLICY_MESSAGE = (
-    f"Invalid crawl.redirect_policy: expected one of {', '.join(sorted(_REDIRECT_POLICIES))}"
-)
+
+
+def _invalid_redirect_policy_message(
+    received_value: str, site_name: str | None = None
+) -> str:
+    allowed_values = ", ".join(sorted(_REDIRECT_POLICIES))
+    site_context = f" for site {site_name!r}" if site_name is not None else ""
+    return (
+        f"Invalid crawl.redirect_policy{site_context}: received "
+        f"{received_value!r}; expected one of {allowed_values}"
+    )
 
 
 def _is_page_url(url: str) -> bool:
