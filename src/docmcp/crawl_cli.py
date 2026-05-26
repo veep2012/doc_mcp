@@ -296,14 +296,14 @@ def _link_discovery_decision(
     return True, "eligible for crawl"
 
 
-def _get_redirect_policy(crawl_cfg: dict) -> str:
+def _get_redirect_policy(crawl_cfg: dict, site_name: str | None = None) -> str:
     """Return the normalized redirect policy for a site crawl config."""
     policy = crawl_cfg.get("redirect_policy", "final")
     if not isinstance(policy, str):
-        raise ConfigError(_invalid_redirect_policy_message(policy))
+        raise ConfigError(_invalid_redirect_policy_message(policy, site_name))
     normalized_policy = policy.strip().lower()
     if normalized_policy not in _REDIRECT_POLICIES:
-        raise ConfigError(_invalid_redirect_policy_message(policy))
+        raise ConfigError(_invalid_redirect_policy_message(policy, site_name))
     return normalized_policy
 
 
@@ -342,7 +342,7 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
     ignore_query_links = crawl_cfg.get("ignore_query_links", True)
     ignore_anchor_links = crawl_cfg.get("ignore_anchor_links", True)
     ignore_https_errors = crawl_cfg.get("ignore_https_errors", False)
-    redirect_policy = _get_redirect_policy(crawl_cfg)
+    redirect_policy = _get_redirect_policy(crawl_cfg, name)
     index_file = site["index_file"]
     session_file = site.get("session_file")
 

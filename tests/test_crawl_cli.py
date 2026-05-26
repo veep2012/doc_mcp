@@ -367,7 +367,7 @@ def test_main_reports_invalid_redirect_policy_as_configuration_error(monkeypatch
     assert excinfo.value.code == 1
     err = capsys.readouterr().err
     assert "[docmcp-crawl] Configuration error:" in err
-    assert "Invalid crawl.redirect_policy" in err
+    assert "Invalid crawl.redirect_policy for site 'Example Docs'" in err
 
 
 @pytest.mark.parametrize("start_delay_seconds", ["1", -0.1, float("inf"), float("nan"), True])
