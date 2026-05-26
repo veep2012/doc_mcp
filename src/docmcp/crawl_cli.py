@@ -15,6 +15,7 @@ Usage:
 
 import argparse
 import asyncio
+import math
 import re
 import sys
 from collections import deque
@@ -100,6 +101,24 @@ def _invalid_redirect_policy_message(received_value: str, site_name: str | None 
         f"Invalid crawl.redirect_policy{site_context}: received "
         f"{received_value!r}; expected one of {allowed_values}"
     )
+
+
+def _invalid_start_delay_message(received_value: object, site_name: str | None = None) -> str:
+    site_context = f" for site {site_name!r}" if site_name is not None else ""
+    return (
+        f"Invalid crawl.start_delay_seconds{site_context}: received "
+        f"{received_value!r}; expected a finite number >= 0"
+    )
+
+
+def _validate_start_delay_seconds(value: object, site_name: str | None = None) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ConfigError(_invalid_start_delay_message(value, site_name))
+
+    delay_seconds = float(value)
+    if not math.isfinite(delay_seconds) or delay_seconds < 0:
+        raise ConfigError(_invalid_start_delay_message(value, site_name))
+    return delay_seconds
 
 
 def _is_page_url(url: str) -> bool:
@@ -289,14 +308,16 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
     Crawl a site using a real Playwright browser (headful by default).
     Uses the saved session from auth_cli.py, or prompts auth if missing.
     """
-    from playwright.async_api import async_playwright
-
     name = site["name"]
     crawl_cfg = site.get("crawl", {})
     start_url = crawl_cfg.get("start_url", site["url"])
     max_depth = crawl_cfg.get("max_depth", 3)
     delay_seconds = crawl_cfg.get("delay_seconds", 1.0)
-    start_delay_seconds = crawl_cfg.get("start_delay_seconds", 0.0)
+    start_delay_seconds = _validate_start_delay_seconds(
+        crawl_cfg.get("start_delay_seconds", 0.0), name
+    )
+    from playwright.async_api import async_playwright
+
     allow_patterns = crawl_cfg.get("allow_patterns", [])
     deny_patterns = crawl_cfg.get("deny_patterns", [])
     block_images = crawl_cfg.get("block_images", False)
