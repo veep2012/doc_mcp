@@ -9,7 +9,7 @@
 - Version: v1.7
 
 ## Change Log
-- 2026-05-26 | v1.7 | Added guidance for `crawl.start_delay_seconds` as a headful-only setup window before crawling begins.
+- 2026-05-26 | v1.7 | Added guidance for `crawl.delay_seconds` and `crawl.start_delay_seconds`, and clarified redirect skip semantics.
 - 2026-05-22 | v1.6 | Added redirect-policy troubleshooting guidance and aligned crawl diagnostics notes with the v0.1.4 release behavior.
 - 2026-05-21 | v1.5 | Consolidated same-day crawl diagnostics updates and kept the startup and recovery guidance aligned with the current code.
 - 2026-05-20 | v1.4 | Clarified debug stderr routing, redirected-navigation diagnostics, and crawl debug guidance for queue, link, and page-level behavior.
@@ -63,6 +63,7 @@ List the most common failure modes for `doc-mcp` and the first corrective step f
 - If a page redirects before indexing, compare the requested URL, the final normalized URL, and the `crawl.redirect_policy` decision in the debug trace.
 - The crawler compares hosts exactly when it decides whether a discovered URL stays inside the site scope. If the site uses `www.example.com`, but `start_url` or `url` is set to `example.com`, links on the canonical host can be skipped as "outside start host". Use the canonical hostname consistently in the site config.
 - If you need to set up the browser manually before crawling starts, use `crawl.start_delay_seconds` instead of stretching `delay_seconds`.
+- If `docmcp-crawl` reports an invalid `crawl.delay_seconds` or `crawl.start_delay_seconds` value, make sure the configured value is numeric, finite, and greater than or equal to 0.
 
 ### Redirected Pages End Up Under The Wrong URL
 - `crawl.redirect_policy` defaults to `final`, which stores the landing URL after a redirect.

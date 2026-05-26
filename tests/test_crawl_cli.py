@@ -16,6 +16,7 @@ from docmcp.crawl_cli import (
     _is_page_url,
     _link_discovery_decision,
     _normalize_url,
+    _get_redirect_policy,
 )
 
 
@@ -40,6 +41,19 @@ def test_is_page_url_filters_static_assets():
     assert _is_page_url("https://example.test/docs/guide.html")
     assert not _is_page_url("https://example.test/static/logo.png")
     assert not _is_page_url("https://example.test/assets/site.css")
+
+
+def test_get_redirect_policy_normalizes_case_and_whitespace():
+    assert _get_redirect_policy({"redirect_policy": "  FINAL  "}) == "final"
+    assert _get_redirect_policy({"redirect_policy": "Requested"}) == "requested"
+
+
+def test_get_redirect_policy_rejects_non_string_values_with_site_context():
+    with pytest.raises(
+        crawl_cli.ConfigError,
+        match=r"Invalid crawl\.redirect_policy for site 'Example Docs': received 123; expected one of final, requested, skip",
+    ):
+        _get_redirect_policy({"redirect_policy": 123}, "Example Docs")
 
 
 def test_is_allowed_enforces_host_path_allow_and_deny_rules():

@@ -9,7 +9,7 @@
 - Version: v1.6
 
 ## Change Log
-- 2026-05-26 | v1.6 | Documented `crawl.start_delay_seconds` for headful crawls that need a setup window before the first request.
+- 2026-05-26 | v1.6 | Documented crawl timing constraints for `delay_seconds` and `start_delay_seconds`, and clarified redirect skip semantics.
 - 2026-05-22 | v1.5 | Documented `crawl.redirect_policy`, updated site examples, and aligned the configuration reference with the v0.1.4 crawler redirect behavior.
 - 2026-05-21 | v1.4 | Documented `MCP_LOG_LEVEL`, clarified workspace `.env` resolution, and aligned runtime path notes with the loader.
 - 2026-04-25 | v1.1 | Documented runtime root resolution through DOC_MCP_HOME and updated implementation references.
@@ -54,8 +54,8 @@ SITE1_PASSWORD=replace-me
 - `session_file`: where to save Playwright storage state
 - `crawl.start_url`: crawl entry point
 - `crawl.max_depth`: breadth-first crawl depth
-- `crawl.delay_seconds`: pause between page fetches
-- `crawl.start_delay_seconds`: headful-only pause after the start page loads, before crawling begins
+- `crawl.delay_seconds`: pause between page fetches; must be a finite number greater than or equal to 0
+- `crawl.start_delay_seconds`: headful-only pause after the start page loads, before crawling begins; must be a finite number greater than or equal to 0
 - `crawl.block_images`: block image, font, and media requests
 - `crawl.redirect_policy`: handle redirected pages as `final`, `requested`, or `skip`
 - `crawl.ignore_query_links`: skip discovered links that contain a query string

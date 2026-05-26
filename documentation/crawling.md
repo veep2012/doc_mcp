@@ -9,7 +9,7 @@
 - Version: v1.8
 
 ## Change Log
-- 2026-05-26 | v1.8 | Documented `crawl.start_delay_seconds` as a headful-only pause before the first crawl request.
+- 2026-05-26 | v1.8 | Documented crawl timing constraints for `delay_seconds` and `start_delay_seconds`, and clarified redirect skip semantics.
 - 2026-05-22 | v1.7 | Documented `crawl.redirect_policy`, expanded redirect diagnostics, and aligned the crawl behavior guide with the v0.1.4 release.
 - 2026-05-21 | v1.6 | Tightened query-link wording so start URLs are preserved exactly and discovered query links are described consistently.
 - 2026-05-20 | v1.4 | Clarified debug output routing, queue preview formatting, redirected URL indexing, and crawler trace expectations.
@@ -72,8 +72,8 @@ docmcp-crawl --version
 - It skips static assets such as images, fonts, CSS, JavaScript, and archives.
 - It optionally skips discovered query links and anchor-only links independently.
 - It applies `allow_patterns` and `deny_patterns`.
-- It waits `delay_seconds` between pages.
-- It can wait `start_delay_seconds` after the start page loads only in headful mode.
+- It waits `delay_seconds` between pages; the value must be a finite number greater than or equal to 0.
+- It can wait `start_delay_seconds` after the start page loads only in headful mode; the value must be a finite number greater than or equal to 0.
 - It stops if it detects a redirect to a login page.
 - It applies `crawl.redirect_policy` when navigation lands on a different URL than the one that was requested.
 - `crawl.redirect_policy: final` indexes the final normalized landing URL and preserves the current default behavior.
