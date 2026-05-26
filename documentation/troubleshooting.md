@@ -67,7 +67,7 @@ List the most common failure modes for `doc-mcp` and the first corrective step f
 ### Redirected Pages End Up Under The Wrong URL
 - `crawl.redirect_policy` defaults to `final`, which stores the landing URL after a redirect.
 - Set `crawl.redirect_policy: requested` if search results should keep the original requested URL.
-- Set `crawl.redirect_policy: skip` if redirected pages should be crawled without being added to the index.
+- Set `crawl.redirect_policy: skip` if redirected pages should be crawled without being added to the index; the crawler still loads the page, extracts content, and discovers links from it.
 - Re-run with `--debug` to confirm whether the crawler reported `final`, `requested`, or `skip` for that redirect.
 
 ### Missing Markdown Conversion

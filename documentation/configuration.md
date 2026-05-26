@@ -101,7 +101,7 @@ The sample config file also includes a few future-facing keys such as `auth_mode
 - `CONFIG_FILE` can override the default config path.
 - Relative `CONFIG_FILE`, `session_file`, and `index_file` values should be interpreted from `DOC_MCP_HOME` or the process working directory.
 - `crawl.start_url` is used as the initial crawl seed and is preserved exactly as configured, including any query string.
-- `crawl.redirect_policy: requested` stores the original requested URL when a page redirects, while `skip` leaves redirected pages out of the index.
+- `crawl.redirect_policy: requested` stores the original requested URL when a page redirects, while `skip` leaves redirected pages out of the index but still crawls the loaded page and discovers links from it.
 - `crawl.start_delay_seconds` only applies in headful mode; headless runs ignore it. When it is used, the crawl starts from the page that is open when the pause ends.
 - `crawl.ignore_query_links: true` skips discovered links that contain a query string, while `false` allows them to be crawled and indexed as distinct URLs.
 - Informational keys should not be treated as enforced runtime behavior.

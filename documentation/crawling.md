@@ -78,7 +78,7 @@ docmcp-crawl --version
 - It applies `crawl.redirect_policy` when navigation lands on a different URL than the one that was requested.
 - `crawl.redirect_policy: final` indexes the final normalized landing URL and preserves the current default behavior.
 - `crawl.redirect_policy: requested` stores the original requested URL in the index while still crawling the landing page content.
-- `crawl.redirect_policy: skip` skips indexing redirected pages but continues normal handling for pages that do not redirect.
+- `crawl.redirect_policy: skip` skips indexing redirected pages but still loads the page, extracts its content, and discovers its links before continuing normal handling for pages that do not redirect.
 
 ### Content Extraction
 - The crawler attempts to extract the most complete rendered HTML it can find.
@@ -105,7 +105,7 @@ docmcp-crawl --version
 - If a session expires during a crawl, the crawler stops and tells you to re-authenticate.
 - Anchor-heavy documentation sites remain indexed as canonical pages instead of fragment-only records.
 - Query-driven documentation can opt into separate records for distinct query URLs by setting `crawl.ignore_query_links: false`.
-- Redirected navigation defaults to indexing the final page URL, but `crawl.redirect_policy` can preserve the requested URL or skip redirected pages entirely in v0.1.4.
+- Redirected navigation defaults to indexing the final page URL, but `crawl.redirect_policy` can preserve the requested URL or skip redirected pages from indexing while still crawling the loaded page in v0.1.4.
 - If you need time to click around in the browser before crawling starts, use `crawl.start_delay_seconds` in headful mode instead of increasing `delay_seconds`.
 
 ## Edge Cases
