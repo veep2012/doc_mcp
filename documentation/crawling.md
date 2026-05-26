@@ -63,7 +63,7 @@ docmcp-crawl --version
 - The current crawler uses Playwright directly instead of Crawl4AI.
 - If `auth_required` is true for the site, the crawl command authenticates before crawling and reuses any still-valid saved session.
 - It starts from `crawl.start_url` and preserves that URL exactly as configured, including any query string.
-- If `crawl.start_delay_seconds` is set and the crawl is running headful, it waits before making the first crawl request so you can finish any manual setup in the browser.
+- If `crawl.start_delay_seconds` is set and the crawl is running headful, it loads the start page first, then waits so you can finish any manual setup in the browser before crawling begins.
 - It uses breadth-first traversal up to `crawl.max_depth`.
 - It normalizes URLs by stripping fragments.
 - It skips discovered links that contain a query string when `crawl.ignore_query_links` is `true`.
@@ -73,7 +73,7 @@ docmcp-crawl --version
 - It optionally skips discovered query links and anchor-only links independently.
 - It applies `allow_patterns` and `deny_patterns`.
 - It waits `delay_seconds` between pages.
-- It can wait `start_delay_seconds` before the first page only in headful mode.
+- It can wait `start_delay_seconds` after the start page loads only in headful mode.
 - It stops if it detects a redirect to a login page.
 - It applies `crawl.redirect_policy` when navigation lands on a different URL than the one that was requested.
 - `crawl.redirect_policy: final` indexes the final normalized landing URL and preserves the current default behavior.

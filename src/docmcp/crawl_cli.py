@@ -311,11 +311,6 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
     # Login indicators used to detect redirect to auth page
     login_indicators = ["login", "signin", "sign-in", "/auth", "/sso"]
 
-    visited: set[str] = set()
-    seed_url = _normalize_url(start_url, strip_query=False)
-    seed_preserves_query = "?" in seed_url
-    queued: set[str] = {seed_url}
-    queue: deque[tuple[str, int]] = deque([(seed_url, 0)])
     page_count = 0
 
     def _debug(message: str) -> None:
@@ -356,12 +351,34 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
 
         try:
             stop_crawl = False
+            seed_url = _normalize_url(start_url, strip_query=False)
+            seed_preserves_query = "?" in seed_url
+            use_loaded_start_page = False
+
             if start_delay_seconds and not headless:
-                print(f"[crawl] Start delay: {start_delay_seconds:g}s before crawl begins")
-                _debug(f"Pausing {start_delay_seconds:g}s before the first crawl request")
-                await asyncio.sleep(start_delay_seconds)
+                use_loaded_start_page = True
+                _debug(f"Loading start page before crawl: {seed_url}")
+                try:
+                    await page.goto(seed_url, wait_until="networkidle", timeout=60000)
+                except Exception as e:
+                    print(f"[crawl]   ✗ Start page load error: {e}")
+                    stop_crawl = True
+                else:
+                    loaded_start_url = _normalize_url(page.url, strip_query=False)
+                    _debug(f"Start page loaded at {loaded_start_url}")
+                    print(f"[crawl] Start delay: {start_delay_seconds:g}s after start page loads")
+                    _debug(f"Pausing {start_delay_seconds:g}s before the first crawl request")
+                    await asyncio.sleep(start_delay_seconds)
+                    seed_url = _normalize_url(page.url, strip_query=False)
+                    seed_preserves_query = "?" in seed_url
+                    _debug(f"Start page selected for crawl: {seed_url}")
+
+            visited: set[str] = set()
+            queued: set[str] = {seed_url}
+            queue: deque[tuple[str, int]] = deque([(seed_url, 0)])
 
             while queue:
+                loaded_page_active = use_loaded_start_page
                 depth = queue[0][1]
                 level_total = sum(1 for _, item_depth in queue if item_depth == depth)
                 level_number = depth + 1
@@ -383,13 +400,17 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
                     print(
                         f"[crawl] [{index_in_level} of {level_total} level {level_number}/{total_levels}] {url}"
                     )
-                    _debug(f"Navigating to {url}")
-
-                    try:
-                        await page.goto(url, wait_until="networkidle", timeout=60000)
-                    except Exception as e:
-                        print(f"[crawl]   ✗ Navigation error: {e}")
-                        continue
+                    if loaded_page_active and url == seed_url:
+                        _debug(f"Using already loaded start page: {url}")
+                        use_loaded_start_page = False
+                        loaded_page_active = False
+                    else:
+                        _debug(f"Navigating to {url}")
+                        try:
+                            await page.goto(url, wait_until="networkidle", timeout=60000)
+                        except Exception as e:
+                            print(f"[crawl]   ✗ Navigation error: {e}")
+                            continue
 
                     strip_query = ignore_query_links and not (
                         url == seed_url and seed_preserves_query
@@ -399,7 +420,12 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
                         strip_query=strip_query,
                     )
                     redirected = current_url != url
-                    if redirected:
+                    if loaded_page_active:
+                        if redirected:
+                            _debug(f"Loaded page redirected to {current_url}")
+                        else:
+                            _debug(f"Loaded page stayed on {current_url}")
+                    elif redirected:
                         _debug(f"Navigation redirected to {current_url}")
                     else:
                         _debug(f"Navigation stayed on {current_url}")

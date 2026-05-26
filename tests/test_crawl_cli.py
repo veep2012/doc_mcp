@@ -1099,5 +1099,8 @@ def test_crawl_site_headful_start_delay_pauses_before_first_navigation(monkeypat
     asyncio.run(crawl_cli.crawl_site_headful(site, headless=False, debug=False))
 
     assert headless_flags == [False]
-    assert events[0] == ("sleep", 0.5)
-    assert events[1] == ("goto", "https://example.test/docs")
+    assert events[:2] == [
+        ("goto", "https://example.test/docs"),
+        ("sleep", 0.5),
+    ]
+    assert events[2] == ("index", "https://example.test/docs")

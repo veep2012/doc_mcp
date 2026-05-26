@@ -39,7 +39,7 @@ List the most common failure modes for `doc-mcp` and the first corrective step f
 - Check whether the site redirects unauthenticated users to a login page.
 
 ### I Need Time To Set Up The Page
-- Set `crawl.start_delay_seconds` for a headful crawl when you want the browser to sit on the start page before the first crawl request.
+- Set `crawl.start_delay_seconds` for a headful crawl when you want the browser to load the start page, pause, and then let you change the page before crawling begins.
 - Use that window to click buttons, switch filters, or navigate to the exact page you want to scan.
 - `crawl.start_delay_seconds` is ignored when the crawl runs headless.
 
