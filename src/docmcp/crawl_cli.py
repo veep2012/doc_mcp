@@ -423,11 +423,12 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
                     if url in visited:
                         continue
                     visited.add(url)
+                    used_preloaded_page = loaded_page_active and url == seed_url
 
                     print(
                         f"[crawl] [{index_in_level} of {level_total} level {level_number}/{total_levels}] {url}"
                     )
-                    if loaded_page_active and url == seed_url:
+                    if used_preloaded_page:
                         _debug(f"Using already loaded start page: {url}")
                         use_loaded_start_page = False
                     else:
@@ -446,7 +447,7 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
                         strip_query=strip_query,
                     )
                     redirected = current_url != url
-                    if loaded_page_active:
+                    if used_preloaded_page:
                         if redirected:
                             _debug(f"Loaded page redirected to {current_url}")
                         else:
