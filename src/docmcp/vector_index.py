@@ -18,7 +18,7 @@ try:
 except ImportError:  # pragma: no cover - exercised via backend availability checks
     sqlite_vec = None
 
-from .index_store import count_pages, iter_page_documents
+from .index_store import _normalize_search_limit, count_pages, iter_page_documents
 
 DEFAULT_EMBEDDING_DIMENSIONS = 32
 DEFAULT_CHUNK_SIZE = 800
@@ -98,6 +98,32 @@ def vector_backend_status() -> tuple[bool, str | None]:
     return True, None
 
 
+def _connect_ro_vector_index(index_file: str) -> sqlite3.Connection | None:
+    available, message = vector_backend_status()
+    if not available:
+        raise VectorBackendUnavailableError(message or "sqlite-vec is unavailable.")
+
+    path = Path(index_file)
+    if not path.exists():
+        return None
+
+    conn = sqlite3.connect(f"{path.resolve(strict=False).as_uri()}?mode=ro", uri=True)
+    try:
+        conn.enable_load_extension(True)
+    except (AttributeError, sqlite3.NotSupportedError) as exc:
+        conn.close()
+        raise VectorBackendUnavailableError(
+            "SQLite extension loading is not available in this Python runtime."
+        ) from exc
+
+    try:
+        sqlite_vec.load(conn)
+    finally:
+        with suppress(sqlite3.Error):
+            conn.enable_load_extension(False)
+    return conn
+
+
 def _connect_vector_index(index_file: str) -> sqlite3.Connection:
     available, message = vector_backend_status()
     if not available:
@@ -110,6 +136,68 @@ def _connect_vector_index(index_file: str) -> sqlite3.Connection:
     sqlite_vec.load(conn)
     conn.enable_load_extension(False)
     return conn
+
+
+def search_vector_chunks(site: dict, query: str, limit: int = 10) -> list[dict]:
+    """Run a read-only nearest-neighbor search against a site's local vector sidecar."""
+    limit = _normalize_search_limit(limit)
+    if limit is None:
+        return []
+
+    conn = _connect_ro_vector_index(resolve_vector_index_file(site))
+    if conn is None:
+        return []
+
+    try:
+        meta = conn.execute(
+            """
+            SELECT embedding_dimensions
+            FROM vector_meta
+            WHERE site_name = ?
+            LIMIT 1
+            """,
+            (site["name"],),
+        ).fetchone()
+        if meta is None:
+            return []
+
+        rows = conn.execute(
+            """
+            SELECT
+                vc.chunk_id,
+                vc.page_url,
+                vc.title,
+                vc.chunk_text,
+                vc.chunk_index,
+                ce.distance
+            FROM chunk_embeddings AS ce
+            JOIN vector_chunks AS vc
+              ON vc.vec_rowid = ce.rowid
+            WHERE vc.site_name = ?
+              AND ce.embedding MATCH ?
+              AND k = ?
+            ORDER BY ce.distance, vc.page_url, vc.chunk_index, vc.chunk_id
+            """,
+            (
+                site["name"],
+                sqlite_vec.serialize_float32(_embed_text(query, int(meta[0]))),
+                limit,
+            ),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    return [
+        {
+            "chunk_id": row[0],
+            "page_url": row[1],
+            "title": row[2],
+            "text": row[3],
+            "chunk_index": row[4],
+            "distance": row[5],
+        }
+        for row in rows
+    ]
 
 
 def _normalize_chunk_settings(

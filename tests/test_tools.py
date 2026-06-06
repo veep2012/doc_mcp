@@ -1,8 +1,17 @@
 import json
 import sqlite3
 
+import pytest
+
 import docmcp.tools as tools
 from docmcp.index_store import init_db, upsert_page
+from docmcp.vector_index import rebuild_vector_index, vector_backend_status
+
+
+def _require_vector_backend():
+    available, message = vector_backend_status()
+    if not available:
+        pytest.skip(message or "sqlite-vec backend unavailable")
 
 
 def test_mcp_tools_return_site_pages_search_and_fetch(monkeypatch, tmp_path):
@@ -190,6 +199,396 @@ def test_search_docs_rejects_non_positive_limit(monkeypatch, tmp_path):
     assert json.loads(tools.search_docs("Example Docs", "Alpha", limit=0)) == expected
 
 
+def test_normalize_search_results_use_shared_schema():
+    keyword_results = tools._normalize_keyword_results(
+        [
+            {
+                "url": "https://example.test/guide",
+                "title": "Guide",
+                "excerpt": "Alpha beta",
+                "rank": -1.0,
+            }
+        ]
+    )
+    vector_results = tools._normalize_vector_results(
+        [
+            {
+                "chunk_id": "chunk-1",
+                "page_url": "https://example.test/guide",
+                "title": "Guide",
+                "text": "Alpha beta",
+                "distance": 0.25,
+            }
+        ]
+    )
+
+    assert keyword_results == [
+        {
+            "text": "Alpha beta",
+            "page_url": "https://example.test/guide",
+            "title": "Guide",
+            "score": 1.0,
+            "source": "keyword",
+            "_dedupe_keys": ("text:https://example.test/guide\nAlpha beta",),
+        }
+    ]
+    assert vector_results == [
+        {
+            "text": "Alpha beta",
+            "page_url": "https://example.test/guide",
+            "title": "Guide",
+            "score": 0.8,
+            "source": "vector",
+            "_dedupe_keys": (
+                "chunk:chunk-1",
+                "text:https://example.test/guide\nAlpha beta",
+            ),
+        }
+    ]
+
+
+def test_merge_search_results_prefers_vector_order_and_deduplicates():
+    vector_results = [
+        {
+            "text": "Alpha beta",
+            "page_url": "https://example.test/guide",
+            "title": "Guide",
+            "score": 0.9,
+            "source": "vector",
+            "_dedupe_keys": (
+                "chunk:chunk-1",
+                "text:https://example.test/guide\nAlpha beta",
+            ),
+        },
+        {
+            "text": "Gamma delta",
+            "page_url": "https://example.test/reference",
+            "title": "Reference",
+            "score": 0.7,
+            "source": "vector",
+            "_dedupe_keys": (
+                "chunk:chunk-2",
+                "text:https://example.test/reference\nGamma delta",
+            ),
+        },
+    ]
+    keyword_results = [
+        {
+            "text": "Alpha beta",
+            "page_url": "https://example.test/guide",
+            "title": "Guide",
+            "score": 1.0,
+            "source": "keyword",
+            "_dedupe_keys": ("text:https://example.test/guide\nAlpha beta",),
+        },
+        {
+            "text": "Install alpha",
+            "page_url": "https://example.test/install",
+            "title": "Install",
+            "score": 0.5,
+            "source": "keyword",
+            "_dedupe_keys": ("text:https://example.test/install\nInstall alpha",),
+        },
+    ]
+
+    merged_results, contributors = tools._merge_search_results(vector_results, keyword_results, 10)
+
+    assert contributors == {"keyword", "vector"}
+    assert merged_results == [
+        {
+            "text": "Alpha beta",
+            "page_url": "https://example.test/guide",
+            "title": "Guide",
+            "score": 0.9,
+            "source": "vector",
+        },
+        {
+            "text": "Gamma delta",
+            "page_url": "https://example.test/reference",
+            "title": "Reference",
+            "score": 0.7,
+            "source": "vector",
+        },
+        {
+            "text": "Install alpha",
+            "page_url": "https://example.test/install",
+            "title": "Install",
+            "score": 0.5,
+            "source": "keyword",
+        },
+    ]
+
+
+@pytest.mark.parametrize(
+    ("vector_results", "keyword_results", "expected_mode"),
+    [
+        (
+            [
+                {
+                    "chunk_id": "chunk-1",
+                    "page_url": "https://example.test/vector",
+                    "title": "Vector",
+                    "text": "Alpha beta",
+                    "distance": 0.1,
+                }
+            ],
+            [],
+            "vector",
+        ),
+        (
+            [
+                {
+                    "chunk_id": "chunk-1",
+                    "page_url": "https://example.test/shared",
+                    "title": "Shared",
+                    "text": "Alpha beta",
+                    "distance": 0.1,
+                }
+            ],
+            [
+                {
+                    "url": "https://example.test/shared",
+                    "title": "Shared",
+                    "excerpt": "Alpha beta",
+                    "rank": -1.0,
+                }
+            ],
+            "vector",
+        ),
+        (
+            [
+                {
+                    "chunk_id": "chunk-1",
+                    "page_url": "https://example.test/vector",
+                    "title": "Vector",
+                    "text": "Alpha beta",
+                    "distance": 0.1,
+                }
+            ],
+            [
+                {
+                    "url": "https://example.test/keyword",
+                    "title": "Keyword",
+                    "excerpt": "Alpha beta keyword",
+                    "rank": -1.0,
+                }
+            ],
+            "hybrid",
+        ),
+    ],
+)
+def test_search_response_selects_mode_from_unique_source_contributors(
+    vector_results, keyword_results, expected_mode
+):
+    response = tools._search_response(keyword_results, vector_results, limit=10)
+
+    assert response["mode"] == expected_mode
+    assert response["vector_hits"] == len(vector_results)
+    assert response["keyword_hits"] == len(keyword_results)
+
+
+def test_search_docs_falls_back_to_keyword_when_vector_lookup_fails(monkeypatch, tmp_path):
+    index_file = tmp_path / "docs.db"
+    init_db(str(index_file))
+    upsert_page(str(index_file), "https://example.test/guide", "Guide", "Alpha beta")
+
+    monkeypatch.setattr(
+        tools,
+        "_get_sites",
+        lambda: [
+            {
+                "name": "Example Docs",
+                "url": "https://example.test",
+                "auth_required": False,
+                "index_file": str(index_file),
+                "vector_index_file": str(tmp_path / "docs.vec.db"),
+            }
+        ],
+    )
+    def raise_sqlite_error(site: dict, query: str, limit: int) -> list[dict]:
+        raise sqlite3.OperationalError("broken vector index")
+
+    monkeypatch.setattr(tools, "search_vector_chunks", raise_sqlite_error)
+
+    response = json.loads(tools.search_docs("Example Docs", "Alpha"))
+
+    assert response == {
+        "mode": "keyword",
+        "vector_hits": 0,
+        "keyword_hits": 1,
+        "results": [
+            {
+                "text": "[Alpha] beta",
+                "page_url": "https://example.test/guide",
+                "title": "Guide",
+                "score": response["results"][0]["score"],
+                "source": "keyword",
+            }
+        ],
+    }
+    assert isinstance(response["results"][0]["score"], float)
+
+
+def test_search_docs_returns_vector_only_results_when_keyword_has_no_hits(monkeypatch, tmp_path):
+    index_file = tmp_path / "docs.db"
+    init_db(str(index_file))
+
+    monkeypatch.setattr(
+        tools,
+        "_get_sites",
+        lambda: [
+            {
+                "name": "Example Docs",
+                "url": "https://example.test",
+                "auth_required": False,
+                "index_file": str(index_file),
+                "vector_index_file": str(tmp_path / "docs.vec.db"),
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        tools,
+        "search_vector_chunks",
+        lambda site, query, limit: [
+            {
+                "chunk_id": "chunk-1",
+                "page_url": "https://example.test/vector",
+                "title": "Vector Guide",
+                "text": "Alpha beta",
+                "distance": 0.25,
+            }
+        ],
+    )
+
+    response = json.loads(tools.search_docs("Example Docs", "Alpha"))
+
+    assert response == {
+        "mode": "vector",
+        "vector_hits": 1,
+        "keyword_hits": 0,
+        "results": [
+            {
+                "text": "Alpha beta",
+                "page_url": "https://example.test/vector",
+                "title": "Vector Guide",
+                "score": 0.8,
+                "source": "vector",
+            }
+        ],
+    }
+
+
+def test_search_docs_returns_hybrid_results_with_partial_vector_sidecar(monkeypatch, tmp_path):
+    _require_vector_backend()
+
+    index_file = tmp_path / "docs.db"
+    vector_index_file = tmp_path / "docs.vec.db"
+    init_db(str(index_file))
+    upsert_page(
+        str(index_file),
+        "https://example.test/vector-best",
+        "Vector Best",
+        "Alpha alpha alpha beta",
+    )
+    upsert_page(
+        str(index_file),
+        "https://example.test/vector-only",
+        "Vector Only",
+        "Gamma delta epsilon zeta",
+    )
+
+    site = {
+        "name": "Example Docs",
+        "url": "https://example.test",
+        "auth_required": False,
+        "index_file": str(index_file),
+        "vector_index_file": str(vector_index_file),
+        "vectorizer": {"chunk_size": 100, "chunk_overlap": 20, "embedding_dimensions": 8},
+    }
+    rebuild_vector_index(site)
+
+    upsert_page(
+        str(index_file),
+        "https://example.test/keyword-only",
+        "Keyword Only",
+        "Alpha beta gamma delta",
+    )
+
+    monkeypatch.setattr(tools, "_get_sites", lambda: [site])
+
+    response = json.loads(tools.search_docs("Example Docs", "Alpha", limit=3))
+
+    assert response == {
+        "mode": "hybrid",
+        "vector_hits": 2,
+        "keyword_hits": 2,
+        "results": [
+            {
+                "text": "Alpha alpha alpha beta",
+                "page_url": "https://example.test/vector-best",
+                "title": "Vector Best",
+                "score": response["results"][0]["score"],
+                "source": "vector",
+            },
+            {
+                "text": "Gamma delta epsilon zeta",
+                "page_url": "https://example.test/vector-only",
+                "title": "Vector Only",
+                "score": response["results"][1]["score"],
+                "source": "vector",
+            },
+            {
+                "text": "[Alpha] beta gamma delta",
+                "page_url": "https://example.test/keyword-only",
+                "title": "Keyword Only",
+                "score": response["results"][2]["score"],
+                "source": "keyword",
+            },
+        ],
+    }
+    assert all(isinstance(result["score"], float) for result in response["results"])
+
+
+def test_search_docs_falls_back_when_vector_sidecar_is_unreadable(monkeypatch, tmp_path):
+    index_file = tmp_path / "docs.db"
+    vector_index_file = tmp_path / "docs.vec.db"
+    init_db(str(index_file))
+    upsert_page(str(index_file), "https://example.test/guide", "Guide", "Alpha beta")
+    vector_index_file.write_bytes(b"not a sqlite database")
+
+    monkeypatch.setattr(
+        tools,
+        "_get_sites",
+        lambda: [
+            {
+                "name": "Example Docs",
+                "url": "https://example.test",
+                "auth_required": False,
+                "index_file": str(index_file),
+                "vector_index_file": str(vector_index_file),
+            }
+        ],
+    )
+
+    response = json.loads(tools.search_docs("Example Docs", "Alpha"))
+
+    assert response == {
+        "mode": "keyword",
+        "vector_hits": 0,
+        "keyword_hits": 1,
+        "results": [
+            {
+                "text": "[Alpha] beta",
+                "page_url": "https://example.test/guide",
+                "title": "Guide",
+                "score": response["results"][0]["score"],
+                "source": "keyword",
+            }
+        ],
+    }
+    assert isinstance(response["results"][0]["score"], float)
+
+
 def test_get_version_returns_server_metadata(monkeypatch):
     monkeypatch.setenv("MCP_SERVER_NAME", "docs-mcp")
 
@@ -198,5 +597,5 @@ def test_get_version_returns_server_metadata(monkeypatch):
     assert payload == {
         "package_name": "doc-mcp",
         "server_name": "docs-mcp",
-        "version": "0.99.2",
+        "version": "0.99.3",
     }

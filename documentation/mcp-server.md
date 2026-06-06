@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-05-24
-- Version: v1.6
+- Last Updated: 2026-06-06
+- Version: v1.7
 
 ## Change Log
+- 2026-06-06 | v1.7 | Documented the experimental `0.99.3` hybrid `search_docs` behavior, including mode selection, source labels, and keyword fallback when the vector sidecar is missing or unreadable.
 - 2026-05-24 | v1.6 | Corrected the historical search_docs contract entry, kept the current `0.99.2` response contract documentation, and bumped the document control record.
 - 2026-05-21 | v1.5 | Documented the server log-level environment variable, added current server version/help guidance, and clarified startup diagnostics.
 - 2026-05-17 | v1.4 | Clarified that `search_docs` is keyword-only today, that the vector search counters remain zero until a vector backend is added, that `score` is an ordinal value derived from result order rather than a semantic relevance score, and that lookup failures return structured JSON.
@@ -56,10 +57,10 @@ python -m src.main
 - `get_sites` lists each configured site and counts pages in its SQLite index.
 - `get_version` returns the MCP server name and code-embedded package version for runtime checks.
 - `list_pages` returns indexed page titles, URLs, and last crawled timestamps.
-- `search_docs` runs SQLite FTS5 keyword search and returns the current `0.99.2` JSON response contract.
+- `search_docs` runs hybrid search across SQLite FTS5 keyword results and the local sqlite-vec sidecar, while preserving the current JSON response contract.
 - `fetch_page` returns the full Markdown content for a single indexed page.
 
-### Experimental Search Contract (`0.99.2`)
+### Experimental Search Contract (`0.99.3`)
 `search_docs(site_name, query, limit=10)` currently returns a JSON string with this
 shape:
 
@@ -81,14 +82,15 @@ shape:
 ```
 
 Implementation notes:
-- `mode` is always `"keyword"` in the current code path.
-- `vector_hits` is always `0` because the server does not expose a vector backend yet.
-- `keyword_hits` reflects the number of SQLite FTS5 matches returned for the query.
-- `limit` defaults to `10` and is passed through to the underlying SQLite query.
-- `score` is experimental and keyword-only today.
-- `score` is derived from the returned ordering, not from a semantic similarity metric.
-- `score` is not comparable across different queries, datasets, or future search engines.
-- `score` should be treated as an ordinal hint for UI ranking, not as an absolute relevance measure.
+- `mode` is `"hybrid"` only when both vector and keyword search contribute at least one unique merged result.
+- `mode` is `"vector"` when vector search returns the only usable results for the response.
+- `mode` falls back to `"keyword"` when the vector sidecar is missing, unreadable, empty, or fully deduplicated away.
+- `vector_hits` reflects the number of vector rows read before merge-time deduplication.
+- `keyword_hits` reflects the number of SQLite FTS5 matches returned for the query before merge-time deduplication.
+- `results` are merged deterministically with vector rows first (ordered by nearest-neighbor distance) and keyword rows second (ordered by existing FTS rank).
+- Cross-source duplicates are removed deterministically using stable chunk/page-text identity, and the retained row keeps its original `source` label.
+- `limit` defaults to `10` and bounds the merged response.
+- `score` remains experimental and should be treated as an ordering hint, not as an absolute relevance measure.
 
 If no keyword results are available, the tool still returns valid JSON:
 

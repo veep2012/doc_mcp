@@ -14,6 +14,7 @@ from docmcp.vector_index import (
     chunk_markdown,
     rebuild_vector_index,
     resolve_vector_index_file,
+    search_vector_chunks,
     _normalize_chunk_settings,
     vector_backend_status,
 )
@@ -227,3 +228,40 @@ def test_rebuild_vector_index_handles_empty_source_index(tmp_path):
 
     assert meta == ("Example Docs", 0, 0)
     assert chunk_rows == 0
+
+
+def test_search_vector_chunks_reads_ranked_matches_from_sidecar(tmp_path):
+    _require_vector_backend()
+    source_index = tmp_path / "index" / "docs.db"
+    vector_index = tmp_path / "index" / "docs.vec.db"
+    init_db(str(source_index))
+    upsert_page(
+        str(source_index),
+        "https://example.test/vector-best",
+        "Vector Best",
+        "Alpha alpha alpha beta",
+    )
+    upsert_page(
+        str(source_index),
+        "https://example.test/vector-next",
+        "Vector Next",
+        "Gamma delta epsilon zeta",
+    )
+
+    site = {
+        "name": "Example Docs",
+        "index_file": str(source_index),
+        "vector_index_file": str(vector_index),
+        "vectorizer": {"chunk_size": 100, "chunk_overlap": 20, "embedding_dimensions": 8},
+    }
+    rebuild_vector_index(site)
+
+    results = search_vector_chunks(site, "Alpha", limit=2)
+
+    assert [result["page_url"] for result in results] == [
+        "https://example.test/vector-best",
+        "https://example.test/vector-next",
+    ]
+    assert results[0]["distance"] <= results[1]["distance"]
+    assert all(result["chunk_id"] for result in results)
+    assert all(isinstance(result["text"], str) and result["text"] for result in results)

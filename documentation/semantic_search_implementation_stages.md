@@ -164,6 +164,12 @@ Acceptance criteria:
 ### Stage 6: Implement Hybrid Search
 Goal: Combine semantic and keyword results when both indexes can answer the query.
 
+Stage 6 is the experimental `0.99.3` hybrid-search release. In this stage,
+`search_docs(site_name, query, limit=10)` queries both the SQLite keyword index and
+the local sqlite-vec sidecar, normalizes both result sets into the shared schema,
+orders vector rows before keyword rows, deduplicates overlaps deterministically, and
+falls back to keyword mode when the vector sidecar is missing, unreadable, or empty.
+
 Deliverables:
 - Add hybrid search behavior to `search_docs` or a dedicated `hybrid_search_docs` tool.
 - Query vector and keyword sources independently.
@@ -176,6 +182,7 @@ Acceptance criteria:
 - When vector returns no results, response metadata reports `mode: "keyword"`.
 - Duplicate results are not returned to callers.
 - Ranking behavior is deterministic and documented.
+- The Stage 6 response behavior is documented as the experimental `0.99.3` release.
 
 ### Stage 7: Add Observability And Degradation Tests
 Goal: Prove the system behaves correctly across missing, partial, and failing dependencies.
