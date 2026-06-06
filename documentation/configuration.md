@@ -5,12 +5,12 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-05-24
+- Last Updated: 2026-05-26
 - Version: v1.7
 
 ## Change Log
-- 2026-05-24 | v1.7 | Added the `docmcp_vectorizer` console script alias, documented vectorizer `--debug` diagnostics, clarified that chained crawl/vectorize inherits debug output, and kept the vector table inspection guidance platform-neutral.
-- 2026-05-23 | v1.5 | Added local vector sidecar settings, documented the separate vectorizer CLI, and clarified that crawl-time vectorization remains disabled in this stage.
+- 2026-05-26 | v1.7 | Documented crawl timing constraints for `delay_seconds` and `start_delay_seconds`, clarified redirect behavior, and updated the site examples to reflect the merged crawl config.
+- 2026-05-24 | v1.6 | Added the `docmcp_vectorizer` console script alias, documented vectorizer `--debug` diagnostics, clarified that chained crawl/vectorize inherits debug output, and kept the vector table inspection guidance platform-neutral.
 - 2026-05-21 | v1.4 | Documented `MCP_LOG_LEVEL`, clarified workspace `.env` resolution, and aligned runtime path notes with the loader.
 - 2026-04-25 | v1.1 | Documented runtime root resolution through DOC_MCP_HOME and updated implementation references.
 - 2026-04-24 | v1.0 | Reformatted the configuration reference and documented the live loader behavior.
@@ -54,8 +54,10 @@ SITE1_PASSWORD=replace-me
 - `session_file`: where to save Playwright storage state
 - `crawl.start_url`: crawl entry point
 - `crawl.max_depth`: breadth-first crawl depth
-- `crawl.delay_seconds`: pause between page fetches
+- `crawl.delay_seconds`: pause between page fetches; must be a finite number greater than or equal to 0
+- `crawl.start_delay_seconds`: headful-only pause after the start page loads, before crawling begins; must be a finite number greater than or equal to 0
 - `crawl.block_images`: block image, font, and media requests
+- `crawl.redirect_policy`: handle redirected pages as `final`, `requested`, or `skip`
 - `crawl.ignore_query_links`: skip discovered links that contain a query string
 - `crawl.ignore_anchor_links`: skip fragment-only links
 - `crawl.ignore_https_errors`: ignore TLS errors for that site
@@ -78,7 +80,9 @@ sites:
       start_url: "https://docs.example.com/docs"
       max_depth: 5
       delay_seconds: 1.0
+      start_delay_seconds: 10.0
       block_images: true
+      redirect_policy: final
       ignore_query_links: true
       ignore_anchor_links: true
       ignore_https_errors: false
@@ -97,6 +101,8 @@ The sample config file also includes a few future-facing keys such as `auth_mode
 - `auth_mode` is currently informational only.
 - `auth_type` is currently informational only.
 - `respect_robots_txt` is not consumed by the current crawler implementation.
+- `crawl.redirect_policy` defaults to `final`, which preserves the existing behavior of indexing the landing URL after a redirect.
+- `crawl.start_delay_seconds` is off by default. Use it when you want a visible headful browser to load the start page, pause, and let you switch to the exact page you want to scan.
 
 ### Local Vector Sidecar Notes
 - `docmcp-crawl` still writes only the keyword SQLite index in this stage.
@@ -116,7 +122,11 @@ The sample config file also includes a few future-facing keys such as `auth_mode
 - `CONFIG_FILE` can override the default config path.
 - Relative `CONFIG_FILE`, `session_file`, `index_file`, and `vector_index_file` values should be interpreted from `DOC_MCP_HOME` or the process working directory.
 - `crawl.start_url` is used as the initial crawl seed and is preserved exactly as configured, including any query string.
+- `crawl.start_url` is used as the initial crawl seed and is preserved exactly as configured, including any query string.
+- `crawl.redirect_policy: requested` stores the original requested URL when a page redirects, while `skip` leaves redirected pages out of the index but still crawls the loaded page and discovers links from it.
+- `crawl.start_delay_seconds` only applies in headful mode; headless runs ignore it. When it is used, the crawl starts from the page that is open when the pause ends.
 - `crawl.ignore_query_links: true` skips discovered links that contain a query string, while `false` allows them to be crawled and indexed as distinct URLs.
+- `crawl.redirect_policy: final` preserves the landing URL after a redirect, which matches the current default behavior.
 - If `vector_index_file` is omitted, the vectorizer writes `<index_file stem>.vec.db` alongside the keyword SQLite index.
 - If sqlite-vec cannot be loaded, `docmcp-vectorize` and `docmcp_vectorizer` fail clearly but crawl and keyword-only MCP search still work.
 - Informational keys should not be treated as enforced runtime behavior.

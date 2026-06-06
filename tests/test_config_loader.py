@@ -18,6 +18,8 @@ def test_load_config_resolves_runtime_paths_and_env(monkeypatch, tmp_path):
                 url: "${DOCS_URL}"
                 auth_required: false
                 session_file: "storage/example.json"
+                crawl:
+                  redirect_policy: "requested"
                 index_file: "index/example.db"
                 vector_index_file: "index/example.vec.db"
             """
@@ -35,6 +37,7 @@ def test_load_config_resolves_runtime_paths_and_env(monkeypatch, tmp_path):
 
     assert site["url"] == "https://example.test/docs"
     assert site["session_file"] == str(runtime_root / "storage" / "example.json")
+    assert site["crawl"]["redirect_policy"] == "requested"
     assert site["index_file"] == str(runtime_root / "index" / "example.db")
     assert site["vector_index_file"] == str(runtime_root / "index" / "example.vec.db")
     assert get_site_by_name("Example Docs") == site

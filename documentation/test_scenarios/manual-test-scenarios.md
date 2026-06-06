@@ -116,6 +116,7 @@ Run this block first when validating the repository checkout directly.
   7. Leave `CONFIG_FILE` unset to use the default `config/sites.yaml`.
 - Expected result:
   - The site entry has a stable `name`, `url`, `crawl.start_url`, `session_file`, and `index_file`.
+  - If the site needs a headful setup pause, `crawl.start_delay_seconds` is present in the crawl config.
   - Relative runtime paths resolve from the repository root.
 - Pass/Fail:
   - Pass if the config can be read by the development CLI in the next scenario.
@@ -270,6 +271,7 @@ Run these scenarios after either `MT-003A` or `MT-003B`, using the command set f
 - Expected result:
   - The crawler runs with Chromium in headless mode.
   - Existing crawl and indexing behavior remains the same.
+  - `crawl.start_delay_seconds` is ignored in headless mode.
 - Pass/Fail:
   - Pass if the run completes and updates existing indexed rows.
   - Fail if headless mode changes authentication state or prevents page extraction unexpectedly.

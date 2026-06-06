@@ -5,7 +5,6 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "doc-mcp"
 version = "0.99.2"
-
 description = "Documentation MCP server with Playwright-based authentication and crawling"
 readme = "README.md"
 requires-python = ">=3.11"
