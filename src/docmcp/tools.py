@@ -34,11 +34,16 @@ except ModuleNotFoundError:  # pragma: no cover - only used in minimal test envi
 
 from . import __version__
 from .config.loader import get_sites as _get_sites
-from .index_store import count_pages, get_page, list_pages as _list_pages, search_pages
+from .index_store import (
+    _normalize_search_limit,
+    count_pages,
+    get_page,
+    list_pages as _list_pages,
+    search_pages,
+)
 from .vector_index import VectorIndexError, search_vector_chunks
 
 mcp = FastMCP(os.getenv("MCP_SERVER_NAME", "docs-mcp"))
-_SEARCH_LIMIT_MAX = 100
 
 
 def _find_site(name: str) -> dict | None:
@@ -72,13 +77,8 @@ def _vector_score(distance: float | None) -> float:
     return round(1.0 / (1.0 + distance), 6)
 
 
-def _normalize_search_limit(limit: int) -> int | None:
-    if limit <= 0:
-        return None
-    return min(limit, _SEARCH_LIMIT_MAX)
-
-
 def _normalize_result_text(text: str | None) -> str:
+    """Collapse result text to a stable single-space form for deduplication."""
     return " ".join((text or "").split())
 
 
@@ -144,6 +144,9 @@ def _merge_search_results(
 
     for result in [*vector_results, *keyword_results]:
         dedupe_keys = result.get("_dedupe_keys", ())
+        # Keyword search is page-level today, so once vector search has already retained
+        # a page, keep the vector row to preserve chunk-level vector granularity and
+        # suppress the overlapping keyword page hit for that same URL.
         if result["source"] == "keyword" and result["page_url"] in vector_pages:
             continue
         if any(key in seen_keys for key in dedupe_keys):

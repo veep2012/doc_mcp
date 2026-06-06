@@ -405,10 +405,10 @@ def test_search_docs_falls_back_to_keyword_when_vector_lookup_fails(monkeypatch,
             }
         ],
     )
-    def raise_sqlite_error(site: dict, query: str, limit: int) -> list[dict]:
+    def _mock_vector_search_error(site: dict, query: str, limit: int) -> list[dict]:
         raise sqlite3.OperationalError("broken vector index")
 
-    monkeypatch.setattr(tools, "search_vector_chunks", raise_sqlite_error)
+    monkeypatch.setattr(tools, "search_vector_chunks", _mock_vector_search_error)
 
     response = json.loads(tools.search_docs("Example Docs", "Alpha"))
 

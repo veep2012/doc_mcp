@@ -106,8 +106,12 @@ def _connect_ro_vector_index(index_file: str) -> sqlite3.Connection | None:
     path = Path(index_file)
     if not path.exists():
         return None
+    try:
+        resolved_path = path.resolve(strict=True)
+    except FileNotFoundError:
+        return None
 
-    conn = sqlite3.connect(f"{path.resolve(strict=False).as_uri()}?mode=ro", uri=True)
+    conn = sqlite3.connect(f"{resolved_path.as_uri()}?mode=ro", uri=True)
     try:
         conn.enable_load_extension(True)
     except (AttributeError, sqlite3.NotSupportedError) as exc:
