@@ -57,7 +57,7 @@ python -m src.main
 - `get_sites` lists each configured site and counts pages in its SQLite index.
 - `get_version` returns the MCP server name and code-embedded package version for runtime checks.
 - `list_pages` returns indexed page titles, URLs, and last crawled timestamps.
-- `search_docs` runs hybrid search across SQLite FTS5 keyword results and the local sqlite-vec sidecar, while preserving the current JSON response contract.
+- `search_docs` uses the site-level `search_engine` setting to choose keyword-only, vector-only, or hybrid search while preserving the current JSON response contract.
 - `fetch_page` returns the full Markdown content for a single indexed page.
 
 ### Experimental Search Contract (`0.99.3`)
@@ -82,12 +82,14 @@ shape:
 ```
 
 Implementation notes:
-- `mode` is `"hybrid"` only when both vector and keyword search contribute at least one unique merged result.
+- `mode` is `"hybrid"` when the site is configured for hybrid search and both vector and keyword search contribute at least one unique merged result.
 - `mode` is `"vector"` when vector search returns the only usable results for the response.
+- `mode` is `"vector"` for vector-only sites even when the vector sidecar is empty, as long as the vector lookup succeeds.
 - `mode` falls back to `"keyword"` when the vector sidecar is missing, unreadable, empty, or fully deduplicated away.
 - `vector_hits` reflects the number of vector rows read before merge-time deduplication.
 - `keyword_hits` reflects the number of SQLite FTS5 matches returned for the query before merge-time deduplication.
 - `results` are merged deterministically with vector rows first (ordered by nearest-neighbor distance) and keyword rows second (ordered by existing FTS rank).
+- `search_engine: keyword` skips vector lookup entirely, while `search_engine: vector` returns an error-bearing empty response if the vector sidecar is missing or unreadable.
 - Cross-source duplicates are removed deterministically using stable chunk/page-text identity, and the retained row keeps its original `source` label.
 - `limit` defaults to `10` and bounds the merged response.
 - `score` remains experimental and should be treated as an ordering hint, not as an absolute relevance measure.

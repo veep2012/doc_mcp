@@ -15,6 +15,9 @@ class ConfigError(RuntimeError):
     """Raised when runtime configuration is missing or invalid."""
 
 
+_ALLOWED_SEARCH_ENGINES = frozenset({"hybrid", "keyword", "vector"})
+
+
 def _runtime_root() -> Path:
     """Return the workspace/runtime root used for relative config and data paths."""
     configured_root = os.environ.get("DOC_MCP_HOME")
@@ -39,6 +42,21 @@ def _resolve_runtime_path(value: Any, root: Path) -> Any:
     return str(root / path)
 
 
+def _normalize_search_engine(value: Any, site_name: str | None = None) -> str:
+    """Return the canonical site search engine or raise a configuration error."""
+    if value is None or value == "":
+        return "hybrid"
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in _ALLOWED_SEARCH_ENGINES:
+            return normalized
+    allowed = ", ".join(sorted(_ALLOWED_SEARCH_ENGINES))
+    site_label = f" for site '{site_name}'" if site_name else ""
+    raise ConfigError(
+        f"Invalid search_engine{site_label}: {value!r}. " f"Expected one of: {allowed}."
+    )
+
+
 def _resolve_runtime_paths(config: Any, root: Path) -> Any:
     """Resolve known runtime file paths inside the loaded site configuration."""
     if not isinstance(config, dict):
@@ -51,6 +69,9 @@ def _resolve_runtime_paths(config: Any, root: Path) -> Any:
     for site in sites:
         if not isinstance(site, dict):
             continue
+        site["search_engine"] = _normalize_search_engine(
+            site.get("search_engine"), site.get("name")
+        )
         for key in _RUNTIME_PATH_KEYS:
             if key in site:
                 site[key] = _resolve_runtime_path(site[key], root)

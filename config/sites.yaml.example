@@ -25,6 +25,7 @@ sites:
       allow_patterns: []            # e.g. ["https://docs.example.com/documentation/*"]
       deny_patterns: []             # e.g. ["*/changelog/*", "*/print/*"]
     index_file: "index/my_private_docs.db"
+    search_engine: "hybrid"         # hybrid | keyword | vector
     vector_index_file: "index/my_private_docs.vec.db"
     vectorizer:
       chunk_size: 800
@@ -50,8 +51,9 @@ sites:
       ignore_anchor_links: true
       ignore_https_errors: false
       allow_patterns: []
-      deny_patterns: ["https://public-docs.example.com/auth/*"]
+    deny_patterns: ["https://public-docs.example.com/auth/*"]
     index_file: "index/my_public_docs.db"
+    search_engine: "vector"         # vector-only semantic search; requires a vector sidecar
     vector_index_file: "index/my_public_docs.vec.db"
     vectorizer:
       chunk_size: 800

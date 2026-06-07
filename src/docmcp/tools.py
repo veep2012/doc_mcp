@@ -13,6 +13,7 @@ Tools:
 import json
 import os
 import sqlite3
+from pathlib import Path
 
 try:
     from mcp.server.fastmcp import FastMCP
@@ -33,7 +34,7 @@ except ModuleNotFoundError:  # pragma: no cover - only used in minimal test envi
 
 
 from . import __version__
-from .config.loader import get_sites as _get_sites
+from .config.loader import get_sites as _get_sites, _normalize_search_engine
 from .index_store import (
     _normalize_search_limit,
     count_pages,
@@ -41,7 +42,12 @@ from .index_store import (
     list_pages as _list_pages,
     search_pages,
 )
-from .vector_index import VectorIndexError, search_vector_chunks
+from .vector_index import (
+    VectorBackendUnavailableError,
+    VectorIndexError,
+    resolve_vector_index_file,
+    search_vector_chunks,
+)
 
 mcp = FastMCP(os.getenv("MCP_SERVER_NAME", "docs-mcp"))
 
@@ -53,8 +59,18 @@ def _find_site(name: str) -> dict | None:
     return None
 
 
-def _empty_search_response() -> dict:
-    return {"mode": "keyword", "vector_hits": 0, "keyword_hits": 0, "results": []}
+def _site_search_engine(site: dict) -> str:
+    return _normalize_search_engine(site.get("search_engine"), site.get("name"))
+
+
+def _empty_search_response(mode: str = "keyword") -> dict:
+    return {"mode": mode, "vector_hits": 0, "keyword_hits": 0, "results": []}
+
+
+def _search_error_response(mode: str, error_type: str, message: str) -> dict:
+    response = _empty_search_response(mode)
+    response["error"] = {"type": error_type, "message": message}
+    return response
 
 
 def _site_not_found_search_response(site_name: str) -> dict:
@@ -106,6 +122,33 @@ def _vector_lookup(site: dict, query: str, limit: int) -> list[dict]:
         return []
 
 
+def _vector_lookup_strict(site: dict, query: str, limit: int) -> tuple[list[dict], dict | None]:
+    vector_index_file = resolve_vector_index_file(site)
+    if not Path(vector_index_file).exists():
+        return [], {
+            "type": "vector_index_missing",
+            "message": (
+                f"Vector search is enabled for '{site['name']}' but the sidecar is missing: "
+                f"{vector_index_file}"
+            ),
+        }
+
+    try:
+        return search_vector_chunks(site, query, limit), None
+    except VectorBackendUnavailableError as exc:
+        return [], {
+            "type": "vector_backend_unavailable",
+            "message": str(exc) or "Vector search backend is unavailable.",
+        }
+    except (sqlite3.Error, OSError, VectorIndexError) as exc:
+        return [], {
+            "type": "vector_index_unreadable",
+            "message": (
+                f"Vector sidecar for '{site['name']}' is unreadable: {vector_index_file}. " f"{exc}"
+            ),
+        }
+
+
 def _normalize_keyword_results(results: list[dict]) -> list[dict]:
     return [
         {
@@ -131,6 +174,12 @@ def _normalize_vector_results(results: list[dict]) -> list[dict]:
             "_dedupe_keys": _dedupe_keys(result),
         }
         for result in results
+    ]
+
+
+def _public_search_results(results: list[dict]) -> list[dict]:
+    return [
+        {key: value for key, value in result.items() if key != "_dedupe_keys"} for result in results
     ]
 
 
@@ -190,6 +239,29 @@ def _search_response(keyword_results: list[dict], vector_results: list[dict], li
     response["keyword_hits"] = len(keyword_results)
     response["results"] = merged_results
     return response
+
+
+def _keyword_search_response(site: dict, query: str, limit: int) -> dict:
+    keyword_results = _keyword_lookup(site, query, limit)
+    response = _empty_search_response("keyword")
+    response["keyword_hits"] = len(keyword_results)
+    response["results"] = _public_search_results(_normalize_keyword_results(keyword_results))
+    return response
+
+
+def _vector_search_response(site: dict, query: str, limit: int) -> dict:
+    vector_results, error = _vector_lookup_strict(site, query, limit)
+    if error:
+        return _search_error_response("vector", error["type"], error["message"])
+
+    response = _empty_search_response("vector")
+    response["vector_hits"] = len(vector_results)
+    response["results"] = _public_search_results(_normalize_vector_results(vector_results))
+    return response
+
+
+def _limit_error_mode(search_engine: str) -> str:
+    return "vector" if search_engine == "vector" else "keyword"
 
 
 @mcp.tool()
@@ -252,9 +324,15 @@ def search_docs(site_name: str, query: str, limit: int = 10) -> str:
     site = _find_site(site_name)
     if not site:
         return json.dumps(_site_not_found_search_response(site_name), indent=2)
+    search_engine = _site_search_engine(site)
     normalized_limit = _normalize_search_limit(limit)
     if normalized_limit is None:
-        return json.dumps(_empty_search_response(), indent=2)
+        return json.dumps(_empty_search_response(_limit_error_mode(search_engine)), indent=2)
+    if search_engine == "keyword":
+        return json.dumps(_keyword_search_response(site, query, normalized_limit), indent=2)
+    if search_engine == "vector":
+        return json.dumps(_vector_search_response(site, query, normalized_limit), indent=2)
+
     keyword_results = _keyword_lookup(site, query, normalized_limit)
     vector_results = _vector_lookup(site, query, normalized_limit)
     return json.dumps(_search_response(keyword_results, vector_results, normalized_limit), indent=2)

@@ -64,6 +64,7 @@ SITE1_PASSWORD=replace-me
 - `crawl.allow_patterns`: optional allow-list glob patterns
 - `crawl.deny_patterns`: optional deny-list glob patterns
 - `index_file`: SQLite database path for the site index
+- `search_engine`: per-site search mode. Default: `hybrid`. Use `keyword` to disable vector lookup entirely, `vector` for vector-only semantic search, or `hybrid` to merge keyword and vector results
 - `vector_index_file`: local sqlite-vec sidecar path for that site's chunk embeddings; if omitted, the runtime uses the same directory and file stem as `index_file` with a `.vec.db` suffix
 - `vectorizer.chunk_size`: maximum normalized chunk length in characters for post-crawl vector records
 - `vectorizer.chunk_overlap`: overlapping trailing characters reused when the vectorizer creates the next chunk
@@ -89,6 +90,7 @@ sites:
       allow_patterns: []
       deny_patterns: []
     index_file: "index/my_docs.db"
+    search_engine: "hybrid"
     vector_index_file: "index/my_docs.vec.db"
     vectorizer:
       chunk_size: 800
@@ -105,6 +107,7 @@ The sample config file also includes a few future-facing keys such as `auth_mode
 - `crawl.start_delay_seconds` is off by default. Use it when you want a visible headful browser to load the start page, pause, and let you switch to the exact page you want to scan.
 
 ### Local Vector Sidecar Notes
+- `search_engine: keyword` keeps the site on keyword-only search, `search_engine: vector` uses the vector sidecar only, and `search_engine: hybrid` combines both.
 - `docmcp-crawl` still writes only the keyword SQLite index in this stage.
 - Build or refresh the local vector sidecar explicitly with `docmcp-vectorize --site "<Site Name>"`, `docmcp_vectorizer --site "<Site Name>"`, or `docmcp-crawl --vectorize --site "<Site Name>"` after crawling.
 - The vectorizer reads the existing `index_file`, chunks page Markdown deterministically, generates deterministic local embeddings, and rewrites the configured `vector_index_file`.

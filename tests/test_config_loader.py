@@ -17,6 +17,7 @@ def test_load_config_resolves_runtime_paths_and_env(monkeypatch, tmp_path):
               - name: "Example Docs"
                 url: "${DOCS_URL}"
                 auth_required: false
+                search_engine: "vector"
                 session_file: "storage/example.json"
                 crawl:
                   redirect_policy: "requested"
@@ -36,6 +37,7 @@ def test_load_config_resolves_runtime_paths_and_env(monkeypatch, tmp_path):
     site = config["sites"][0]
 
     assert site["url"] == "https://example.test/docs"
+    assert site["search_engine"] == "vector"
     assert site["session_file"] == str(runtime_root / "storage" / "example.json")
     assert site["crawl"]["redirect_policy"] == "requested"
     assert site["index_file"] == str(runtime_root / "index" / "example.db")
@@ -71,6 +73,7 @@ def test_load_config_resolves_config_file_relative_to_runtime_root(monkeypatch, 
     config = load_config()
 
     assert config["sites"][0]["url"] == "https://example.test/docs"
+    assert config["sites"][0]["search_engine"] == "hybrid"
     assert config["sites"][0]["session_file"] == str(runtime_root / "storage" / "relative.json")
     assert config["sites"][0]["index_file"] == str(runtime_root / "index" / "relative.db")
     assert config["sites"][0]["vector_index_file"] == str(
@@ -157,3 +160,27 @@ def test_get_sites_requires_non_empty_sites_list(monkeypatch, tmp_path):
 
     with pytest.raises(ConfigError, match="Configuration has no sites"):
         get_sites()
+
+
+def test_load_config_rejects_invalid_search_engine(monkeypatch, tmp_path):
+    runtime_root = tmp_path / "runtime"
+    (runtime_root / "config").mkdir(parents=True)
+    (runtime_root / "config" / "sites.yaml").write_text(
+        textwrap.dedent(
+            """
+            sites:
+              - name: "Broken Docs"
+                url: "https://example.test/docs"
+                auth_required: false
+                search_engine: "fuzzy"
+                session_file: "storage/broken.json"
+                index_file: "index/broken.db"
+            """
+        ).strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("DOC_MCP_HOME", str(runtime_root))
+
+    with pytest.raises(ConfigError, match="Invalid search_engine"):
+        load_config()
