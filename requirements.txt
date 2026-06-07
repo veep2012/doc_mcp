@@ -13,5 +13,8 @@ PyYAML>=6.0.1
 # Utilities
 python-dotenv>=1.0.0
 
+# Embeddings
+fastembed>=0.7.2
+
 # Local vector index
 sqlite-vec>=0.1.9

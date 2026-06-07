@@ -121,7 +121,7 @@ Goal: Own a repo-local sqlite-vec sidecar and rebuild it from crawled SQLite con
 Stage 3 is implemented in the current code path through the dedicated `docmcp-vectorize`
 and `docmcp_vectorizer` CLIs and the local sqlite-vec sidecar stored next to each site's keyword index by default.
 The vectorizer reads the existing crawl index, chunks Markdown deterministically, generates
-deterministic local embeddings, and rewrites the configured vector sidecar after each run.
+FastEmbed embeddings, and rewrites the configured vector sidecar after each run.
 MCP remains read-only at query time and continues to operate without any vector data.
 The crawler can optionally chain the same rebuild immediately after a successful crawl with
 `docmcp-crawl --vectorize`, while the dedicated vectorizer CLI remains available for manual

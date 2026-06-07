@@ -1,3 +1,5 @@
+import hashlib
+import re
 import sqlite3
 
 import pytest
@@ -7,8 +9,10 @@ try:
 except ImportError:  # pragma: no cover - exercised only when the backend is unavailable
     sqlite_vec = None
 
+import docmcp.vector_index as vector_index
 from docmcp.index_store import init_db, upsert_page
 from docmcp.vector_index import (
+    EmbeddingBackendUnavailableError,
     VectorSourceError,
     build_vector_records,
     chunk_markdown,
@@ -35,6 +39,47 @@ def _read_vector_db(index_file):
     return conn
 
 
+class _FakeTextEmbedding:
+    def __init__(self, model_name: str):
+        self.model_name = model_name
+
+    def embed(self, texts):
+        return [self._embed_text(text) for text in texts]
+
+    @staticmethod
+    def _embed_text(text: str) -> list[float]:
+        dimensions = 8
+        vector = [0.0] * dimensions
+        tokens = re.findall(r"[A-Za-z0-9_]+", text.lower())
+        if not tokens:
+            vector[0] = 1.0
+            return vector
+
+        for token in tokens:
+            digest = hashlib.sha256(token.encode("utf-8")).digest()
+            primary = int.from_bytes(digest[:4], "little") % dimensions
+            secondary = int.from_bytes(digest[4:8], "little") % dimensions
+            sign = -1.0 if digest[8] & 1 else 1.0
+            weight = 1.0 + (digest[9] / 255.0)
+            vector[primary] += sign * weight
+            vector[secondary] += (weight / 2.0) * (-sign)
+
+        norm = sum(component * component for component in vector) ** 0.5
+        if norm == 0:
+            vector[0] = 1.0
+            return vector
+        return [component / norm for component in vector]
+
+
+@pytest.fixture(autouse=True)
+def _fake_fastembed_backend(monkeypatch):
+    monkeypatch.setattr(
+        vector_index,
+        "_load_text_embedding_backend",
+        lambda model_name: _FakeTextEmbedding(model_name),
+    )
+
+
 def test_build_vector_records_shapes_stable_chunk_records():
     records = build_vector_records(
         "Example Docs",
@@ -48,7 +93,7 @@ def test_build_vector_records_shapes_stable_chunk_records():
         ],
         chunk_size=20,
         chunk_overlap=5,
-        embedding_dimensions=8,
+        embedding_model="fake-fastembed-model",
     )
 
     assert len(records) >= 2
@@ -72,7 +117,7 @@ def test_build_vector_records_shapes_stable_chunk_records():
             ],
             chunk_size=20,
             chunk_overlap=5,
-            embedding_dimensions=8,
+            embedding_model="fake-fastembed-model",
         )
         == records
     )
@@ -105,20 +150,17 @@ def test_resolve_vector_index_file_defaults_to_sidecar_name(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "chunk_size, chunk_overlap, embedding_dimensions, expected",
+    "chunk_size, chunk_overlap, expected",
     [
-        (0, 5, 8, "chunk_size must be positive"),
-        (18, 5, 0, "embedding_dimensions must be positive"),
-        (18, -1, 8, "chunk_overlap must be non-negative"),
-        (18, 18, 8, "chunk_overlap must be smaller than chunk_size"),
-        (18, 19, 8, "chunk_overlap must be smaller than chunk_size"),
+        (0, 5, "chunk_size must be positive"),
+        (18, -1, "chunk_overlap must be non-negative"),
+        (18, 18, "chunk_overlap must be smaller than chunk_size"),
+        (18, 19, "chunk_overlap must be smaller than chunk_size"),
     ],
 )
-def test_normalize_chunk_settings_rejects_invalid_values(
-    chunk_size, chunk_overlap, embedding_dimensions, expected
-):
+def test_normalize_chunk_settings_rejects_invalid_values(chunk_size, chunk_overlap, expected):
     with pytest.raises(ValueError, match=expected):
-        _normalize_chunk_settings(chunk_size, chunk_overlap, embedding_dimensions)
+        _normalize_chunk_settings(chunk_size, chunk_overlap, None)
 
 
 def test_rebuild_vector_index_creates_and_refreshes_sidecar(tmp_path):
@@ -137,13 +179,19 @@ def test_rebuild_vector_index_creates_and_refreshes_sidecar(tmp_path):
         "name": "Example Docs",
         "index_file": str(source_index),
         "vector_index_file": str(vector_index),
-        "vectorizer": {"chunk_size": 18, "chunk_overlap": 5, "embedding_dimensions": 8},
+        "vectorizer": {
+            "chunk_size": 18,
+            "chunk_overlap": 5,
+            "embedding_model": "fake-fastembed-model",
+        },
     }
 
     summary = rebuild_vector_index(site)
 
     assert summary.page_count == 1
     assert summary.chunk_count >= 2
+    assert summary.embedding_model == "fake-fastembed-model"
+    assert summary.embedding_dimensions == 8
     assert vector_index.exists()
 
     with _read_vector_db(vector_index) as conn:
@@ -151,10 +199,10 @@ def test_rebuild_vector_index_creates_and_refreshes_sidecar(tmp_path):
             "SELECT chunk_id, page_url, title, chunk_text FROM vector_chunks ORDER BY chunk_index"
         ).fetchall()
         meta = conn.execute(
-            "SELECT site_name, page_count, chunk_count, embedding_dimensions FROM vector_meta"
+            "SELECT site_name, page_count, chunk_count, embedding_model, embedding_dimensions FROM vector_meta"
         ).fetchone()
 
-    assert meta == ("Example Docs", 1, len(first_rows), 8)
+    assert meta == ("Example Docs", 1, len(first_rows), "fake-fastembed-model", 8)
     assert all(row[1] == "https://example.test/guide" for row in first_rows)
 
     upsert_page(
@@ -252,7 +300,11 @@ def test_search_vector_chunks_reads_ranked_matches_from_sidecar(tmp_path):
         "name": "Example Docs",
         "index_file": str(source_index),
         "vector_index_file": str(vector_index),
-        "vectorizer": {"chunk_size": 100, "chunk_overlap": 20, "embedding_dimensions": 8},
+        "vectorizer": {
+            "chunk_size": 100,
+            "chunk_overlap": 20,
+            "embedding_model": "fake-fastembed-model",
+        },
     }
     rebuild_vector_index(site)
 
@@ -265,3 +317,26 @@ def test_search_vector_chunks_reads_ranked_matches_from_sidecar(tmp_path):
     assert results[0]["distance"] <= results[1]["distance"]
     assert all(result["chunk_id"] for result in results)
     assert all(isinstance(result["text"], str) and result["text"] for result in results)
+
+
+def test_rebuild_vector_index_reports_embedding_backend_failure(monkeypatch, tmp_path):
+    source_index = tmp_path / "index" / "docs.db"
+    init_db(str(source_index))
+
+    monkeypatch.setattr(
+        vector_index,
+        "_load_text_embedding_backend",
+        lambda model_name: (_ for _ in ()).throw(
+            EmbeddingBackendUnavailableError("fastembed is not installed")
+        ),
+    )
+
+    site = {
+        "name": "Example Docs",
+        "index_file": str(source_index),
+        "vector_index_file": str(tmp_path / "index" / "docs.vec.db"),
+        "vectorizer": {"embedding_model": "fake-fastembed-model"},
+    }
+
+    with pytest.raises(EmbeddingBackendUnavailableError, match="fastembed is not installed"):
+        rebuild_vector_index(site)

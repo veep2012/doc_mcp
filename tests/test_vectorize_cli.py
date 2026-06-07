@@ -5,6 +5,7 @@ import pytest
 
 from docmcp.config.loader import ConfigError
 from docmcp.index_store import init_db, upsert_page
+import docmcp.vector_index as vector_index
 from docmcp.vector_index import (
     VectorBackendUnavailableError,
     VectorIndexError,
@@ -17,6 +18,23 @@ def _require_vector_backend():
     available, message = vector_backend_status()
     if not available:
         pytest.skip(message or "sqlite-vec backend unavailable")
+
+
+class _FakeTextEmbedding:
+    def __init__(self, model_name: str):
+        self.model_name = model_name
+
+    def embed(self, texts):
+        return [[1.0] + [0.0] * 7 for _ in texts]
+
+
+@pytest.fixture(autouse=True)
+def _fake_fastembed_backend(monkeypatch):
+    monkeypatch.setattr(
+        vector_index,
+        "_load_text_embedding_backend",
+        lambda model_name: _FakeTextEmbedding(model_name),
+    )
 
 
 def test_vectorize_cli_builds_local_vector_index(monkeypatch, tmp_path, capsys):
@@ -44,7 +62,7 @@ def test_vectorize_cli_builds_local_vector_index(monkeypatch, tmp_path, capsys):
                 vectorizer:
                   chunk_size: 24
                   chunk_overlap: 6
-                  embedding_dimensions: 8
+                  embedding_model: "fake-fastembed-model"
             """
         ).strip()
         + "\n",
@@ -93,7 +111,7 @@ def test_vectorize_cli_debug_emits_chunk_progress(monkeypatch, tmp_path, capsys)
                 vectorizer:
                   chunk_size: 24
                   chunk_overlap: 6
-                  embedding_dimensions: 8
+                  embedding_model: "fake-fastembed-model"
             """
         ).strip()
         + "\n",
@@ -205,7 +223,7 @@ def test_vectorize_cli_reports_vectorization_failures(monkeypatch, tmp_path, cap
     assert excinfo.value.code == 1
     stderr = capsys.readouterr().err
     if isinstance(error, VectorBackendUnavailableError):
-        assert "[vectorize] sqlite-vec backend unavailable:" in stderr
+        assert "[vectorize] Vector backend unavailable:" in stderr
     else:
         assert "[vectorize] Vectorization failed:" in stderr
 

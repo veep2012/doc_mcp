@@ -30,7 +30,7 @@ sites:
     vectorizer:
       chunk_size: 800
       chunk_overlap: 120
-      embedding_dimensions: 32
+      embedding_model: "BAAI/bge-small-en-v1.5"
 
   # ---------------------------------------------------------------------------
   # Public site (no auth required)
@@ -58,4 +58,4 @@ sites:
     vectorizer:
       chunk_size: 800
       chunk_overlap: 120
-      embedding_dimensions: 32
+      embedding_model: "BAAI/bge-small-en-v1.5"

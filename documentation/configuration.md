@@ -68,7 +68,7 @@ SITE1_PASSWORD=replace-me
 - `vector_index_file`: local sqlite-vec sidecar path for that site's chunk embeddings; if omitted, the runtime uses the same directory and file stem as `index_file` with a `.vec.db` suffix
 - `vectorizer.chunk_size`: maximum normalized chunk length in characters for post-crawl vector records
 - `vectorizer.chunk_overlap`: overlapping trailing characters reused when the vectorizer creates the next chunk
-- `vectorizer.embedding_dimensions`: deterministic local embedding size written into the sqlite-vec sidecar
+- `vectorizer.embedding_model`: FastEmbed text model used to build and query the vector sidecar. Default: `BAAI/bge-small-en-v1.5`
 
 Example:
 ```yaml
@@ -95,7 +95,7 @@ sites:
     vectorizer:
       chunk_size: 800
       chunk_overlap: 120
-      embedding_dimensions: 32
+      embedding_model: "BAAI/bge-small-en-v1.5"
 ```
 
 ### Notes On Example Fields
@@ -110,8 +110,9 @@ The sample config file also includes a few future-facing keys such as `auth_mode
 - `search_engine: keyword` keeps the site on keyword-only search, `search_engine: vector` uses the vector sidecar only, and `search_engine: hybrid` combines both.
 - `docmcp-crawl` still writes only the keyword SQLite index in this stage.
 - Build or refresh the local vector sidecar explicitly with `docmcp-vectorize --site "<Site Name>"`, `docmcp_vectorizer --site "<Site Name>"`, or `docmcp-crawl --vectorize --site "<Site Name>"` after crawling.
-- The vectorizer reads the existing `index_file`, chunks page Markdown deterministically, generates deterministic local embeddings, and rewrites the configured `vector_index_file`.
-- Install the vector backend with `pip install sqlite-vec`. The packaged project now declares `sqlite-vec` as a runtime dependency.
+- The vectorizer reads the existing `index_file`, chunks page Markdown deterministically, generates FastEmbed embeddings, and rewrites the configured `vector_index_file`.
+- Install the vector backend with `pip install sqlite-vec fastembed` if you are running from source. The packaged project now declares both dependencies as runtime requirements.
+- Changing `vectorizer.embedding_model` changes the vector space and requires rebuilding the sidecar.
 - `docmcp-vectorize --debug` and `docmcp_vectorizer --debug` enable chunk-level vectorizer diagnostics; normal runs stay at page-level progress.
 - When `docmcp-crawl --debug --vectorize` runs the vectorizer immediately after a successful crawl, that debug mode is inherited.
 - To inspect the vector tables with `sqlite3`, use a shell that supports extension loading, open `index/<site>.vec.db`, and load the platform-appropriate `vec0` library before running `.tables`:

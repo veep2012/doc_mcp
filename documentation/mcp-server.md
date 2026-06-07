@@ -90,6 +90,7 @@ Implementation notes:
 - `keyword_hits` reflects the number of SQLite FTS5 matches returned for the query before merge-time deduplication.
 - `results` are merged deterministically with vector rows first (ordered by nearest-neighbor distance) and keyword rows second (ordered by existing FTS rank).
 - `search_engine: keyword` skips vector lookup entirely, while `search_engine: vector` returns an error-bearing empty response if the vector sidecar is missing or unreadable.
+- Vector queries use the FastEmbed model recorded in the sidecar metadata, so rebuilding the sidecar is required after changing `vectorizer.embedding_model`.
 - Cross-source duplicates are removed deterministically using stable chunk/page-text identity, and the retained row keeps its original `source` label.
 - `limit` defaults to `10` and bounds the merged response.
 - `score` remains experimental and should be treated as an ordering hint, not as an absolute relevance measure.

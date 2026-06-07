@@ -1,9 +1,12 @@
 import json
+import hashlib
+import re
 import sqlite3
 
 import pytest
 
 import docmcp.tools as tools
+import docmcp.vector_index as vector_index
 from docmcp.index_store import init_db, upsert_page
 from docmcp.vector_index import rebuild_vector_index, vector_backend_status
 
@@ -12,6 +15,47 @@ def _require_vector_backend():
     available, message = vector_backend_status()
     if not available:
         pytest.skip(message or "sqlite-vec backend unavailable")
+
+
+class _FakeTextEmbedding:
+    def __init__(self, model_name: str):
+        self.model_name = model_name
+
+    def embed(self, texts):
+        return [self._embed_text(text) for text in texts]
+
+    @staticmethod
+    def _embed_text(text: str) -> list[float]:
+        dimensions = 8
+        vector = [0.0] * dimensions
+        tokens = re.findall(r"[A-Za-z0-9_]+", text.lower())
+        if not tokens:
+            vector[0] = 1.0
+            return vector
+
+        for token in tokens:
+            digest = hashlib.sha256(token.encode("utf-8")).digest()
+            primary = int.from_bytes(digest[:4], "little") % dimensions
+            secondary = int.from_bytes(digest[4:8], "little") % dimensions
+            sign = -1.0 if digest[8] & 1 else 1.0
+            weight = 1.0 + (digest[9] / 255.0)
+            vector[primary] += sign * weight
+            vector[secondary] += (weight / 2.0) * (-sign)
+
+        norm = sum(component * component for component in vector) ** 0.5
+        if norm == 0:
+            vector[0] = 1.0
+            return vector
+        return [component / norm for component in vector]
+
+
+@pytest.fixture(autouse=True)
+def _fake_fastembed_backend(monkeypatch):
+    monkeypatch.setattr(
+        vector_index,
+        "_load_text_embedding_backend",
+        lambda model_name: _FakeTextEmbedding(model_name),
+    )
 
 
 def test_mcp_tools_return_site_pages_search_and_fetch(monkeypatch, tmp_path):
@@ -312,6 +356,47 @@ def test_search_docs_vector_mode_reports_unreadable_sidecar(monkeypatch, tmp_pat
     assert response["results"] == []
     assert response["error"]["type"] == "vector_index_unreadable"
     assert "unreadable" in response["error"]["message"]
+
+
+def test_search_docs_vector_mode_reports_missing_fastembed_backend(monkeypatch, tmp_path):
+    _require_vector_backend()
+    index_file = tmp_path / "docs.db"
+    vector_index_file = tmp_path / "docs.vec.db"
+    init_db(str(index_file))
+    upsert_page(str(index_file), "https://example.test/vector", "Vector", "Alpha beta")
+
+    site = {
+        "name": "Vector Docs",
+        "url": "https://example.test",
+        "auth_required": False,
+        "search_engine": "vector",
+        "index_file": str(index_file),
+        "vector_index_file": str(vector_index_file),
+        "vectorizer": {"embedding_model": "fake-fastembed-model"},
+    }
+    rebuild_vector_index(site)
+
+    monkeypatch.setattr(
+        tools,
+        "_get_sites",
+        lambda: [site],
+    )
+    monkeypatch.setattr(
+        vector_index,
+        "_load_text_embedding_backend",
+        lambda model_name: (_ for _ in ()).throw(
+            tools.VectorBackendUnavailableError("fastembed is not installed")
+        ),
+    )
+
+    response = json.loads(tools.search_docs("Vector Docs", "Alpha"))
+
+    assert response["mode"] == "vector"
+    assert response["vector_hits"] == 0
+    assert response["keyword_hits"] == 0
+    assert response["results"] == []
+    assert response["error"]["type"] == "vector_backend_unavailable"
+    assert "fastembed is not installed" in response["error"]["message"]
 
 
 def test_search_docs_returns_empty_json_on_sqlite_query_error(monkeypatch, tmp_path):
@@ -674,7 +759,11 @@ def test_search_docs_returns_hybrid_results_with_partial_vector_sidecar(monkeypa
         "auth_required": False,
         "index_file": str(index_file),
         "vector_index_file": str(vector_index_file),
-        "vectorizer": {"chunk_size": 100, "chunk_overlap": 20, "embedding_dimensions": 8},
+        "vectorizer": {
+            "chunk_size": 100,
+            "chunk_overlap": 20,
+            "embedding_model": "fake-fastembed-model",
+        },
     }
     rebuild_vector_index(site)
 

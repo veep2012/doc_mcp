@@ -82,7 +82,7 @@ ORDER BY ce.distance;
 
 Notes:
 - Bind `:query` to a real vector with the same dimension as the table.
-- In this repository the default dimension is `32`, unless a site overrides `vectorizer.embedding_dimensions`.
+- In this repository the vector dimension comes from the FastEmbed model recorded in `vector_meta.embedding_model` and `vector_meta.embedding_dimensions`.
 - The `distance` column is smaller for closer matches.
 
 ### Test A Query With A Literal Vector
