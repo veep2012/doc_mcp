@@ -5,7 +5,6 @@ import pytest
 
 from docmcp.config.loader import ConfigError
 from docmcp.index_store import init_db, upsert_page
-import docmcp.vector_index as vector_index
 from docmcp.vector_index import (
     VectorBackendUnavailableError,
     VectorIndexError,
@@ -18,23 +17,6 @@ def _require_vector_backend():
     available, message = vector_backend_status()
     if not available:
         pytest.skip(message or "sqlite-vec backend unavailable")
-
-
-class _FakeTextEmbedding:
-    def __init__(self, model_name: str):
-        self.model_name = model_name
-
-    def embed(self, texts):
-        return [[1.0] + [0.0] * 7 for _ in texts]
-
-
-@pytest.fixture(autouse=True)
-def _fake_fastembed_backend(monkeypatch):
-    monkeypatch.setattr(
-        vector_index,
-        "_load_text_embedding_backend",
-        lambda model_name: _FakeTextEmbedding(model_name),
-    )
 
 
 def test_vectorize_cli_builds_local_vector_index(monkeypatch, tmp_path, capsys):
