@@ -12,6 +12,7 @@ from docmcp.index_store import init_db, upsert_page
 from docmcp.vector_index import (
     DEFAULT_EMBEDDING_MODEL,
     EmbeddingBackendUnavailableError,
+    VectorIndexError,
     VectorSourceError,
     build_vector_records,
     chunk_markdown,
@@ -328,6 +329,44 @@ def test_search_vector_chunks_reads_ranked_matches_from_sidecar(tmp_path):
     assert results[0]["distance"] <= results[1]["distance"]
     assert all(result["chunk_id"] for result in results)
     assert all(isinstance(result["text"], str) and result["text"] for result in results)
+
+
+def test_search_vector_chunks_rejects_stale_embedding_dimensions(monkeypatch, tmp_path):
+    _require_vector_backend()
+    source_index = tmp_path / "index" / "docs.db"
+    vector_index_file = tmp_path / "index" / "docs.vec.db"
+    init_db(str(source_index))
+    upsert_page(
+        str(source_index),
+        "https://example.test/vector-best",
+        "Vector Best",
+        "Alpha alpha alpha beta",
+    )
+
+    site = {
+        "name": "Example Docs",
+        "index_file": str(source_index),
+        "vector_index_file": str(vector_index_file),
+        "vectorizer": {
+            "chunk_size": 100,
+            "chunk_overlap": 20,
+            "embedding_model": "fake-fastembed-model",
+        },
+    }
+    rebuild_vector_index(site)
+
+    class _ShortEmbeddingBackend:
+        def embed(self, texts):
+            return [[1.0, 0.0, 0.0] for _ in texts]
+
+    monkeypatch.setattr(
+        vector_index,
+        "_load_text_embedding_backend",
+        lambda model_name: _ShortEmbeddingBackend(),
+    )
+
+    with pytest.raises(VectorIndexError, match="embedding dimension mismatch"):
+        search_vector_chunks(site, "Alpha", limit=2)
 
 
 def test_rebuild_vector_index_reports_embedding_backend_failure(monkeypatch, tmp_path):

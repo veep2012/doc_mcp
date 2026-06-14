@@ -809,6 +809,51 @@ def test_search_docs_returns_vector_only_results_when_keyword_has_no_hits(monkey
     }
 
 
+def test_search_docs_returns_keyword_results_when_vector_lookup_returns_no_hits(
+    monkeypatch, tmp_path, caplog
+):
+    index_file = tmp_path / "docs.db"
+    init_db(str(index_file))
+    upsert_page(str(index_file), "https://example.test/guide", "Guide", "Alpha beta")
+
+    monkeypatch.setattr(
+        tools,
+        "_get_sites",
+        lambda: [
+            {
+                "name": "Example Docs",
+                "url": "https://example.test",
+                "auth_required": False,
+                "index_file": str(index_file),
+                "vector_index_file": str(tmp_path / "docs.vec.db"),
+            }
+        ],
+    )
+    monkeypatch.setattr(tools, "search_vector_chunks", lambda site, query, limit: [])
+
+    caplog.set_level(logging.WARNING, logger="docmcp.tools")
+    response = json.loads(tools.search_docs("Example Docs", "Alpha"))
+
+    assert response == {
+        "mode": "keyword",
+        "vector_hits": 0,
+        "keyword_hits": 1,
+        "results": [
+            {
+                "text": "[Alpha] beta",
+                "page_url": "https://example.test/guide",
+                "title": "Guide",
+                "score": response["results"][0]["score"],
+                "source": "keyword",
+            }
+        ],
+    }
+    assert isinstance(response["results"][0]["score"], float)
+    assert not any(
+        "Hybrid search degraded to keyword" in record.message for record in caplog.records
+    )
+
+
 def test_search_docs_returns_hybrid_results_with_partial_vector_sidecar(monkeypatch, tmp_path):
     _require_vector_backend()
 
