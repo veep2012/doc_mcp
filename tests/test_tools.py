@@ -1,4 +1,5 @@
 import json
+import logging
 import sqlite3
 
 import pytest
@@ -388,6 +389,43 @@ def test_search_docs_returns_empty_json_on_sqlite_query_error(monkeypatch, tmp_p
     }
 
 
+def test_search_docs_logs_hybrid_vector_degradation(monkeypatch, tmp_path, caplog):
+    index_file = tmp_path / "docs.db"
+    init_db(str(index_file))
+    upsert_page(str(index_file), "https://example.test/guide", "Guide", "Alpha beta")
+
+    monkeypatch.setattr(
+        tools,
+        "_get_sites",
+        lambda: [
+            {
+                "name": "Example Docs",
+                "url": "https://example.test",
+                "auth_required": False,
+                "index_file": str(index_file),
+            }
+        ],
+    )
+
+    def raise_sqlite_error(index_file: str, query: str, limit: int) -> list[dict]:
+        raise sqlite3.OperationalError("broken vector index")
+
+    monkeypatch.setattr(tools, "search_vector_chunks", raise_sqlite_error)
+
+    caplog.set_level(logging.WARNING, logger="docmcp.tools")
+    response = json.loads(tools.search_docs("Example Docs", "Alpha"))
+
+    assert response["mode"] == "keyword"
+    assert response["vector_hits"] == 0
+    assert response["keyword_hits"] == 1
+    assert any(
+        record.name == "docmcp.tools"
+        and "Hybrid search degraded to keyword" in record.message
+        and "OperationalError" in record.message
+        for record in caplog.records
+    )
+
+
 def test_search_docs_rejects_non_positive_limit(monkeypatch, tmp_path):
     index_file = tmp_path / "docs.db"
     init_db(str(index_file))
@@ -526,6 +564,52 @@ def test_merge_search_results_prefers_vector_order_and_deduplicates():
             "page_url": "https://example.test/install",
             "title": "Install",
             "score": 0.5,
+            "source": "keyword",
+        },
+    ]
+
+
+def test_merge_search_results_keeps_distinct_keyword_snippets_from_same_page():
+    vector_results = [
+        {
+            "text": "Alpha beta",
+            "page_url": "https://example.test/guide",
+            "title": "Guide",
+            "score": 0.9,
+            "source": "vector",
+            "_dedupe_keys": (
+                "chunk:chunk-1",
+                "text:https://example.test/guide\nAlpha beta",
+            ),
+        }
+    ]
+    keyword_results = [
+        {
+            "text": "Alpha beta gamma",
+            "page_url": "https://example.test/guide",
+            "title": "Guide",
+            "score": 1.0,
+            "source": "keyword",
+            "_dedupe_keys": ("text:https://example.test/guide\nAlpha beta gamma",),
+        }
+    ]
+
+    merged_results, contributors = tools._merge_search_results(vector_results, keyword_results, 10)
+
+    assert contributors == {"keyword", "vector"}
+    assert merged_results == [
+        {
+            "text": "Alpha beta",
+            "page_url": "https://example.test/guide",
+            "title": "Guide",
+            "score": 0.9,
+            "source": "vector",
+        },
+        {
+            "text": "Alpha beta gamma",
+            "page_url": "https://example.test/guide",
+            "title": "Guide",
+            "score": 1.0,
             "source": "keyword",
         },
     ]
@@ -735,34 +819,19 @@ def test_search_docs_returns_hybrid_results_with_partial_vector_sidecar(monkeypa
 
     response = json.loads(tools.search_docs("Example Docs", "Alpha", limit=3))
 
-    assert response == {
-        "mode": "hybrid",
-        "vector_hits": 2,
-        "keyword_hits": 2,
-        "results": [
-            {
-                "text": "Alpha alpha alpha beta",
-                "page_url": "https://example.test/vector-best",
-                "title": "Vector Best",
-                "score": response["results"][0]["score"],
-                "source": "vector",
-            },
-            {
-                "text": "Gamma delta epsilon zeta",
-                "page_url": "https://example.test/vector-only",
-                "title": "Vector Only",
-                "score": response["results"][1]["score"],
-                "source": "vector",
-            },
-            {
-                "text": "[Alpha] beta gamma delta",
-                "page_url": "https://example.test/keyword-only",
-                "title": "Keyword Only",
-                "score": response["results"][2]["score"],
-                "source": "keyword",
-            },
-        ],
-    }
+    assert response["mode"] == "hybrid"
+    assert response["vector_hits"] == 2
+    assert response["keyword_hits"] == 2
+    assert [result["source"] for result in response["results"]] == [
+        "vector",
+        "vector",
+        "keyword",
+    ]
+    assert response["results"][0]["page_url"] == "https://example.test/vector-best"
+    assert response["results"][1]["page_url"] == "https://example.test/vector-only"
+    assert response["results"][2]["page_url"] == "https://example.test/vector-best"
+    assert response["results"][2]["title"] == "Vector Best"
+    assert response["results"][2]["text"].startswith("[Alpha]")
     assert all(isinstance(result["score"], float) for result in response["results"])
 
 

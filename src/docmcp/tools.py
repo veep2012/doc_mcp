@@ -11,6 +11,7 @@ Tools:
 """
 
 import json
+import logging
 import os
 import sqlite3
 from pathlib import Path
@@ -50,6 +51,7 @@ from .vector_index import (
 )
 
 mcp = FastMCP(os.getenv("MCP_SERVER_NAME", "docs-mcp"))
+logger = logging.getLogger("docmcp.tools")
 
 
 def _find_site(name: str) -> dict | None:
@@ -118,7 +120,12 @@ def _keyword_lookup(site: dict, query: str, limit: int) -> list[dict]:
 def _vector_lookup(site: dict, query: str, limit: int) -> list[dict]:
     try:
         return search_vector_chunks(site, query, limit)
-    except (sqlite3.Error, OSError, VectorIndexError):
+    except (sqlite3.Error, OSError, VectorIndexError) as exc:
+        logger.warning(
+            "Hybrid search degraded to keyword for site %r because vector lookup failed: %s",
+            site["name"],
+            type(exc).__name__,
+        )
         return []
 
 
@@ -189,21 +196,13 @@ def _merge_search_results(
     merged: list[dict] = []
     seen_keys: set[str] = set()
     contributors: set[str] = set()
-    vector_pages: set[str] = set()
 
     for result in [*vector_results, *keyword_results]:
         dedupe_keys = result.get("_dedupe_keys", ())
-        # Keyword search is page-level today, so once vector search has already retained
-        # a page, keep the vector row to preserve chunk-level vector granularity and
-        # suppress the overlapping keyword page hit for that same URL.
-        if result["source"] == "keyword" and result["page_url"] in vector_pages:
-            continue
         if any(key in seen_keys for key in dedupe_keys):
             continue
         seen_keys.update(dedupe_keys)
         contributors.add(result["source"])
-        if result["source"] == "vector":
-            vector_pages.add(result["page_url"])
         merged.append(
             {
                 "text": result["text"],
