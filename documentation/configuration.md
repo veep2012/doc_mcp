@@ -69,6 +69,47 @@ SITE1_PASSWORD=replace-me
 - `vectorizer.chunk_size`: maximum normalized chunk length in characters for post-crawl vector records
 - `vectorizer.chunk_overlap`: overlapping trailing characters reused when the vectorizer creates the next chunk
 - `vectorizer.embedding_model`: FastEmbed text model used to build and query the vector sidecar. Default: `BAAI/bge-small-en-v1.5`
+- Before changing this value, check the models supported by the installed FastEmbed package:
+  ```bash
+  .venv/bin/python - <<'PY'
+  from fastembed import TextEmbedding
+
+  print([m["model"] for m in TextEmbedding.list_supported_models()])
+  PY
+  ```
+- `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` is a good multilingual option when your search corpus spans multiple languages.
+- `BAAI/bge-small-en-v1.5` is a good default when your corpus is primarily English and you want a smaller, faster embedding model.
+- Supported text embedding models in the currently bundled `fastembed 0.8.0` include:
+  - `BAAI/bge-base-en`
+  - `BAAI/bge-base-en-v1.5`
+  - `BAAI/bge-large-en-v1.5`
+  - `BAAI/bge-small-en`
+  - `BAAI/bge-small-en-v1.5`
+  - `BAAI/bge-small-zh-v1.5`
+  - `mixedbread-ai/mxbai-embed-large-v1`
+  - `snowflake/snowflake-arctic-embed-xs`
+  - `snowflake/snowflake-arctic-embed-s`
+  - `snowflake/snowflake-arctic-embed-m`
+  - `snowflake/snowflake-arctic-embed-m-long`
+  - `snowflake/snowflake-arctic-embed-l`
+  - `jinaai/jina-clip-v1`
+  - `Qdrant/clip-ViT-B-32-text`
+  - `sentence-transformers/all-MiniLM-L6-v2`
+  - `jinaai/jina-embeddings-v2-base-en`
+  - `jinaai/jina-embeddings-v2-small-en`
+  - `jinaai/jina-embeddings-v2-base-de`
+  - `jinaai/jina-embeddings-v2-base-code`
+  - `jinaai/jina-embeddings-v2-base-zh`
+  - `jinaai/jina-embeddings-v2-base-es`
+  - `thenlper/gte-base`
+  - `thenlper/gte-large`
+  - `nomic-ai/nomic-embed-text-v1.5`
+  - `nomic-ai/nomic-embed-text-v1.5-Q`
+  - `nomic-ai/nomic-embed-text-v1`
+  - `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`
+  - `sentence-transformers/paraphrase-multilingual-mpnet-base-v2`
+  - `intfloat/multilingual-e5-large`
+  - `jinaai/jina-embeddings-v3`
 
 Example:
 ```yaml
@@ -95,7 +136,7 @@ sites:
     vectorizer:
       chunk_size: 800
       chunk_overlap: 120
-      embedding_model: "BAAI/bge-small-en-v1.5"
+      embedding_model: "BAAI/bge-small-en-v1.5"  # use a FastEmbed-supported model; multilingual docs can use sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
 ```
 
 ### Notes On Example Fields
