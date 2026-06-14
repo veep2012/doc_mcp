@@ -3,12 +3,12 @@ Local vector-index helpers and post-crawl vectorization support.
 """
 
 import hashlib
-import math
 import os
 import re
 import sqlite3
 import time
 from contextlib import suppress
+from functools import lru_cache
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,12 +18,11 @@ try:
 except ImportError:  # pragma: no cover - exercised via backend availability checks
     sqlite_vec = None
 
-from .index_store import count_pages, iter_page_documents
+from .index_store import _normalize_search_limit, count_pages, iter_page_documents
 
-DEFAULT_EMBEDDING_DIMENSIONS = 32
+DEFAULT_EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 DEFAULT_CHUNK_SIZE = 800
 DEFAULT_CHUNK_OVERLAP = 120
-_TOKEN_RE = re.compile(r"[A-Za-z0-9_]+")
 
 
 class VectorIndexError(RuntimeError):
@@ -32,6 +31,10 @@ class VectorIndexError(RuntimeError):
 
 class VectorBackendUnavailableError(VectorIndexError):
     """Raised when sqlite-vec is unavailable in the current runtime."""
+
+
+class EmbeddingBackendUnavailableError(VectorBackendUnavailableError):
+    """Raised when the FastEmbed runtime or model is unavailable."""
 
 
 class VectorSourceError(VectorIndexError):
@@ -61,6 +64,7 @@ class VectorBuildSummary:
     page_count: int
     chunk_count: int
     built_at: str
+    embedding_model: str
     embedding_dimensions: int
     chunk_size: int
     chunk_overlap: int
@@ -98,6 +102,87 @@ def vector_backend_status() -> tuple[bool, str | None]:
     return True, None
 
 
+def _normalize_embedding_model(value: object) -> str:
+    if value is None or value == "":
+        return DEFAULT_EMBEDDING_MODEL
+    if isinstance(value, str):
+        normalized = value.strip()
+        if normalized:
+            return normalized
+    raise ValueError("embedding_model must be a non-empty string")
+
+
+def _site_embedding_model(site: dict) -> str:
+    vectorizer_cfg = site.get("vectorizer", {})
+    return _normalize_embedding_model(vectorizer_cfg.get("embedding_model"))
+
+
+@lru_cache(maxsize=None)
+def _load_text_embedding_backend(model_name: str):
+    try:
+        from fastembed import TextEmbedding
+    except ImportError as exc:  # pragma: no cover - exercised through runtime error paths
+        raise EmbeddingBackendUnavailableError(
+            "fastembed is not installed. Install with: pip install fastembed"
+        ) from exc
+
+    try:
+        return TextEmbedding(model_name=model_name)
+    except Exception as exc:  # pragma: no cover - exercised through runtime error paths
+        raise EmbeddingBackendUnavailableError(
+            f"FastEmbed model '{model_name}' could not be loaded: {exc}"
+        ) from exc
+
+
+def _coerce_embedding(embedding: object) -> list[float]:
+    if hasattr(embedding, "tolist"):
+        values = embedding.tolist()
+    else:
+        values = list(embedding)  # type: ignore[arg-type]
+    return [float(value) for value in values]
+
+
+def _embed_texts(texts: list[str], model_name: str) -> list[list[float]]:
+    backend = _load_text_embedding_backend(model_name)
+    embeddings = backend.embed(texts)
+    return [_coerce_embedding(embedding) for embedding in embeddings]
+
+
+@lru_cache(maxsize=None)
+def _infer_embedding_dimensions(model_name: str, loader_token: object | None = None) -> int:
+    return len(_embed_texts(["embedding probe"], model_name)[0])
+
+
+def _connect_ro_vector_index(index_file: str) -> sqlite3.Connection | None:
+    available, message = vector_backend_status()
+    if not available:
+        raise VectorBackendUnavailableError(message or "sqlite-vec is unavailable.")
+
+    path = Path(index_file)
+    if not path.exists():
+        return None
+    try:
+        resolved_path = path.resolve(strict=True)
+    except FileNotFoundError:
+        return None
+
+    conn = sqlite3.connect(f"{resolved_path.as_uri()}?mode=ro", uri=True)
+    try:
+        conn.enable_load_extension(True)
+    except (AttributeError, sqlite3.NotSupportedError) as exc:
+        conn.close()
+        raise VectorBackendUnavailableError(
+            "SQLite extension loading is not available in this Python runtime."
+        ) from exc
+
+    try:
+        sqlite_vec.load(conn)
+    finally:
+        with suppress(sqlite3.Error):
+            conn.enable_load_extension(False)
+    return conn
+
+
 def _connect_vector_index(index_file: str) -> sqlite3.Connection:
     available, message = vector_backend_status()
     if not available:
@@ -112,16 +197,87 @@ def _connect_vector_index(index_file: str) -> sqlite3.Connection:
     return conn
 
 
+def search_vector_chunks(site: dict, query: str, limit: int = 10) -> list[dict]:
+    """Run a read-only nearest-neighbor search against a site's local vector sidecar."""
+    limit = _normalize_search_limit(limit)
+    if limit is None:
+        return []
+
+    conn = _connect_ro_vector_index(resolve_vector_index_file(site))
+    if conn is None:
+        return []
+
+    try:
+        meta = conn.execute(
+            """
+            SELECT embedding_model, embedding_dimensions
+            FROM vector_meta
+            WHERE site_name = ?
+            LIMIT 1
+            """,
+            (site["name"],),
+        ).fetchone()
+        if meta is None:
+            return []
+
+        embedding_model = meta[0] or DEFAULT_EMBEDDING_MODEL
+        embedding_dimensions = int(meta[1] or 0)
+
+        query_embedding = _embed_text(query, embedding_model)
+        if embedding_dimensions and len(query_embedding) != embedding_dimensions:
+            raise VectorIndexError(
+                f"Vector sidecar embedding dimension mismatch for '{site['name']}': "
+                f"expected {embedding_dimensions}, got {len(query_embedding)}. "
+                "Rebuild the sidecar with docmcp-vectorize."
+            )
+
+        rows = conn.execute(
+            """
+            SELECT
+                vc.chunk_id,
+                vc.page_url,
+                vc.title,
+                vc.chunk_text,
+                vc.chunk_index,
+                ce.distance
+            FROM chunk_embeddings AS ce
+            JOIN vector_chunks AS vc
+              ON vc.vec_rowid = ce.rowid
+            WHERE vc.site_name = ?
+              AND ce.embedding MATCH ?
+              AND k = ?
+            ORDER BY ce.distance, vc.page_url, vc.chunk_index, vc.chunk_id
+            """,
+            (
+                site["name"],
+                sqlite_vec.serialize_float32(query_embedding),
+                limit,
+            ),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    return [
+        {
+            "chunk_id": row[0],
+            "page_url": row[1],
+            "title": row[2],
+            "text": row[3],
+            "chunk_index": row[4],
+            "distance": row[5],
+        }
+        for row in rows
+    ]
+
+
 def _normalize_chunk_settings(
     chunk_size: int | None,
     chunk_overlap: int | None,
-    embedding_dimensions: int | None,
-) -> tuple[int, int, int]:
+    embedding_model: str | None,
+) -> tuple[int, int, str]:
     chunk_size = chunk_size if chunk_size is not None else DEFAULT_CHUNK_SIZE
     chunk_overlap = chunk_overlap if chunk_overlap is not None else DEFAULT_CHUNK_OVERLAP
-    embedding_dimensions = (
-        embedding_dimensions if embedding_dimensions is not None else DEFAULT_EMBEDDING_DIMENSIONS
-    )
+    embedding_model = _normalize_embedding_model(embedding_model)
 
     if chunk_size <= 0:
         raise ValueError("chunk_size must be positive")
@@ -129,10 +285,8 @@ def _normalize_chunk_settings(
         raise ValueError("chunk_overlap must be non-negative")
     if chunk_overlap >= chunk_size:
         raise ValueError("chunk_overlap must be smaller than chunk_size")
-    if embedding_dimensions <= 0:
-        raise ValueError("embedding_dimensions must be positive")
 
-    return chunk_size, chunk_overlap, embedding_dimensions
+    return chunk_size, chunk_overlap, embedding_model
 
 
 def _normalize_text(text: str) -> str:
@@ -195,28 +349,9 @@ def chunk_markdown(
     return chunks
 
 
-def _embed_text(text: str, dimensions: int) -> list[float]:
-    """Create a deterministic local embedding vector for a text chunk."""
-    vector = [0.0] * dimensions
-    tokens = _TOKEN_RE.findall(text.lower())
-    if not tokens:
-        vector[0] = 1.0
-        return vector
-
-    for token in tokens:
-        digest = hashlib.sha256(token.encode("utf-8")).digest()
-        primary = int.from_bytes(digest[:4], "little") % dimensions
-        secondary = int.from_bytes(digest[4:8], "little") % dimensions
-        sign = -1.0 if digest[8] & 1 else 1.0
-        weight = 1.0 + (digest[9] / 255.0)
-        vector[primary] += sign * weight
-        vector[secondary] += (weight / 2.0) * (-sign)
-
-    norm = math.sqrt(sum(component * component for component in vector))
-    if norm == 0:
-        vector[0] = 1.0
-        norm = 1.0
-    return [component / norm for component in vector]
+def _embed_text(text: str, embedding_model: str) -> list[float]:
+    """Generate a FastEmbed vector for a single text chunk."""
+    return _embed_texts([text], embedding_model)[0]
 
 
 def _chunk_id(site_name: str, page_url: str, chunk_index: int, chunk_text: str) -> str:
@@ -232,7 +367,7 @@ def build_vector_records(
     *,
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
-    embedding_dimensions: int = DEFAULT_EMBEDDING_DIMENSIONS,
+    embedding_model: str = DEFAULT_EMBEDDING_MODEL,
 ) -> list[VectorRecord]:
     """Convert crawled page documents into vector records."""
     return [
@@ -243,7 +378,7 @@ def build_vector_records(
             page,
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
-            embedding_dimensions=embedding_dimensions,
+            embedding_model=embedding_model,
         )
     ]
 
@@ -254,7 +389,7 @@ def _build_vector_records_for_page(
     *,
     chunk_size: int,
     chunk_overlap: int,
-    embedding_dimensions: int,
+    embedding_model: str,
 ) -> list[VectorRecord]:
     source_text = _normalize_text(page.get("content_md") or "") or _normalize_text(
         page.get("title") or ""
@@ -269,7 +404,7 @@ def _build_vector_records_for_page(
             source_text,
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
-            embedding_dimensions=embedding_dimensions,
+            embedding_model=embedding_model,
         )
     )
 
@@ -281,7 +416,7 @@ def _iter_vector_records_for_page(
     *,
     chunk_size: int,
     chunk_overlap: int,
-    embedding_dimensions: int,
+    embedding_model: str,
 ):
     for chunk_index, chunk_text in enumerate(
         chunk_markdown(source_text, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
@@ -292,7 +427,7 @@ def _iter_vector_records_for_page(
             title=page.get("title") or "",
             chunk_id=_chunk_id(site_name, page["url"], chunk_index, chunk_text),
             chunk_text=chunk_text,
-            embedding=_embed_text(chunk_text, embedding_dimensions),
+            embedding=_embed_text(chunk_text, embedding_model),
             source_last_crawled=page.get("last_crawled"),
             chunk_index=chunk_index,
         )
@@ -308,7 +443,9 @@ def _format_duration(seconds: float) -> str:
     return f"{seconds:.2f}s"
 
 
-def _init_vector_db(conn: sqlite3.Connection, *, embedding_dimensions: int) -> None:
+def _init_vector_db(
+    conn: sqlite3.Connection, *, embedding_model: str, embedding_dimensions: int
+) -> None:
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA journal_mode=OFF")
     conn.execute("PRAGMA synchronous=OFF")
@@ -321,6 +458,7 @@ def _init_vector_db(conn: sqlite3.Connection, *, embedding_dimensions: int) -> N
             site_name TEXT PRIMARY KEY,
             source_index_file TEXT NOT NULL,
             built_at TEXT NOT NULL,
+            embedding_model TEXT NOT NULL,
             page_count INTEGER NOT NULL,
             chunk_count INTEGER NOT NULL,
             embedding_dimensions INTEGER NOT NULL,
@@ -356,10 +494,10 @@ def _init_vector_db(conn: sqlite3.Connection, *, embedding_dimensions: int) -> N
 def rebuild_vector_index(site: dict, *, debug: bool = False) -> VectorBuildSummary:
     """Rebuild a site's local vector sidecar from the current crawl index."""
     vectorizer_cfg = site.get("vectorizer", {})
-    chunk_size, chunk_overlap, embedding_dimensions = _normalize_chunk_settings(
+    chunk_size, chunk_overlap, embedding_model = _normalize_chunk_settings(
         vectorizer_cfg.get("chunk_size"),
         vectorizer_cfg.get("chunk_overlap"),
-        vectorizer_cfg.get("embedding_dimensions"),
+        _site_embedding_model(site),
     )
 
     source_index_path = Path(site["index_file"])
@@ -376,6 +514,10 @@ def rebuild_vector_index(site: dict, *, debug: bool = False) -> VectorBuildSumma
         ) from exc
     _emit_progress(f"Loaded {total_pages} pages from source index")
 
+    embedding_dimensions = _infer_embedding_dimensions(
+        embedding_model, _load_text_embedding_backend
+    )
+
     vector_index_file = resolve_vector_index_file(site)
     target_path = Path(vector_index_file)
     temp_path = target_path.with_name(f"{target_path.name}.tmp")
@@ -385,7 +527,11 @@ def rebuild_vector_index(site: dict, *, debug: bool = False) -> VectorBuildSumma
     _emit_progress("Initializing vector index")
     conn = _connect_vector_index(str(temp_path))
     try:
-        _init_vector_db(conn, embedding_dimensions=embedding_dimensions)
+        _init_vector_db(
+            conn,
+            embedding_model=embedding_model,
+            embedding_dimensions=embedding_dimensions,
+        )
         chunk_count = 0
         page_count = 0
         source_max_last_crawled = None
@@ -414,7 +560,7 @@ def rebuild_vector_index(site: dict, *, debug: bool = False) -> VectorBuildSumma
                         page.get("content_md") or page.get("title") or "",
                         chunk_size=chunk_size,
                         chunk_overlap=chunk_overlap,
-                        embedding_dimensions=embedding_dimensions,
+                        embedding_model=embedding_model,
                     ),
                     start=1,
                 ):
@@ -499,18 +645,20 @@ def rebuild_vector_index(site: dict, *, debug: bool = False) -> VectorBuildSumma
                 site_name,
                 source_index_file,
                 built_at,
+                embedding_model,
                 page_count,
                 chunk_count,
                 embedding_dimensions,
                 chunk_size,
                 chunk_overlap,
                 source_max_last_crawled
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 site["name"],
                 site["index_file"],
                 built_at,
+                embedding_model,
                 page_count,
                 chunk_count,
                 embedding_dimensions,
@@ -537,6 +685,7 @@ def rebuild_vector_index(site: dict, *, debug: bool = False) -> VectorBuildSumma
         page_count=page_count,
         chunk_count=chunk_count,
         built_at=built_at,
+        embedding_model=embedding_model,
         embedding_dimensions=embedding_dimensions,
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,

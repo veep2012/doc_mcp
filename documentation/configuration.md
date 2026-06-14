@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-05-26
-- Version: v1.7
+- Last Updated: 2026-06-14
+- Version: v1.8
 
 ## Change Log
+- 2026-06-14 | v1.8 | Added FastEmbed model-selection guidance, clarified that supported models depend on the installed FastEmbed version, and documented when to use multilingual versus English-focused embeddings.
 - 2026-05-26 | v1.7 | Documented crawl timing constraints for `delay_seconds` and `start_delay_seconds`, clarified redirect behavior, and updated the site examples to reflect the merged crawl config.
 - 2026-05-24 | v1.6 | Added the `docmcp_vectorizer` console script alias, documented vectorizer `--debug` diagnostics, clarified that chained crawl/vectorize inherits debug output, and kept the vector table inspection guidance platform-neutral.
 - 2026-05-21 | v1.4 | Documented `MCP_LOG_LEVEL`, clarified workspace `.env` resolution, and aligned runtime path notes with the loader.
@@ -64,10 +65,52 @@ SITE1_PASSWORD=replace-me
 - `crawl.allow_patterns`: optional allow-list glob patterns
 - `crawl.deny_patterns`: optional deny-list glob patterns
 - `index_file`: SQLite database path for the site index
+- `search_engine`: per-site search mode. Default: `hybrid`. Use `keyword` to disable vector lookup entirely, `vector` for vector-only semantic search, or `hybrid` to merge keyword and vector results
 - `vector_index_file`: local sqlite-vec sidecar path for that site's chunk embeddings; if omitted, the runtime uses the same directory and file stem as `index_file` with a `.vec.db` suffix
 - `vectorizer.chunk_size`: maximum normalized chunk length in characters for post-crawl vector records
 - `vectorizer.chunk_overlap`: overlapping trailing characters reused when the vectorizer creates the next chunk
-- `vectorizer.embedding_dimensions`: deterministic local embedding size written into the sqlite-vec sidecar
+- `vectorizer.embedding_model`: FastEmbed text model used to build and query the vector sidecar. Default: `BAAI/bge-small-en-v1.5`
+- Before changing this value, check the models supported by the installed FastEmbed package. Supported models depend on the FastEmbed version installed in your environment:
+  ```bash
+  .venv/bin/python - <<'PY'
+  from fastembed import TextEmbedding
+
+  print([m["model"] for m in TextEmbedding.list_supported_models()])
+  PY
+  ```
+  - `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` is a good multilingual option when your search corpus spans multiple languages.
+  - `BAAI/bge-small-en-v1.5` is a good default when your corpus is primarily English and you want a smaller, faster embedding model.
+- Example snapshot of models that may appear in a given FastEmbed release:
+  - `BAAI/bge-base-en`
+  - `BAAI/bge-base-en-v1.5`
+  - `BAAI/bge-large-en-v1.5`
+  - `BAAI/bge-small-en`
+  - `BAAI/bge-small-en-v1.5`
+  - `BAAI/bge-small-zh-v1.5`
+  - `mixedbread-ai/mxbai-embed-large-v1`
+  - `snowflake/snowflake-arctic-embed-xs`
+  - `snowflake/snowflake-arctic-embed-s`
+  - `snowflake/snowflake-arctic-embed-m`
+  - `snowflake/snowflake-arctic-embed-m-long`
+  - `snowflake/snowflake-arctic-embed-l`
+  - `jinaai/jina-clip-v1`
+  - `Qdrant/clip-ViT-B-32-text`
+  - `sentence-transformers/all-MiniLM-L6-v2`
+  - `jinaai/jina-embeddings-v2-base-en`
+  - `jinaai/jina-embeddings-v2-small-en`
+  - `jinaai/jina-embeddings-v2-base-de`
+  - `jinaai/jina-embeddings-v2-base-code`
+  - `jinaai/jina-embeddings-v2-base-zh`
+  - `jinaai/jina-embeddings-v2-base-es`
+  - `thenlper/gte-base`
+  - `thenlper/gte-large`
+  - `nomic-ai/nomic-embed-text-v1.5`
+  - `nomic-ai/nomic-embed-text-v1.5-Q`
+  - `nomic-ai/nomic-embed-text-v1`
+  - `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`
+  - `sentence-transformers/paraphrase-multilingual-mpnet-base-v2`
+  - `intfloat/multilingual-e5-large`
+  - `jinaai/jina-embeddings-v3`
 
 Example:
 ```yaml
@@ -89,11 +132,12 @@ sites:
       allow_patterns: []
       deny_patterns: []
     index_file: "index/my_docs.db"
+    search_engine: "hybrid"
     vector_index_file: "index/my_docs.vec.db"
     vectorizer:
       chunk_size: 800
       chunk_overlap: 120
-      embedding_dimensions: 32
+      embedding_model: "BAAI/bge-small-en-v1.5"  # English-focused default; multilingual docs can use sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
 ```
 
 ### Notes On Example Fields
@@ -105,10 +149,12 @@ The sample config file also includes a few future-facing keys such as `auth_mode
 - `crawl.start_delay_seconds` is off by default. Use it when you want a visible headful browser to load the start page, pause, and let you switch to the exact page you want to scan.
 
 ### Local Vector Sidecar Notes
+- `search_engine: keyword` keeps the site on keyword-only search, `search_engine: vector` uses the vector sidecar only, and `search_engine: hybrid` combines both.
 - `docmcp-crawl` still writes only the keyword SQLite index in this stage.
 - Build or refresh the local vector sidecar explicitly with `docmcp-vectorize --site "<Site Name>"`, `docmcp_vectorizer --site "<Site Name>"`, or `docmcp-crawl --vectorize --site "<Site Name>"` after crawling.
-- The vectorizer reads the existing `index_file`, chunks page Markdown deterministically, generates deterministic local embeddings, and rewrites the configured `vector_index_file`.
-- Install the vector backend with `pip install sqlite-vec`. The packaged project now declares `sqlite-vec` as a runtime dependency.
+- The vectorizer reads the existing `index_file`, chunks page Markdown deterministically, generates FastEmbed embeddings, and rewrites the configured `vector_index_file`.
+- Install the vector backend with `pip install sqlite-vec fastembed` if you are running from source. The packaged project now declares both dependencies as runtime requirements.
+- Changing `vectorizer.embedding_model` changes the vector space and requires rebuilding the sidecar.
 - `docmcp-vectorize --debug` and `docmcp_vectorizer --debug` enable chunk-level vectorizer diagnostics; normal runs stay at page-level progress.
 - When `docmcp-crawl --debug --vectorize` runs the vectorizer immediately after a successful crawl, that debug mode is inherited.
 - To inspect the vector tables with `sqlite3`, use a shell that supports extension loading, open `index/<site>.vec.db`, and load the platform-appropriate `vec0` library before running `.tables`:

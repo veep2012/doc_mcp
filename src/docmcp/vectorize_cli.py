@@ -23,7 +23,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         prog="docmcp-vectorize",
         description=(
-            "Build or refresh the local sqlite-vec sidecar from the crawled SQLite index.\n"
+            "Build or refresh the local FastEmbed + sqlite-vec sidecar from the crawled SQLite index.\n"
             f"Version: {__version__}"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -75,7 +75,7 @@ def main() -> None:
     try:
         summary = rebuild_vector_index(site, debug=args.debug)
     except VectorBackendUnavailableError as exc:
-        print(f"[vectorize] sqlite-vec backend unavailable:\n{exc}", file=sys.stderr)
+        print(f"[vectorize] Vector backend unavailable:\n{exc}", file=sys.stderr)
         sys.exit(1)
     except VectorIndexError as exc:
         print(f"[vectorize] Vectorization failed:\n{exc}", file=sys.stderr)

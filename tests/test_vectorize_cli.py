@@ -44,7 +44,7 @@ def test_vectorize_cli_builds_local_vector_index(monkeypatch, tmp_path, capsys):
                 vectorizer:
                   chunk_size: 24
                   chunk_overlap: 6
-                  embedding_dimensions: 8
+                  embedding_model: "fake-fastembed-model"
             """
         ).strip()
         + "\n",
@@ -93,7 +93,7 @@ def test_vectorize_cli_debug_emits_chunk_progress(monkeypatch, tmp_path, capsys)
                 vectorizer:
                   chunk_size: 24
                   chunk_overlap: 6
-                  embedding_dimensions: 8
+                  embedding_model: "fake-fastembed-model"
             """
         ).strip()
         + "\n",
@@ -205,7 +205,7 @@ def test_vectorize_cli_reports_vectorization_failures(monkeypatch, tmp_path, cap
     assert excinfo.value.code == 1
     stderr = capsys.readouterr().err
     if isinstance(error, VectorBackendUnavailableError):
-        assert "[vectorize] sqlite-vec backend unavailable:" in stderr
+        assert "[vectorize] Vector backend unavailable:" in stderr
     else:
         assert "[vectorize] Vectorization failed:" in stderr
 
