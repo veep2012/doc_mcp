@@ -80,7 +80,7 @@ SITE1_PASSWORD=replace-me
   ```
   - `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` is a good multilingual option when your search corpus spans multiple languages.
   - `BAAI/bge-small-en-v1.5` is a good default when your corpus is primarily English and you want a smaller, faster embedding model.
-- Supported text embedding models in the currently bundled `fastembed 0.8.0` include:
+- Supported text embedding models (version-dependent; e.g. in `fastembed 0.8.0`) include:
   - `BAAI/bge-base-en`
   - `BAAI/bge-base-en-v1.5`
   - `BAAI/bge-large-en-v1.5`
