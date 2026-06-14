@@ -219,40 +219,39 @@ def search_vector_chunks(site: dict, query: str, limit: int = 10) -> list[dict]:
         if meta is None:
             return []
 
-embedding_model = meta[0] or DEFAULT_EMBEDDING_MODEL
-embedding_dimensions = int(meta[1] or 0)
+        embedding_model = meta[0] or DEFAULT_EMBEDDING_MODEL
+        embedding_dimensions = int(meta[1] or 0)
 
-query_embedding = _embed_text(query, embedding_model)
-if embedding_dimensions and len(query_embedding) != embedding_dimensions:
-    raise VectorIndexError(
-        f"Vector sidecar embedding dimension mismatch for '{site['name']}': "
-        f"expected {embedding_dimensions}, got {len(query_embedding)}. "
-        "Rebuild the sidecar with docmcp-vectorize."
-    )
+        query_embedding = _embed_text(query, embedding_model)
+        if embedding_dimensions and len(query_embedding) != embedding_dimensions:
+            raise VectorIndexError(
+                f"Vector sidecar embedding dimension mismatch for '{site['name']}': "
+                f"expected {embedding_dimensions}, got {len(query_embedding)}. "
+                "Rebuild the sidecar with docmcp-vectorize."
+            )
 
-rows = conn.execute(
-    """
-    SELECT
-        vc.chunk_id,
-        vc.page_url,
-        vc.title,
-        vc.chunk_text,
-        vc.chunk_index,
-        ce.distance
-    FROM chunk_embeddings AS ce
-    JOIN vector_chunks AS vc
-      ON vc.vec_rowid = ce.rowid
-    WHERE vc.site_name = ?
-      AND ce.embedding MATCH ?
-      AND k = ?
-    ORDER BY ce.distance, vc.page_url, vc.chunk_index, vc.chunk_id
-    """,
-    (
-        site["name"],
-        sqlite_vec.serialize_float32(query_embedding),
-        limit,
-    ),
-).fetchall()
+        rows = conn.execute(
+            """
+            SELECT
+                vc.chunk_id,
+                vc.page_url,
+                vc.title,
+                vc.chunk_text,
+                vc.chunk_index,
+                ce.distance
+            FROM chunk_embeddings AS ce
+            JOIN vector_chunks AS vc
+              ON vc.vec_rowid = ce.rowid
+            WHERE vc.site_name = ?
+              AND ce.embedding MATCH ?
+              AND k = ?
+            ORDER BY ce.distance, vc.page_url, vc.chunk_index, vc.chunk_id
+            """,
+            (
+                site["name"],
+                sqlite_vec.serialize_float32(query_embedding),
+                limit,
+            ),
         ).fetchall()
     finally:
         conn.close()
@@ -499,7 +498,6 @@ def rebuild_vector_index(site: dict, *, debug: bool = False) -> VectorBuildSumma
         vectorizer_cfg.get("chunk_overlap"),
         _site_embedding_model(site),
     )
-    embedding_dimensions = _infer_embedding_dimensions(embedding_model)
 
     source_index_path = Path(site["index_file"])
     if not source_index_path.exists():
@@ -514,6 +512,8 @@ def rebuild_vector_index(site: dict, *, debug: bool = False) -> VectorBuildSumma
             f"Keyword index unreadable: {site['index_file']}. Run docmcp-crawl before docmcp-vectorize."
         ) from exc
     _emit_progress(f"Loaded {total_pages} pages from source index")
+
+    embedding_dimensions = _infer_embedding_dimensions(embedding_model)
 
     vector_index_file = resolve_vector_index_file(site)
     target_path = Path(vector_index_file)

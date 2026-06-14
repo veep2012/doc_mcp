@@ -250,6 +250,28 @@ def test_rebuild_vector_index_requires_existing_keyword_index(tmp_path):
         rebuild_vector_index(site)
 
 
+def test_rebuild_vector_index_reports_missing_source_before_embedding_backend(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(
+        vector_index,
+        "_load_text_embedding_backend",
+        lambda model_name: (_ for _ in ()).throw(
+            EmbeddingBackendUnavailableError("fastembed is not installed")
+        ),
+    )
+
+    site = {
+        "name": "Example Docs",
+        "index_file": str(tmp_path / "missing" / "docs.db"),
+        "vector_index_file": str(tmp_path / "index" / "docs.vec.db"),
+        "vectorizer": {"embedding_model": "fake-fastembed-model"},
+    }
+
+    with pytest.raises(VectorSourceError, match="Keyword index not found"):
+        rebuild_vector_index(site)
+
+
 def test_rebuild_vector_index_rejects_corrupt_source_index(tmp_path):
     source_index = tmp_path / "index" / "docs.db"
     source_index.parent.mkdir(parents=True, exist_ok=True)
