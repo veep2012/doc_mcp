@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-05-26
-- Version: v1.7
+- Last Updated: 2026-06-14
+- Version: v1.8
 
 ## Change Log
+- 2026-06-14 | v1.8 | Added vector-sidecar fallback and rebuild guidance for degraded search results.
 - 2026-05-26 | v1.7 | Added guidance for `crawl.delay_seconds` and `crawl.start_delay_seconds`, and clarified redirect skip semantics.
 - 2026-05-24 | v1.6 | Added Podman machine recovery guidance for smoke-test environments and documented the rootful connection option.
 - 2026-05-22 | v1.5 | Added redirect-policy troubleshooting guidance and aligned crawl diagnostics notes with the v0.1.4 release behavior.
@@ -52,6 +53,12 @@ List the most common failure modes for `doc-mcp` and the first corrective step f
 - Confirm the crawler indexed pages into the correct `index_file`.
 - Check whether the site was crawled from the right `start_url`.
 - Make sure the query terms actually exist in the indexed Markdown.
+
+### Search Falls Back From Vector To Keyword
+- `search_docs` now treats vector lookup as best-effort and keeps returning valid JSON when the vector sidecar is missing, unreadable, stale, incompatible, or empty.
+- If the response includes an `error` object such as `vector_index_missing`, `vector_index_stale`, or `vector_index_incompatible`, rebuild the sidecar with `docmcp-vectorize --site "My Docs"` after confirming the crawl index is current.
+- Rebuild the sidecar after changing `vectorizer.embedding_model` or replacing the site's `index_file`.
+- In hybrid mode, the same fallback reason is logged and keyword results remain available when the SQLite index can answer.
 
 ### Pages Look Truncated
 - The crawler tries several page containers, but some sites still expose incomplete content to automation.

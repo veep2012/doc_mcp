@@ -46,6 +46,8 @@ from .index_store import (
 from .vector_index import (
     VectorBackendUnavailableError,
     VectorIndexError,
+    VectorSidecarIncompatibleError,
+    VectorSidecarStaleError,
     resolve_vector_index_file,
     search_vector_chunks,
 )
@@ -117,14 +119,50 @@ def _keyword_lookup(site: dict, query: str, limit: int) -> list[dict]:
         return []
 
 
+def _vector_lookup_error(site: dict, vector_index_file: str, exc: Exception | None = None) -> dict:
+    if exc is None:
+        return {
+            "type": "vector_index_missing",
+            "message": (
+                f"Vector search is enabled for '{site['name']}' but the sidecar is missing: "
+                f"{vector_index_file}"
+            ),
+        }
+    if isinstance(exc, VectorBackendUnavailableError):
+        return {
+            "type": "vector_backend_unavailable",
+            "message": str(exc) or "Vector search backend is unavailable.",
+        }
+    if isinstance(exc, VectorSidecarStaleError):
+        return {"type": "vector_index_stale", "message": str(exc)}
+    if isinstance(exc, VectorSidecarIncompatibleError):
+        return {"type": "vector_index_incompatible", "message": str(exc)}
+    return {
+        "type": "vector_index_unreadable",
+        "message": f"Vector sidecar for '{site['name']}' is unreadable: {vector_index_file}. {exc}",
+    }
+
+
 def _vector_lookup(site: dict, query: str, limit: int) -> list[dict]:
+    vector_index_file = resolve_vector_index_file(site)
+    if not Path(vector_index_file).exists():
+        error = _vector_lookup_error(site, vector_index_file)
+        logger.warning(
+            "Hybrid search degraded to keyword for site %r because %s: %s",
+            site["name"],
+            error["type"],
+            error["message"],
+        )
+        return []
     try:
         return search_vector_chunks(site, query, limit)
     except (sqlite3.Error, OSError, VectorIndexError) as exc:
+        error = _vector_lookup_error(site, vector_index_file, exc)
         logger.warning(
-            "Hybrid search degraded to keyword for site %r because vector lookup failed: %s",
+            "Hybrid search degraded to keyword for site %r because %s: %s",
             site["name"],
-            type(exc).__name__,
+            error["type"],
+            error["message"],
         )
         return []
 
@@ -132,28 +170,14 @@ def _vector_lookup(site: dict, query: str, limit: int) -> list[dict]:
 def _vector_lookup_strict(site: dict, query: str, limit: int) -> tuple[list[dict], dict | None]:
     vector_index_file = resolve_vector_index_file(site)
     if not Path(vector_index_file).exists():
-        return [], {
-            "type": "vector_index_missing",
-            "message": (
-                f"Vector search is enabled for '{site['name']}' but the sidecar is missing: "
-                f"{vector_index_file}"
-            ),
-        }
+        return [], _vector_lookup_error(site, vector_index_file)
 
     try:
         return search_vector_chunks(site, query, limit), None
     except VectorBackendUnavailableError as exc:
-        return [], {
-            "type": "vector_backend_unavailable",
-            "message": str(exc) or "Vector search backend is unavailable.",
-        }
+        return [], _vector_lookup_error(site, vector_index_file, exc)
     except (sqlite3.Error, OSError, VectorIndexError) as exc:
-        return [], {
-            "type": "vector_index_unreadable",
-            "message": (
-                f"Vector sidecar for '{site['name']}' is unreadable: {vector_index_file}. " f"{exc}"
-            ),
-        }
+        return [], _vector_lookup_error(site, vector_index_file, exc)
 
 
 def _normalize_keyword_results(results: list[dict]) -> list[dict]:
@@ -250,12 +274,18 @@ def _keyword_search_response(site: dict, query: str, limit: int) -> dict:
 
 def _vector_search_response(site: dict, query: str, limit: int) -> dict:
     vector_results, error = _vector_lookup_strict(site, query, limit)
-    if error:
-        return _search_error_response("vector", error["type"], error["message"])
+    if vector_results:
+        response = _empty_search_response("vector")
+        response["vector_hits"] = len(vector_results)
+        response["results"] = _public_search_results(_normalize_vector_results(vector_results))
+        return response
 
-    response = _empty_search_response("vector")
-    response["vector_hits"] = len(vector_results)
-    response["results"] = _public_search_results(_normalize_vector_results(vector_results))
+    keyword_results = _keyword_lookup(site, query, limit)
+    response = _empty_search_response("keyword")
+    response["keyword_hits"] = len(keyword_results)
+    response["results"] = _public_search_results(_normalize_keyword_results(keyword_results))
+    if error:
+        response["error"] = error
     return response
 
 

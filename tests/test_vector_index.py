@@ -369,6 +369,41 @@ def test_search_vector_chunks_rejects_stale_embedding_dimensions(monkeypatch, tm
         search_vector_chunks(site, "Alpha", limit=2)
 
 
+def test_search_vector_chunks_rejects_stale_source_index_metadata(tmp_path):
+    _require_vector_backend()
+    source_index = tmp_path / "index" / "docs.db"
+    vector_index_file = tmp_path / "index" / "docs.vec.db"
+    init_db(str(source_index))
+    upsert_page(
+        str(source_index),
+        "https://example.test/vector-best",
+        "Vector Best",
+        "Alpha alpha alpha beta",
+    )
+
+    site = {
+        "name": "Example Docs",
+        "index_file": str(source_index),
+        "vector_index_file": str(vector_index_file),
+        "vectorizer": {
+            "chunk_size": 100,
+            "chunk_overlap": 20,
+            "embedding_model": "fake-fastembed-model",
+        },
+    }
+    rebuild_vector_index(site)
+
+    with sqlite3.connect(str(vector_index_file)) as conn:
+        conn.execute(
+            "UPDATE vector_meta SET source_index_file = ? WHERE site_name = ?",
+            (str(tmp_path / "other" / "docs.db"), site["name"]),
+        )
+        conn.commit()
+
+    with pytest.raises(VectorIndexError, match="built from a different keyword index"):
+        search_vector_chunks(site, "Alpha", limit=2)
+
+
 def test_rebuild_vector_index_reports_embedding_backend_failure(monkeypatch, tmp_path):
     source_index = tmp_path / "index" / "docs.db"
     init_db(str(source_index))

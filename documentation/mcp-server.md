@@ -6,9 +6,10 @@
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
 - Last Updated: 2026-06-14
-- Version: v1.8
+- Version: v1.9
 
 ## Change Log
+- 2026-06-14 | v1.9 | Documented vector-search fallback to keyword for missing, stale, incompatible, unreadable, and empty sidecars.
 - 2026-06-14 | v1.8 | Clarified hybrid degradation logging and same-page keyword preservation semantics.
 - 2026-06-06 | v1.7 | Documented the experimental `0.99.3` hybrid `search_docs` behavior, including mode selection, source labels, and keyword fallback when the vector sidecar is missing or unreadable.
 - 2026-05-24 | v1.6 | Corrected the historical search_docs contract entry, kept the current `0.99.2` response contract documentation, and bumped the document control record.
@@ -85,13 +86,13 @@ shape:
 Implementation notes:
 - `mode` is `"hybrid"` when the site is configured for hybrid search and both vector and keyword search contribute at least one unique merged result.
 - `mode` is `"vector"` when vector search returns the only usable results for the response.
-- `mode` is `"vector"` for vector-only sites even when the vector sidecar is empty, as long as the vector lookup succeeds.
-- `mode` falls back to `"keyword"` when the vector sidecar is missing, unreadable, empty, or fully deduplicated away.
+- `mode` falls back to `"keyword"` when vector search cannot produce usable results, including missing, unreadable, stale, incompatible, empty, or fully deduplicated vector sidecars.
 - `vector_hits` reflects the number of vector rows read before merge-time deduplication.
 - `keyword_hits` reflects the number of SQLite FTS5 matches returned for the query before merge-time deduplication.
 - `results` are merged deterministically with vector rows first (ordered by nearest-neighbor distance) and keyword rows second (ordered by existing FTS rank).
-- `search_engine: keyword` skips vector lookup entirely, while `search_engine: vector` returns an error-bearing empty response if the vector sidecar is missing or unreadable.
-- Vector queries use the FastEmbed model recorded in the sidecar metadata, so rebuilding the sidecar is required after changing `vectorizer.embedding_model`.
+- `search_engine: keyword` skips vector lookup entirely.
+- `search_engine: vector` still falls back to keyword results when vector search cannot answer, and includes an `error` object when the vector sidecar is missing, unreadable, stale, incompatible, or the embedding backend is unavailable.
+- Vector queries require the sidecar metadata to match the current `index_file` and `vectorizer.embedding_model`; rebuild the sidecar after changing either input.
 - Cross-source duplicates are removed deterministically using stable chunk/page-text identity, and the retained row keeps its original `source` label.
 - In hybrid mode, vector lookup failures are logged and the tool still falls back to keyword results when they are available.
 - Hybrid merge does not suppress distinct keyword snippets from the same page just because one vector chunk from that page was retained.
@@ -125,6 +126,17 @@ If the site name is unknown, the tool returns structured JSON with an `error` ob
 ```
 
 Successful search calls and empty-index search calls still return the base JSON search contract.
+
+When vector fallback is explicit, the response may also include:
+
+```json
+{
+  "error": {
+    "type": "vector_index_missing | vector_index_unreadable | vector_index_stale | vector_index_incompatible | vector_backend_unavailable",
+    "message": "Human-readable fallback reason"
+  }
+}
+```
 
 ### Client Setup
 - The server is designed for MCP clients that connect over stdio, such as VS Code / Copilot or Claude Desktop.

@@ -5,11 +5,12 @@
 - Owner: Repository maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-25
-- Last Updated: 2026-05-24
-- Version: v1.0.1
+- Last Updated: 2026-06-14
+- Version: v1.0.2
 - Related Tickets: https://github.com/veep2012/doc_mcp/issues/1
 
 ## Change Log
+- 2026-06-14 | v1.0.2 | Documented query-time vector fallback rules for missing, stale, incompatible, unreadable, and empty sidecars.
 - 2026-05-24 | v1.0.1 | Documented that the crawler can optionally chain the vector rebuild after a successful crawl while keeping the vectorizer boundary explicit.
 - 2026-05-17 | v1.0.0 | Reframed the epic around a repo-owned local vector index and a separate post-crawl vectorizer step, replacing the external vector DB assumption, and marked Stage 2 keyword-only hardening as implemented for the current `search_docs` path, including safe empty-result fallbacks for missing, empty, or failing SQLite keyword indexes.
 - 2026-05-09 | v0.99.0 | Finalized the Stage 1 keyword search response contract, canonical JSON schema, examples, and experimental release status.
@@ -168,7 +169,8 @@ Stage 6 is implemented as the experimental `0.99.3` hybrid-search release. In th
 `search_docs(site_name, query, limit=10)` queries both the SQLite keyword index and
 the local sqlite-vec sidecar, normalizes both result sets into the shared schema,
 orders vector rows before keyword rows, deduplicates overlaps deterministically, and
-falls back to keyword mode when the vector sidecar is missing, unreadable, or empty.
+falls back to keyword mode when the vector sidecar is missing, unreadable, stale,
+incompatible with current metadata, or empty.
 
 Deliverables:
 - Add hybrid search behavior to `search_docs` or a dedicated `hybrid_search_docs` tool.
@@ -292,13 +294,13 @@ semantic_search_docs(site_name: str, query: str, limit: int)
 
 ## Edge Cases
 - No local vector index configured or present: return keyword results with `mode: "keyword"`.
-- Local vector index unavailable or unreadable: log the fallback reason and return keyword results if possible.
+- Local vector index unavailable, stale, incompatible, or unreadable: log the fallback reason and return keyword results if possible.
 - Embedding provider failure: log the fallback reason and return keyword results if possible.
 - Empty SQLite index and no vector index: return an empty result set without crashing.
 - Partial vector index: query only available chunks and do not require full crawl coverage.
 - Duplicate keyword and vector hits: keep one result and preserve the best available score or merged rank.
 - Score scale mismatch: normalize or rank within each source before merging hybrid results.
-- Stale vector index after recrawl: vectorizer rebuilds should refresh or replace stale chunks deterministically.
+- Stale vector index after recrawl: query-time search should fall back safely, and vectorizer rebuilds should refresh or replace stale chunks deterministically.
 
 ## Testing Strategy
 - Unit tests:

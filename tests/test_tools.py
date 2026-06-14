@@ -245,6 +245,48 @@ def test_search_docs_vector_mode_returns_vector_results_and_skips_keyword(monkey
     ]
 
 
+def test_search_docs_vector_mode_falls_back_to_keyword_when_vector_results_are_empty(
+    monkeypatch, tmp_path
+):
+    index_file = tmp_path / "docs.db"
+    vector_index_file = tmp_path / "docs.vec.db"
+    init_db(str(index_file))
+    upsert_page(str(index_file), "https://example.test/guide", "Guide", "Alpha beta")
+    vector_index_file.write_bytes(b"placeholder")
+
+    monkeypatch.setattr(
+        tools,
+        "_get_sites",
+        lambda: [
+            {
+                "name": "Vector Docs",
+                "url": "https://example.test",
+                "auth_required": False,
+                "search_engine": "vector",
+                "index_file": str(index_file),
+                "vector_index_file": str(vector_index_file),
+            }
+        ],
+    )
+    monkeypatch.setattr(tools, "search_vector_chunks", lambda site, query, limit: [])
+
+    response = json.loads(tools.search_docs("Vector Docs", "Alpha"))
+
+    assert response["mode"] == "keyword"
+    assert response["vector_hits"] == 0
+    assert response["keyword_hits"] == 1
+    assert response["results"] == [
+        {
+            "text": "[Alpha] beta",
+            "page_url": "https://example.test/guide",
+            "title": "Guide",
+            "score": response["results"][0]["score"],
+            "source": "keyword",
+        }
+    ]
+    assert isinstance(response["results"][0]["score"], float)
+
+
 def test_search_docs_vector_mode_reports_missing_sidecar(monkeypatch, tmp_path):
     index_file = tmp_path / "docs.db"
     vector_index_file = tmp_path / "docs.vec.db"
@@ -272,7 +314,7 @@ def test_search_docs_vector_mode_reports_missing_sidecar(monkeypatch, tmp_path):
 
     response = json.loads(tools.search_docs("Vector Docs", "Alpha"))
 
-    assert response["mode"] == "vector"
+    assert response["mode"] == "keyword"
     assert response["vector_hits"] == 0
     assert response["keyword_hits"] == 0
     assert response["results"] == []
@@ -308,7 +350,7 @@ def test_search_docs_vector_mode_reports_unreadable_sidecar(monkeypatch, tmp_pat
 
     response = json.loads(tools.search_docs("Vector Docs", "Alpha"))
 
-    assert response["mode"] == "vector"
+    assert response["mode"] == "keyword"
     assert response["vector_hits"] == 0
     assert response["keyword_hits"] == 0
     assert response["results"] == []
@@ -349,12 +391,66 @@ def test_search_docs_vector_mode_reports_missing_fastembed_backend(monkeypatch, 
 
     response = json.loads(tools.search_docs("Vector Docs", "Alpha"))
 
-    assert response["mode"] == "vector"
+    assert response["mode"] == "keyword"
     assert response["vector_hits"] == 0
-    assert response["keyword_hits"] == 0
-    assert response["results"] == []
+    assert response["keyword_hits"] == 1
+    assert response["results"] == [
+        {
+            "text": "[Alpha] beta",
+            "page_url": "https://example.test/vector",
+            "title": "Vector",
+            "score": response["results"][0]["score"],
+            "source": "keyword",
+        }
+    ]
     assert response["error"]["type"] == "vector_backend_unavailable"
     assert "fastembed is not installed" in response["error"]["message"]
+    assert isinstance(response["results"][0]["score"], float)
+
+
+def test_search_docs_vector_mode_falls_back_when_sidecar_model_is_incompatible(
+    monkeypatch, tmp_path
+):
+    _require_vector_backend()
+    index_file = tmp_path / "docs.db"
+    vector_index_file = tmp_path / "docs.vec.db"
+    init_db(str(index_file))
+    upsert_page(str(index_file), "https://example.test/vector", "Vector", "Alpha beta")
+
+    site = {
+        "name": "Vector Docs",
+        "url": "https://example.test",
+        "auth_required": False,
+        "search_engine": "vector",
+        "index_file": str(index_file),
+        "vector_index_file": str(vector_index_file),
+        "vectorizer": {"embedding_model": "fake-fastembed-model"},
+    }
+    rebuild_vector_index(site)
+
+    incompatible_site = {
+        **site,
+        "vectorizer": {"embedding_model": "different-fastembed-model"},
+    }
+    monkeypatch.setattr(tools, "_get_sites", lambda: [incompatible_site])
+
+    response = json.loads(tools.search_docs("Vector Docs", "Alpha"))
+
+    assert response["mode"] == "keyword"
+    assert response["vector_hits"] == 0
+    assert response["keyword_hits"] == 1
+    assert response["results"] == [
+        {
+            "text": "[Alpha] beta",
+            "page_url": "https://example.test/vector",
+            "title": "Vector",
+            "score": response["results"][0]["score"],
+            "source": "keyword",
+        }
+    ]
+    assert response["error"]["type"] == "vector_index_incompatible"
+    assert "embedding model mismatch" in response["error"]["message"]
+    assert isinstance(response["results"][0]["score"], float)
 
 
 def test_search_docs_returns_empty_json_on_sqlite_query_error(monkeypatch, tmp_path):
@@ -391,8 +487,10 @@ def test_search_docs_returns_empty_json_on_sqlite_query_error(monkeypatch, tmp_p
 
 def test_search_docs_logs_hybrid_vector_degradation(monkeypatch, tmp_path, caplog):
     index_file = tmp_path / "docs.db"
+    vector_index_file = tmp_path / "docs.vec.db"
     init_db(str(index_file))
     upsert_page(str(index_file), "https://example.test/guide", "Guide", "Alpha beta")
+    vector_index_file.write_bytes(b"placeholder")
 
     monkeypatch.setattr(
         tools,
@@ -403,6 +501,7 @@ def test_search_docs_logs_hybrid_vector_degradation(monkeypatch, tmp_path, caplo
                 "url": "https://example.test",
                 "auth_required": False,
                 "index_file": str(index_file),
+                "vector_index_file": str(vector_index_file),
             }
         ],
     )
@@ -421,7 +520,40 @@ def test_search_docs_logs_hybrid_vector_degradation(monkeypatch, tmp_path, caplo
     assert any(
         record.name == "docmcp.tools"
         and "Hybrid search degraded to keyword" in record.message
-        and "OperationalError" in record.message
+        and "vector_index_unreadable" in record.message
+        for record in caplog.records
+    )
+
+
+def test_search_docs_logs_missing_hybrid_vector_sidecar(monkeypatch, tmp_path, caplog):
+    index_file = tmp_path / "docs.db"
+    init_db(str(index_file))
+    upsert_page(str(index_file), "https://example.test/guide", "Guide", "Alpha beta")
+
+    monkeypatch.setattr(
+        tools,
+        "_get_sites",
+        lambda: [
+            {
+                "name": "Example Docs",
+                "url": "https://example.test",
+                "auth_required": False,
+                "index_file": str(index_file),
+                "vector_index_file": str(tmp_path / "docs.vec.db"),
+            }
+        ],
+    )
+
+    caplog.set_level(logging.WARNING, logger="docmcp.tools")
+    response = json.loads(tools.search_docs("Example Docs", "Alpha"))
+
+    assert response["mode"] == "keyword"
+    assert response["vector_hits"] == 0
+    assert response["keyword_hits"] == 1
+    assert any(
+        record.name == "docmcp.tools"
+        and "Hybrid search degraded to keyword" in record.message
+        and "vector_index_missing" in record.message
         for record in caplog.records
     )
 
@@ -762,7 +894,9 @@ def test_search_docs_falls_back_to_keyword_when_vector_lookup_fails(monkeypatch,
 
 def test_search_docs_returns_vector_only_results_when_keyword_has_no_hits(monkeypatch, tmp_path):
     index_file = tmp_path / "docs.db"
+    vector_index_file = tmp_path / "docs.vec.db"
     init_db(str(index_file))
+    vector_index_file.write_bytes(b"placeholder")
 
     monkeypatch.setattr(
         tools,
@@ -773,7 +907,7 @@ def test_search_docs_returns_vector_only_results_when_keyword_has_no_hits(monkey
                 "url": "https://example.test",
                 "auth_required": False,
                 "index_file": str(index_file),
-                "vector_index_file": str(tmp_path / "docs.vec.db"),
+                "vector_index_file": str(vector_index_file),
             }
         ],
     )
@@ -813,8 +947,10 @@ def test_search_docs_returns_keyword_results_when_vector_lookup_returns_no_hits(
     monkeypatch, tmp_path, caplog
 ):
     index_file = tmp_path / "docs.db"
+    vector_index_file = tmp_path / "docs.vec.db"
     init_db(str(index_file))
     upsert_page(str(index_file), "https://example.test/guide", "Guide", "Alpha beta")
+    vector_index_file.write_bytes(b"placeholder")
 
     monkeypatch.setattr(
         tools,
@@ -825,7 +961,7 @@ def test_search_docs_returns_keyword_results_when_vector_lookup_returns_no_hits(
                 "url": "https://example.test",
                 "auth_required": False,
                 "index_file": str(index_file),
-                "vector_index_file": str(tmp_path / "docs.vec.db"),
+                "vector_index_file": str(vector_index_file),
             }
         ],
     )
