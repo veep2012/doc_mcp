@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-05-24
-- Last Updated: 2026-05-24
-- Version: v1.0
+- Last Updated: 2026-06-14
+- Version: v1.1
 
 ## Change Log
+- 2026-06-14 | v1.1 | Clarified rebuild-needed guidance when vector query dimensions no longer match the recorded FastEmbed model.
 - 2026-05-24 | v1.0 | Added practical sqlite3 commands for inspecting the local vector index and running nearest-neighbor queries against `chunk_embeddings`.
 
 ## Purpose
@@ -154,6 +155,7 @@ ORDER BY chunk_index;
 - If `.load` fails, confirm you are using a `sqlite3` build that supports extension loading and the platform-appropriate `vec0` library from the active Python environment (`vec0.dylib` on macOS, `vec0.so` on Linux, or `vec0.dll` on Windows).
 - If `MATCH` reports a JSON parsing error, the query vector is not valid JSON or does not have the correct number of dimensions.
 - If a `k` query returns no rows, confirm the vector table was built and the query vector dimension matches the table definition.
+- If a query raises a dimension mismatch in the application layer, the sidecar metadata likely no longer matches the current FastEmbed model and the vector index should be rebuilt.
 - The brute-force closest-pair query gets expensive as the vector index grows.
 
 ## References

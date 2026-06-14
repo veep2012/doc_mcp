@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-06-06
-- Version: v1.7
+- Last Updated: 2026-06-14
+- Version: v1.8
 
 ## Change Log
+- 2026-06-14 | v1.8 | Clarified hybrid degradation logging and same-page keyword preservation semantics.
 - 2026-06-06 | v1.7 | Documented the experimental `0.99.3` hybrid `search_docs` behavior, including mode selection, source labels, and keyword fallback when the vector sidecar is missing or unreadable.
 - 2026-05-24 | v1.6 | Corrected the historical search_docs contract entry, kept the current `0.99.2` response contract documentation, and bumped the document control record.
 - 2026-05-21 | v1.5 | Documented the server log-level environment variable, added current server version/help guidance, and clarified startup diagnostics.
@@ -92,6 +93,8 @@ Implementation notes:
 - `search_engine: keyword` skips vector lookup entirely, while `search_engine: vector` returns an error-bearing empty response if the vector sidecar is missing or unreadable.
 - Vector queries use the FastEmbed model recorded in the sidecar metadata, so rebuilding the sidecar is required after changing `vectorizer.embedding_model`.
 - Cross-source duplicates are removed deterministically using stable chunk/page-text identity, and the retained row keeps its original `source` label.
+- In hybrid mode, vector lookup failures are logged and the tool still falls back to keyword results when they are available.
+- Hybrid merge does not suppress distinct keyword snippets from the same page just because one vector chunk from that page was retained.
 - `limit` defaults to `10` and bounds the merged response.
 - `score` remains experimental and should be treated as an ordering hint, not as an absolute relevance measure.
 
