@@ -12,6 +12,7 @@ except ImportError:  # pragma: no cover - exercised only when the backend is una
 import docmcp.vector_index as vector_index
 from docmcp.index_store import init_db, upsert_page
 from docmcp.vector_index import (
+    DEFAULT_EMBEDDING_MODEL,
     EmbeddingBackendUnavailableError,
     VectorSourceError,
     build_vector_records,
@@ -141,6 +142,18 @@ def test_vector_backend_status_reports_missing_dependency(monkeypatch):
 
     assert not available
     assert "pip install sqlite-vec" in message
+
+
+def test_fastembed_supports_documented_embedding_models():
+    try:
+        from fastembed import TextEmbedding
+    except ModuleNotFoundError:
+        pytest.skip("fastembed is not installed in the test environment")
+
+    supported_models = {model["model"] for model in TextEmbedding.list_supported_models()}
+
+    assert DEFAULT_EMBEDDING_MODEL in supported_models
+    assert "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2" in supported_models
 
 
 def test_resolve_vector_index_file_defaults_to_sidecar_name(tmp_path):

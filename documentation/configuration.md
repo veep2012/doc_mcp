@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-05-26
-- Version: v1.7
+- Last Updated: 2026-06-14
+- Version: v1.8
 
 ## Change Log
+- 2026-06-14 | v1.8 | Added FastEmbed model-selection guidance, documented supported models, and clarified when to use multilingual versus English-focused embeddings.
 - 2026-05-26 | v1.7 | Documented crawl timing constraints for `delay_seconds` and `start_delay_seconds`, clarified redirect behavior, and updated the site examples to reflect the merged crawl config.
 - 2026-05-24 | v1.6 | Added the `docmcp_vectorizer` console script alias, documented vectorizer `--debug` diagnostics, clarified that chained crawl/vectorize inherits debug output, and kept the vector table inspection guidance platform-neutral.
 - 2026-05-21 | v1.4 | Documented `MCP_LOG_LEVEL`, clarified workspace `.env` resolution, and aligned runtime path notes with the loader.
@@ -77,8 +78,8 @@ SITE1_PASSWORD=replace-me
   print([m["model"] for m in TextEmbedding.list_supported_models()])
   PY
   ```
-- `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` is a good multilingual option when your search corpus spans multiple languages.
-- `BAAI/bge-small-en-v1.5` is a good default when your corpus is primarily English and you want a smaller, faster embedding model.
+  - `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` is a good multilingual option when your search corpus spans multiple languages.
+  - `BAAI/bge-small-en-v1.5` is a good default when your corpus is primarily English and you want a smaller, faster embedding model.
 - Supported text embedding models in the currently bundled `fastembed 0.8.0` include:
   - `BAAI/bge-base-en`
   - `BAAI/bge-base-en-v1.5`
@@ -136,7 +137,7 @@ sites:
     vectorizer:
       chunk_size: 800
       chunk_overlap: 120
-      embedding_model: "BAAI/bge-small-en-v1.5"  # use a FastEmbed-supported model; multilingual docs can use sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+      embedding_model: "BAAI/bge-small-en-v1.5"  # English-focused default; multilingual docs can use sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
 ```
 
 ### Notes On Example Fields

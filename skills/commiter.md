@@ -34,10 +34,6 @@ git add -A
 3) Build commit message using required format.
 
 4) Pre-commit checks (required when configured):
-- Before running hooks, inspect staged documentation changes for noisy same-day changelog duplication:
-  - If a newly created document has multiple changelog entries for the same date that only describe intermediate edits in the current uncommitted change, collapse them into one current-version entry.
-  - Keep distinct same-day entries only when they describe separately released or already committed versions.
-  - Ensure the document `Version` matches the top changelog entry.
 - Detect whether pre-commit is configured:
   - `.pre-commit-config.yaml` exists, or
   - `.git/hooks/pre-commit` exists.
@@ -53,6 +49,8 @@ pre-commit run --all-files
 ```bash
 git add <files>
 ```
+
+4.5) If the current work mixes documentation cleanup with functional DB/API changes, prefer a separate commit boundary when practical. If the mix is intentional, note that in the final report and capture any deferred process concern in `tech-debt/<YYYY-MM-DD>.md` before committing.
 
 5) Commit:
 ```bash
