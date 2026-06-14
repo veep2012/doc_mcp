@@ -219,30 +219,40 @@ def search_vector_chunks(site: dict, query: str, limit: int = 10) -> list[dict]:
         if meta is None:
             return []
 
-        embedding_model = meta[0] or DEFAULT_EMBEDDING_MODEL
+embedding_model = meta[0] or DEFAULT_EMBEDDING_MODEL
+embedding_dimensions = int(meta[1] or 0)
 
-        rows = conn.execute(
-            """
-            SELECT
-                vc.chunk_id,
-                vc.page_url,
-                vc.title,
-                vc.chunk_text,
-                vc.chunk_index,
-                ce.distance
-            FROM chunk_embeddings AS ce
-            JOIN vector_chunks AS vc
-              ON vc.vec_rowid = ce.rowid
-            WHERE vc.site_name = ?
-              AND ce.embedding MATCH ?
-              AND k = ?
-            ORDER BY ce.distance, vc.page_url, vc.chunk_index, vc.chunk_id
-            """,
-            (
-                site["name"],
-                sqlite_vec.serialize_float32(_embed_text(query, embedding_model)),
-                limit,
-            ),
+query_embedding = _embed_text(query, embedding_model)
+if embedding_dimensions and len(query_embedding) != embedding_dimensions:
+    raise VectorIndexError(
+        f"Vector sidecar embedding dimension mismatch for '{site['name']}': "
+        f"expected {embedding_dimensions}, got {len(query_embedding)}. "
+        "Rebuild the sidecar with docmcp-vectorize."
+    )
+
+rows = conn.execute(
+    """
+    SELECT
+        vc.chunk_id,
+        vc.page_url,
+        vc.title,
+        vc.chunk_text,
+        vc.chunk_index,
+        ce.distance
+    FROM chunk_embeddings AS ce
+    JOIN vector_chunks AS vc
+      ON vc.vec_rowid = ce.rowid
+    WHERE vc.site_name = ?
+      AND ce.embedding MATCH ?
+      AND k = ?
+    ORDER BY ce.distance, vc.page_url, vc.chunk_index, vc.chunk_id
+    """,
+    (
+        site["name"],
+        sqlite_vec.serialize_float32(query_embedding),
+        limit,
+    ),
+).fetchall()
         ).fetchall()
     finally:
         conn.close()
