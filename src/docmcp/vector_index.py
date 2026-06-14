@@ -148,7 +148,8 @@ def _embed_texts(texts: list[str], model_name: str) -> list[list[float]]:
     return [_coerce_embedding(embedding) for embedding in embeddings]
 
 
-def _infer_embedding_dimensions(model_name: str) -> int:
+@lru_cache(maxsize=None)
+def _infer_embedding_dimensions(model_name: str, loader_token: object | None = None) -> int:
     return len(_embed_texts(["embedding probe"], model_name)[0])
 
 
@@ -513,7 +514,9 @@ def rebuild_vector_index(site: dict, *, debug: bool = False) -> VectorBuildSumma
         ) from exc
     _emit_progress(f"Loaded {total_pages} pages from source index")
 
-    embedding_dimensions = _infer_embedding_dimensions(embedding_model)
+    embedding_dimensions = _infer_embedding_dimensions(
+        embedding_model, _load_text_embedding_backend
+    )
 
     vector_index_file = resolve_vector_index_file(site)
     target_path = Path(vector_index_file)

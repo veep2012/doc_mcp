@@ -615,6 +615,40 @@ def test_merge_search_results_keeps_distinct_keyword_snippets_from_same_page():
     ]
 
 
+def test_merge_search_results_preserves_same_page_keyword_hits_in_hybrid_mode():
+    vector_results = [
+        {
+            "text": "Alpha beta",
+            "page_url": "https://example.test/guide",
+            "title": "Guide",
+            "score": 0.92,
+            "source": "vector",
+            "_dedupe_keys": (
+                "chunk:chunk-1",
+                "text:https://example.test/guide\nAlpha beta",
+            ),
+        }
+    ]
+    keyword_results = [
+        {
+            "text": "Alpha beta gamma",
+            "page_url": "https://example.test/guide",
+            "title": "Guide",
+            "score": 1.0,
+            "source": "keyword",
+            "_dedupe_keys": ("text:https://example.test/guide\nAlpha beta gamma",),
+        }
+    ]
+
+    merged_results, contributors = tools._merge_search_results(vector_results, keyword_results, 10)
+
+    assert contributors == {"keyword", "vector"}
+    assert [result["source"] for result in merged_results] == ["vector", "keyword"]
+    assert merged_results[0]["page_url"] == "https://example.test/guide"
+    assert merged_results[1]["page_url"] == "https://example.test/guide"
+    assert merged_results[1]["text"] == "Alpha beta gamma"
+
+
 @pytest.mark.parametrize(
     ("vector_results", "keyword_results", "expected_mode"),
     [

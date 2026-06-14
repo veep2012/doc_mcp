@@ -9,7 +9,7 @@
 - Version: v1.8
 
 ## Change Log
-- 2026-06-14 | v1.8 | Added FastEmbed model-selection guidance, documented supported models, and clarified when to use multilingual versus English-focused embeddings.
+- 2026-06-14 | v1.8 | Added FastEmbed model-selection guidance, clarified that supported models depend on the installed FastEmbed version, and documented when to use multilingual versus English-focused embeddings.
 - 2026-05-26 | v1.7 | Documented crawl timing constraints for `delay_seconds` and `start_delay_seconds`, clarified redirect behavior, and updated the site examples to reflect the merged crawl config.
 - 2026-05-24 | v1.6 | Added the `docmcp_vectorizer` console script alias, documented vectorizer `--debug` diagnostics, clarified that chained crawl/vectorize inherits debug output, and kept the vector table inspection guidance platform-neutral.
 - 2026-05-21 | v1.4 | Documented `MCP_LOG_LEVEL`, clarified workspace `.env` resolution, and aligned runtime path notes with the loader.
@@ -70,7 +70,7 @@ SITE1_PASSWORD=replace-me
 - `vectorizer.chunk_size`: maximum normalized chunk length in characters for post-crawl vector records
 - `vectorizer.chunk_overlap`: overlapping trailing characters reused when the vectorizer creates the next chunk
 - `vectorizer.embedding_model`: FastEmbed text model used to build and query the vector sidecar. Default: `BAAI/bge-small-en-v1.5`
-- Before changing this value, check the models supported by the installed FastEmbed package:
+- Before changing this value, check the models supported by the installed FastEmbed package. Supported models depend on the FastEmbed version installed in your environment:
   ```bash
   .venv/bin/python - <<'PY'
   from fastembed import TextEmbedding
@@ -80,7 +80,7 @@ SITE1_PASSWORD=replace-me
   ```
   - `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` is a good multilingual option when your search corpus spans multiple languages.
   - `BAAI/bge-small-en-v1.5` is a good default when your corpus is primarily English and you want a smaller, faster embedding model.
-- Supported text embedding models (version-dependent; e.g. in `fastembed 0.8.0`) include:
+- Example snapshot of models that may appear in a given FastEmbed release:
   - `BAAI/bge-base-en`
   - `BAAI/bge-base-en-v1.5`
   - `BAAI/bge-large-en-v1.5`

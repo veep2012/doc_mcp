@@ -113,6 +113,25 @@ def test_fastembed_supports_documented_embedding_models():
     assert "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2" in supported_models
 
 
+def test_infer_embedding_dimensions_is_cached_by_loader_token(monkeypatch):
+    calls: list[str] = []
+
+    def fake_embed_texts(texts, model_name: str):
+        calls.append(model_name)
+        return [[1.0, 0.0, 0.0] for _ in texts]
+
+    monkeypatch.setattr(vector_index, "_embed_texts", fake_embed_texts)
+    vector_index._infer_embedding_dimensions.cache_clear()
+
+    loader_token = object()
+    assert vector_index._infer_embedding_dimensions("fake-fastembed-model", loader_token) == 3
+    assert vector_index._infer_embedding_dimensions("fake-fastembed-model", loader_token) == 3
+    assert calls == ["fake-fastembed-model"]
+
+    assert vector_index._infer_embedding_dimensions("fake-fastembed-model", object()) == 3
+    assert calls == ["fake-fastembed-model", "fake-fastembed-model"]
+
+
 def test_resolve_vector_index_file_defaults_to_sidecar_name(tmp_path):
     site = {"index_file": str(tmp_path / "index" / "docs.db")}
 
