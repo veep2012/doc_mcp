@@ -93,6 +93,7 @@ Implementation notes:
 - `search_engine: keyword` skips vector lookup entirely.
 - `search_engine: vector` still falls back to keyword results when vector search cannot answer, and includes an `error` object when the vector sidecar is missing, unreadable, stale, incompatible, or the embedding backend is unavailable.
 - `search_engine: hybrid` also includes the same `error` object when vector lookup degrades, while preserving keyword results when available.
+- `vector_index_incompatible` covers both metadata mismatches and site configuration problems such as a missing usable `index_file`, as well as legacy vector sidecars that lack the `source_index_file` column.
 - Vector queries require the sidecar metadata to match the current `index_file` and `vectorizer.embedding_model`; rebuild the sidecar after changing either input.
 - Cross-source duplicates are removed deterministically using stable chunk/page-text identity, and the retained row keeps its original `source` label.
 - In hybrid mode, vector lookup failures are logged and the tool still falls back to keyword results when they are available.

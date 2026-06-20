@@ -57,6 +57,7 @@ List the most common failure modes for `doc-mcp` and the first corrective step f
 ### Search Falls Back From Vector To Keyword
 - `search_docs` now treats vector lookup as best-effort and keeps returning valid JSON when the vector sidecar is missing, unreadable, stale, incompatible, or empty.
 - If the response includes an `error` object such as `vector_index_missing`, `vector_index_stale`, or `vector_index_incompatible`, rebuild the sidecar with `docmcp-vectorize --site "My Docs"` after confirming the crawl index is current.
+- `vector_index_incompatible` can also mean the site config is missing a usable `index_file` or the vector sidecar was built from an older schema that lacks `source_index_file`.
 - Rebuild the sidecar after changing `vectorizer.embedding_model` or replacing the site's `index_file`.
 - In hybrid mode, the same fallback reason is logged and also attached to the JSON response when the SQLite index can answer.
 

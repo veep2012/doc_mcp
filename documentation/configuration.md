@@ -174,6 +174,7 @@ The sample config file also includes a few future-facing keys such as `auth_mode
 - `crawl.ignore_query_links: true` skips discovered links that contain a query string, while `false` allows them to be crawled and indexed as distinct URLs.
 - `crawl.redirect_policy: final` preserves the landing URL after a redirect, which matches the current default behavior.
 - If `vector_index_file` is omitted, the vectorizer writes `<index_file stem>.vec.db` alongside the keyword SQLite index.
+- An empty or missing `index_file` is invalid for vector search validation and is treated as a site configuration problem rather than a searchable vector state.
 - If sqlite-vec cannot be loaded, `docmcp-vectorize` and `docmcp_vectorizer` fail clearly but crawl and keyword-only MCP search still work.
 - Informational keys should not be treated as enforced runtime behavior.
 
