@@ -10,7 +10,7 @@
 
 ## Change Log
 - 2026-06-14 | v1.9 | Documented vector-search fallback to keyword for missing, stale, incompatible, unreadable, and empty sidecars.
-- 2026-06-14 | v1.8 | Clarified hybrid degradation logging and same-page keyword preservation semantics.
+- 2026-06-13 | v1.8 | Clarified hybrid degradation logging and same-page keyword preservation semantics.
 - 2026-06-06 | v1.7 | Documented the experimental `0.99.3` hybrid `search_docs` behavior, including mode selection, source labels, and keyword fallback when the vector sidecar is missing or unreadable.
 - 2026-05-24 | v1.6 | Corrected the historical search_docs contract entry, kept the current `0.99.2` response contract documentation, and bumped the document control record.
 - 2026-05-21 | v1.5 | Documented the server log-level environment variable, added current server version/help guidance, and clarified startup diagnostics.
