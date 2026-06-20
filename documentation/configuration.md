@@ -11,7 +11,7 @@
 ## Change Log
 - 2026-06-14 | v1.8 | Added FastEmbed model-selection guidance, clarified that supported models depend on the installed FastEmbed version, and documented when to use multilingual versus English-focused embeddings.
 - 2026-05-26 | v1.7 | Documented crawl timing constraints for `delay_seconds` and `start_delay_seconds`, clarified redirect behavior, and updated the site examples to reflect the merged crawl config.
-- 2026-05-24 | v1.6 | Added the `docmcp_vectorizer` console script alias, documented vectorizer `--debug` diagnostics, clarified that chained crawl/vectorize inherits debug output, and kept the vector table inspection guidance platform-neutral.
+- 2026-05-24 | v1.6 | Documented vectorizer `--debug` diagnostics, clarified that chained crawl/vectorize inherits debug output, and kept the vector table inspection guidance platform-neutral.
 - 2026-05-21 | v1.4 | Documented `MCP_LOG_LEVEL`, clarified workspace `.env` resolution, and aligned runtime path notes with the loader.
 - 2026-04-25 | v1.1 | Documented runtime root resolution through DOC_MCP_HOME and updated implementation references.
 - 2026-04-24 | v1.0 | Reformatted the configuration reference and documented the live loader behavior.
@@ -151,11 +151,11 @@ The sample config file also includes a few future-facing keys such as `auth_mode
 ### Local Vector Sidecar Notes
 - `search_engine: keyword` keeps the site on keyword-only search, `search_engine: vector` uses the vector sidecar only, and `search_engine: hybrid` combines both.
 - `docmcp-crawl` still writes only the keyword SQLite index in this stage.
-- Build or refresh the local vector sidecar explicitly with `docmcp-vectorize --site "<Site Name>"`, `docmcp_vectorizer --site "<Site Name>"`, or `docmcp-crawl --vectorize --site "<Site Name>"` after crawling.
+- Build or refresh the local vector sidecar explicitly with `docmcp-vectorize --site "<Site Name>"` or `docmcp-crawl --vectorize --site "<Site Name>"` after crawling.
 - The vectorizer reads the existing `index_file`, chunks page Markdown deterministically, generates FastEmbed embeddings, and rewrites the configured `vector_index_file`.
 - Install the vector backend with `pip install sqlite-vec fastembed` if you are running from source. The packaged project now declares both dependencies as runtime requirements.
 - Changing `vectorizer.embedding_model` changes the vector space and requires rebuilding the sidecar.
-- `docmcp-vectorize --debug` and `docmcp_vectorizer --debug` enable chunk-level vectorizer diagnostics; normal runs stay at page-level progress.
+- `docmcp-vectorize --debug` enables chunk-level vectorizer diagnostics; normal runs stay at page-level progress.
 - When `docmcp-crawl --debug --vectorize` runs the vectorizer immediately after a successful crawl, that debug mode is inherited.
 - To inspect the vector tables with `sqlite3`, use a shell that supports extension loading, open `index/<site>.vec.db`, and load the platform-appropriate `vec0` library before running `.tables`:
   - `sqlite3 index/<site>.vec.db`
@@ -175,7 +175,7 @@ The sample config file also includes a few future-facing keys such as `auth_mode
 - `crawl.redirect_policy: final` preserves the landing URL after a redirect, which matches the current default behavior.
 - If `vector_index_file` is omitted, the vectorizer writes `<index_file stem>.vec.db` alongside the keyword SQLite index.
 - An empty or missing `index_file` is invalid for vector search validation and is treated as a site configuration problem rather than a searchable vector state.
-- If sqlite-vec cannot be loaded, `docmcp-vectorize` and `docmcp_vectorizer` fail clearly but crawl and keyword-only MCP search still work.
+- If sqlite-vec cannot be loaded, `docmcp-vectorize` fails clearly but crawl and keyword-only MCP search still work.
 - Informational keys should not be treated as enforced runtime behavior.
 
 ## References

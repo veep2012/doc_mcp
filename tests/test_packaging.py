@@ -8,4 +8,4 @@ def test_pyproject_exposes_vectorizer_console_scripts():
     scripts = data["project"]["scripts"]
 
     assert scripts["docmcp-vectorize"] == "docmcp.vectorize_cli:main"
-    assert scripts["docmcp_vectorizer"] == "docmcp.vectorize_cli:main"
+    assert "docmcp_vectorizer" not in scripts

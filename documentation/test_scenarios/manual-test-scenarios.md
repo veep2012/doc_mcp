@@ -9,7 +9,7 @@
 - Version: v1.2
 
 ## Change Log
-- 2026-05-24 | v1.2 | Documented the standalone vectorizer CLI, the `docmcp_vectorizer` alias, the vectorizer `--debug` option, and the chained crawl-and-vectorize command path with inherited debug mode.
+- 2026-05-24 | v1.2 | Documented the standalone vectorizer CLI, the vectorizer `--debug` option, and the chained crawl-and-vectorize command path with inherited debug mode.
 - 2026-05-23 | v1.0 | Added explicit vectorizer verification steps and documented that crawl and vector refresh remain separate commands.
 - 2026-05-20 | v0.9 | Aligned the manual checklist with the current CLI wrappers, version commands, and crawler debug behavior.
 - 2026-05-03 | v0.8 | Linked the automated pytest scenario document and clarified that this manual checklist remains the source coverage baseline.
@@ -66,8 +66,8 @@ Run this block first when validating the repository checkout directly.
 ### Development Command Set
 - Auth command: `python auth_cli.py` or `docmcp-auth` once installed
 - Crawl command: `python crawl_cli.py` or `docmcp-crawl` once installed
-- Vectorize command: `python vectorize_cli.py` or `docmcp-vectorize` / `docmcp_vectorizer` once installed
-- Vectorize command with debug diagnostics: `python vectorize_cli.py --debug` or `docmcp-vectorize --debug` / `docmcp_vectorizer --debug` once installed
+- Vectorize command: `python vectorize_cli.py` or `docmcp-vectorize` once installed
+- Vectorize command with debug diagnostics: `python vectorize_cli.py --debug` or `docmcp-vectorize --debug` once installed
 - Crawl + vectorize chain: `python crawl_cli.py --vectorize` or `docmcp-crawl --vectorize` once installed
 - Crawl + vectorize chain with inherited debug diagnostics: `python crawl_cli.py --debug --vectorize` or `docmcp-crawl --debug --vectorize` once installed
 - Server command: `python -m src.main` or `docmcp-server` once installed; stop it with `Ctrl+C` after startup is verified.
@@ -139,8 +139,8 @@ Run this block after the development environment passes, using a separate runtim
 ### Runtime Command Set
 - Auth command: `docmcp-auth`
 - Crawl command: `docmcp-crawl`
-- Vectorize command: `docmcp-vectorize` or `docmcp_vectorizer`
-- Vectorize command with debug diagnostics: `docmcp-vectorize --debug` or `docmcp_vectorizer --debug`
+- Vectorize command: `docmcp-vectorize`
+- Vectorize command with debug diagnostics: `docmcp-vectorize --debug`
 - Crawl + vectorize chain: `docmcp-crawl --vectorize`
 - Crawl + vectorize chain with inherited debug diagnostics: `docmcp-crawl --debug --vectorize`
 - Server command: `docmcp-server`; stop it with `Ctrl+C` after startup is verified.
@@ -164,13 +164,13 @@ Run this block after the development environment passes, using a separate runtim
      - Windows PowerShell: `python -m playwright install chromium`
   6. Run `docmcp-auth --help`.
   7. Run `docmcp-crawl --help`.
-  8. Run `docmcp-vectorize --help` and `docmcp_vectorizer --help`.
+  8. Run `docmcp-vectorize --help`.
   9. Run `command -v docmcp-server` to verify the server console script is installed.
-  10. Run `docmcp-auth --version`, `docmcp-crawl --version`, `docmcp-vectorize --version`, and `docmcp_vectorizer --version`.
+  10. Run `docmcp-auth --version`, `docmcp-crawl --version`, and `docmcp-vectorize --version`.
 - Expected result:
   - The wheel installs into an environment that does not depend on the repository source tree.
   - The `docmcp-auth`, `docmcp-crawl`, and `docmcp-server` console commands are available.
-  - The `docmcp-vectorize` and `docmcp_vectorizer` console commands are available and accept `--debug`.
+  - The `docmcp-vectorize` console command is available and accepts `--debug`.
   - Help and version output print without importing the browser-heavy paths.
 - Pass/Fail:
   - Pass if the wheel installs and all console commands are available.
@@ -386,7 +386,7 @@ Run these scenarios after either `MT-003A` or `MT-003B`, using the command set f
 - If the selected site requires MFA, pause the manual run until login completes and record the login path used.
 - If a crawl starts from a redirected URL, verify indexed URLs still belong to the configured site and path scope.
 - If a command is run outside the repository or runtime workspace, set `DOC_MCP_HOME` and `CONFIG_FILE` explicitly before treating failures as product defects.
-- If `docmcp-vectorize` or `docmcp_vectorizer` reports that sqlite-vec cannot be loaded, verify the active environment has the packaged dependency installed before treating it as an application defect.
+- If `docmcp-vectorize` reports that sqlite-vec cannot be loaded, verify the active environment has the packaged dependency installed before treating it as an application defect.
 
 ## Risks and Mitigations
 - Risk: Site-specific authentication behavior may make tests inconsistent.
