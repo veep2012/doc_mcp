@@ -222,21 +222,36 @@ def search_vector_chunks(site: dict, query: str, limit: int = 10) -> list[dict]:
         return []
 
     try:
-        meta = conn.execute(
-            """
-            SELECT source_index_file, embedding_model, embedding_dimensions
-            FROM vector_meta
-            WHERE site_name = ?
-            LIMIT 1
-            """,
-            (site["name"],),
-        ).fetchone()
-        if meta is None:
-            return []
+        try:
+            meta = conn.execute(
+                """
+                SELECT source_index_file, embedding_model, embedding_dimensions
+                FROM vector_meta
+                WHERE site_name = ?
+                LIMIT 1
+                """,
+                (site["name"],),
+            ).fetchone()
+            if meta is None:
+                return []
+        except sqlite3.OperationalError as exc:
+            if "no such column" in str(exc).lower():
+                raise VectorSidecarIncompatibleError(
+                    f"Vector sidecar for '{site['name']}' is missing expected metadata columns "
+                    "(source_index_file). Rebuild with docmcp-vectorize."
+                ) from exc
+            raise
 
         source_index_file = _normalize_index_path(meta[0])
         embedding_model = meta[1] or DEFAULT_EMBEDDING_MODEL
         embedding_dimensions = int(meta[2] or 0)
+        if not site.get("index_file"):
+            raise VectorSidecarIncompatibleError(
+                f"Vector sidecar for '{site['name']}' cannot be validated because the "
+                "site configuration is missing index_file. Rebuild with docmcp-vectorize "
+                "after fixing the site config."
+            )
+
         current_index_file = _normalize_index_path(site.get("index_file"))
         if source_index_file and current_index_file and source_index_file != current_index_file:
             raise VectorSidecarStaleError(

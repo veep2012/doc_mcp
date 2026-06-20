@@ -137,9 +137,11 @@ def _vector_lookup_error(site: dict, vector_index_file: str, exc: Exception | No
         return {"type": "vector_index_stale", "message": str(exc)}
     if isinstance(exc, VectorSidecarIncompatibleError):
         return {"type": "vector_index_incompatible", "message": str(exc)}
+    exc_text = str(exc).rstrip(".")
+    exc_detail = f" ({exc_text})" if exc_text else ""
     return {
         "type": "vector_index_unreadable",
-        "message": f"Vector sidecar for '{site['name']}' is unreadable: {vector_index_file}. {exc}",
+        "message": f"Vector sidecar for '{site['name']}' is unreadable{exc_detail}: {vector_index_file}",
     }
 
 
@@ -176,6 +178,8 @@ def _vector_lookup_strict(site: dict, query: str, limit: int) -> tuple[list[dict
         return search_vector_chunks(site, query, limit), None
     except VectorBackendUnavailableError as exc:
         return [], _vector_lookup_error(site, vector_index_file, exc)
+    # VectorSidecarStaleError and VectorSidecarIncompatibleError inherit from VectorIndexError,
+    # so they intentionally flow through this shared fallback branch for consistent classification.
     except (sqlite3.Error, OSError, VectorIndexError) as exc:
         return [], _vector_lookup_error(site, vector_index_file, exc)
 

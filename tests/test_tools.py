@@ -961,6 +961,117 @@ def test_search_docs_returns_vector_only_results_when_keyword_has_no_hits(monkey
     }
 
 
+def test_search_docs_reports_legacy_vector_meta_schema_as_incompatible(monkeypatch, tmp_path):
+    _require_vector_backend()
+
+    index_file = tmp_path / "docs.db"
+    vector_index_file = tmp_path / "docs.vec.db"
+    init_db(str(index_file))
+    upsert_page(str(index_file), "https://example.test/guide", "Guide", "Alpha beta")
+
+    with sqlite3.connect(str(vector_index_file)) as conn:
+        conn.execute(
+            """
+            CREATE TABLE vector_meta (
+                site_name TEXT PRIMARY KEY,
+                page_count INTEGER NOT NULL,
+                chunk_count INTEGER NOT NULL,
+                built_at TEXT NOT NULL,
+                embedding_model TEXT NOT NULL,
+                embedding_dimensions INTEGER NOT NULL,
+                chunk_size INTEGER NOT NULL,
+                chunk_overlap INTEGER NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO vector_meta(
+                site_name,
+                page_count,
+                chunk_count,
+                built_at,
+                embedding_model,
+                embedding_dimensions,
+                chunk_size,
+                chunk_overlap
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("Example Docs", 1, 1, "2026-06-20T00:00:00Z", "fake-fastembed-model", 3, 100, 20),
+        )
+        conn.commit()
+
+    monkeypatch.setattr(
+        tools,
+        "_get_sites",
+        lambda: [
+            {
+                "name": "Example Docs",
+                "url": "https://example.test",
+                "auth_required": False,
+                "index_file": str(index_file),
+                "vector_index_file": str(vector_index_file),
+                "vectorizer": {
+                    "chunk_size": 100,
+                    "chunk_overlap": 20,
+                    "embedding_model": "fake-fastembed-model",
+                },
+            }
+        ],
+    )
+
+    response = json.loads(tools.search_docs("Example Docs", "Alpha"))
+
+    assert response["mode"] == "keyword"
+    assert response["vector_hits"] == 0
+    assert response["keyword_hits"] == 1
+    assert response["results"] == [
+        {
+            "text": "[Alpha] beta",
+            "page_url": "https://example.test/guide",
+            "title": "Guide",
+            "score": response["results"][0]["score"],
+            "source": "keyword",
+        }
+    ]
+    assert response["error"]["type"] == "vector_index_incompatible"
+    assert "source_index_file" in response["error"]["message"]
+
+
+def test_search_docs_reports_missing_site_index_file_as_incompatible(monkeypatch, tmp_path):
+    _require_vector_backend()
+
+    source_index = tmp_path / "docs.db"
+    vector_index_file = tmp_path / "docs.vec.db"
+    init_db(str(source_index))
+    upsert_page(str(source_index), "https://example.test/guide", "Guide", "Alpha beta")
+
+    site = {
+        "name": "Example Docs",
+        "url": "https://example.test",
+        "auth_required": False,
+        "index_file": "",
+        "vector_index_file": str(vector_index_file),
+        "vectorizer": {
+            "chunk_size": 100,
+            "chunk_overlap": 20,
+            "embedding_model": "fake-fastembed-model",
+        },
+    }
+    rebuild_vector_index({**site, "index_file": str(source_index)})
+
+    monkeypatch.setattr(tools, "_get_sites", lambda: [site])
+
+    response = json.loads(tools.search_docs("Example Docs", "Alpha"))
+
+    assert response["mode"] == "keyword"
+    assert response["vector_hits"] == 0
+    assert response["keyword_hits"] == 0
+    assert response["results"] == []
+    assert response["error"]["type"] == "vector_index_incompatible"
+    assert "missing index_file" in response["error"]["message"]
+
+
 def test_search_docs_returns_keyword_results_when_vector_lookup_returns_no_hits(
     monkeypatch, tmp_path, caplog
 ):
