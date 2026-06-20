@@ -542,6 +542,40 @@ def test_search_docs_logs_hybrid_vector_degradation(monkeypatch, tmp_path, caplo
     )
 
 
+def test_search_docs_normalizes_unreadable_vector_error_message(monkeypatch, tmp_path):
+    index_file = tmp_path / "docs.db"
+    vector_index_file = tmp_path / "docs.vec.db"
+    init_db(str(index_file))
+    upsert_page(str(index_file), "https://example.test/guide", "Guide", "Alpha beta")
+    vector_index_file.write_bytes(b"placeholder")
+
+    monkeypatch.setattr(
+        tools,
+        "_get_sites",
+        lambda: [
+            {
+                "name": "Example Docs",
+                "url": "https://example.test",
+                "auth_required": False,
+                "index_file": str(index_file),
+                "vector_index_file": str(vector_index_file),
+            }
+        ],
+    )
+
+    def raise_sqlite_error(site: dict, query: str, limit: int) -> list[dict]:
+        raise sqlite3.DatabaseError("broken.")
+
+    monkeypatch.setattr(tools, "search_vector_chunks", raise_sqlite_error)
+
+    response = json.loads(tools.search_docs("Example Docs", "Alpha"))
+
+    assert response["error"]["type"] == "vector_index_unreadable"
+    assert response["error"]["message"] == (
+        f"Vector sidecar for 'Example Docs' is unreadable (broken): {vector_index_file}"
+    )
+
+
 def test_search_docs_logs_missing_hybrid_vector_sidecar(monkeypatch, tmp_path, caplog):
     index_file = tmp_path / "docs.db"
     init_db(str(index_file))
