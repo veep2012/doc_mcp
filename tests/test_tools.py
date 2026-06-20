@@ -114,10 +114,22 @@ def test_search_docs_returns_empty_json_for_empty_or_missing_indexes(monkeypatch
         ],
     )
 
-    expected = {"mode": "keyword", "vector_hits": 0, "keyword_hits": 0, "results": []}
+    empty_response = json.loads(tools.search_docs("Empty Docs", "Alpha"))
+    missing_response = json.loads(tools.search_docs("Missing Docs", "Alpha"))
 
-    assert json.loads(tools.search_docs("Empty Docs", "Alpha")) == expected
-    assert json.loads(tools.search_docs("Missing Docs", "Alpha")) == expected
+    assert empty_response["mode"] == "keyword"
+    assert empty_response["vector_hits"] == 0
+    assert empty_response["keyword_hits"] == 0
+    assert empty_response["results"] == []
+    assert empty_response["error"]["type"] == "vector_index_missing"
+    assert str(tmp_path / "empty.vec.db") in empty_response["error"]["message"]
+
+    assert missing_response["mode"] == "keyword"
+    assert missing_response["vector_hits"] == 0
+    assert missing_response["keyword_hits"] == 0
+    assert missing_response["results"] == []
+    assert missing_response["error"]["type"] == "vector_index_missing"
+    assert str(missing_index_file.with_suffix(".vec.db")) in missing_response["error"]["message"]
 
 
 def test_search_docs_returns_empty_json_for_zero_match_query(monkeypatch, tmp_path):
@@ -138,12 +150,14 @@ def test_search_docs_returns_empty_json_for_zero_match_query(monkeypatch, tmp_pa
         ],
     )
 
-    assert json.loads(tools.search_docs("Example Docs", "Omega")) == {
-        "mode": "keyword",
-        "vector_hits": 0,
-        "keyword_hits": 0,
-        "results": [],
-    }
+    response = json.loads(tools.search_docs("Example Docs", "Omega"))
+
+    assert response["mode"] == "keyword"
+    assert response["vector_hits"] == 0
+    assert response["keyword_hits"] == 0
+    assert response["results"] == []
+    assert response["error"]["type"] == "vector_index_missing"
+    assert str(index_file.with_suffix(".vec.db")) in response["error"]["message"]
 
 
 def test_search_docs_keyword_mode_skips_vector_lookup(monkeypatch, tmp_path):
@@ -477,12 +491,14 @@ def test_search_docs_returns_empty_json_on_sqlite_query_error(monkeypatch, tmp_p
         raise_sqlite_error,
     )
 
-    assert json.loads(tools.search_docs("Broken Docs", "Alpha")) == {
-        "mode": "keyword",
-        "vector_hits": 0,
-        "keyword_hits": 0,
-        "results": [],
-    }
+    response = json.loads(tools.search_docs("Broken Docs", "Alpha"))
+
+    assert response["mode"] == "keyword"
+    assert response["vector_hits"] == 0
+    assert response["keyword_hits"] == 0
+    assert response["results"] == []
+    assert response["error"]["type"] == "vector_index_missing"
+    assert str(index_file.with_suffix(".vec.db")) in response["error"]["message"]
 
 
 def test_search_docs_logs_hybrid_vector_degradation(monkeypatch, tmp_path, caplog):
@@ -517,6 +533,7 @@ def test_search_docs_logs_hybrid_vector_degradation(monkeypatch, tmp_path, caplo
     assert response["mode"] == "keyword"
     assert response["vector_hits"] == 0
     assert response["keyword_hits"] == 1
+    assert response["error"]["type"] == "vector_index_unreadable"
     assert any(
         record.name == "docmcp.tools"
         and "Hybrid search degraded to keyword" in record.message
@@ -550,6 +567,7 @@ def test_search_docs_logs_missing_hybrid_vector_sidecar(monkeypatch, tmp_path, c
     assert response["mode"] == "keyword"
     assert response["vector_hits"] == 0
     assert response["keyword_hits"] == 1
+    assert response["error"]["type"] == "vector_index_missing"
     assert any(
         record.name == "docmcp.tools"
         and "Hybrid search degraded to keyword" in record.message
@@ -875,20 +893,20 @@ def test_search_docs_falls_back_to_keyword_when_vector_lookup_fails(monkeypatch,
 
     response = json.loads(tools.search_docs("Example Docs", "Alpha"))
 
-    assert response == {
-        "mode": "keyword",
-        "vector_hits": 0,
-        "keyword_hits": 1,
-        "results": [
-            {
-                "text": "[Alpha] beta",
-                "page_url": "https://example.test/guide",
-                "title": "Guide",
-                "score": response["results"][0]["score"],
-                "source": "keyword",
-            }
-        ],
-    }
+    assert response["mode"] == "keyword"
+    assert response["vector_hits"] == 0
+    assert response["keyword_hits"] == 1
+    assert response["results"] == [
+        {
+            "text": "[Alpha] beta",
+            "page_url": "https://example.test/guide",
+            "title": "Guide",
+            "score": response["results"][0]["score"],
+            "source": "keyword",
+        }
+    ]
+    assert response["error"]["type"] == "vector_index_missing"
+    assert str(tmp_path / "docs.vec.db") in response["error"]["message"]
     assert isinstance(response["results"][0]["score"], float)
 
 
@@ -1048,9 +1066,12 @@ def test_search_docs_returns_hybrid_results_with_partial_vector_sidecar(monkeypa
     assert response["results"][2]["title"] == "Vector Best"
     assert response["results"][2]["text"].startswith("[Alpha]")
     assert all(isinstance(result["score"], float) for result in response["results"])
+    assert "error" not in response
 
 
 def test_search_docs_falls_back_when_vector_sidecar_is_unreadable(monkeypatch, tmp_path):
+    _require_vector_backend()
+
     index_file = tmp_path / "docs.db"
     vector_index_file = tmp_path / "docs.vec.db"
     init_db(str(index_file))
@@ -1073,20 +1094,19 @@ def test_search_docs_falls_back_when_vector_sidecar_is_unreadable(monkeypatch, t
 
     response = json.loads(tools.search_docs("Example Docs", "Alpha"))
 
-    assert response == {
-        "mode": "keyword",
-        "vector_hits": 0,
-        "keyword_hits": 1,
-        "results": [
-            {
-                "text": "[Alpha] beta",
-                "page_url": "https://example.test/guide",
-                "title": "Guide",
-                "score": response["results"][0]["score"],
-                "source": "keyword",
-            }
-        ],
-    }
+    assert response["mode"] == "keyword"
+    assert response["vector_hits"] == 0
+    assert response["keyword_hits"] == 1
+    assert response["results"] == [
+        {
+            "text": "[Alpha] beta",
+            "page_url": "https://example.test/guide",
+            "title": "Guide",
+            "score": response["results"][0]["score"],
+            "source": "keyword",
+        }
+    ]
+    assert response["error"]["type"] == "vector_index_unreadable"
     assert isinstance(response["results"][0]["score"], float)
 
 

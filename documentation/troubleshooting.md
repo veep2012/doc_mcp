@@ -58,7 +58,7 @@ List the most common failure modes for `doc-mcp` and the first corrective step f
 - `search_docs` now treats vector lookup as best-effort and keeps returning valid JSON when the vector sidecar is missing, unreadable, stale, incompatible, or empty.
 - If the response includes an `error` object such as `vector_index_missing`, `vector_index_stale`, or `vector_index_incompatible`, rebuild the sidecar with `docmcp-vectorize --site "My Docs"` after confirming the crawl index is current.
 - Rebuild the sidecar after changing `vectorizer.embedding_model` or replacing the site's `index_file`.
-- In hybrid mode, the same fallback reason is logged and keyword results remain available when the SQLite index can answer.
+- In hybrid mode, the same fallback reason is logged and also attached to the JSON response when the SQLite index can answer.
 
 ### Pages Look Truncated
 - The crawler tries several page containers, but some sites still expose incomplete content to automation.

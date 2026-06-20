@@ -143,7 +143,7 @@ def _vector_lookup_error(site: dict, vector_index_file: str, exc: Exception | No
     }
 
 
-def _vector_lookup(site: dict, query: str, limit: int) -> list[dict]:
+def _vector_lookup(site: dict, query: str, limit: int) -> tuple[list[dict], dict | None]:
     vector_index_file = resolve_vector_index_file(site)
     if not Path(vector_index_file).exists():
         error = _vector_lookup_error(site, vector_index_file)
@@ -153,9 +153,9 @@ def _vector_lookup(site: dict, query: str, limit: int) -> list[dict]:
             error["type"],
             error["message"],
         )
-        return []
+        return [], error
     try:
-        return search_vector_chunks(site, query, limit)
+        return search_vector_chunks(site, query, limit), None
     except (sqlite3.Error, OSError, VectorIndexError) as exc:
         error = _vector_lookup_error(site, vector_index_file, exc)
         logger.warning(
@@ -164,7 +164,7 @@ def _vector_lookup(site: dict, query: str, limit: int) -> list[dict]:
             error["type"],
             error["message"],
         )
-        return []
+        return [], error
 
 
 def _vector_lookup_strict(site: dict, query: str, limit: int) -> tuple[list[dict], dict | None]:
@@ -250,7 +250,9 @@ def _select_search_mode(contributors: set[str]) -> str:
     return "keyword"
 
 
-def _search_response(keyword_results: list[dict], vector_results: list[dict], limit: int) -> dict:
+def _search_response(
+    keyword_results: list[dict], vector_results: list[dict], limit: int, error: dict | None = None
+) -> dict:
     response = _empty_search_response()
     normalized_keyword_results = _normalize_keyword_results(keyword_results)
     normalized_vector_results = _normalize_vector_results(vector_results)
@@ -261,6 +263,8 @@ def _search_response(keyword_results: list[dict], vector_results: list[dict], li
     response["vector_hits"] = len(vector_results)
     response["keyword_hits"] = len(keyword_results)
     response["results"] = merged_results
+    if error:
+        response["error"] = error
     return response
 
 
@@ -363,8 +367,11 @@ def search_docs(site_name: str, query: str, limit: int = 10) -> str:
         return json.dumps(_vector_search_response(site, query, normalized_limit), indent=2)
 
     keyword_results = _keyword_lookup(site, query, normalized_limit)
-    vector_results = _vector_lookup(site, query, normalized_limit)
-    return json.dumps(_search_response(keyword_results, vector_results, normalized_limit), indent=2)
+    vector_results, error = _vector_lookup(site, query, normalized_limit)
+    return json.dumps(
+        _search_response(keyword_results, vector_results, normalized_limit, error),
+        indent=2,
+    )
 
 
 @mcp.tool()
