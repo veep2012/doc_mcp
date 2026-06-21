@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-05-21
-- Version: v1.3
+- Last Updated: 2026-06-21
+- Version: v1.4
 
 ## Change Log
+- 2026-06-21 | v1.4 | Added the local vector sidecar to the runtime overview and clarified the data flow between crawl, vectorize, and MCP query time.
 - 2026-05-21 | v1.3 | Clarified the full MCP tool surface and the runtime env resolution behavior.
 - 2026-05-20 | v1.2 | Noted the current CLI version/help behavior and the source-tree versus installed command model.
 - 2026-04-25 | v1.1 | Updated architecture references for the docmcp package entry points and moved implementation modules.
@@ -32,7 +33,9 @@ flowchart TD
   A["docmcp-auth"] --> B["storage/<site>.json"]
   B --> C["docmcp-crawl"]
   C --> D["index/<site>.db"]
+  C --> D2["index/<site>.vec.db"]
   D --> E["docmcp-server"]
+  D2 --> E
   E --> F["src/docmcp/tools.py"]
   F --> G["AI client over MCP stdio"]
 ```
@@ -40,6 +43,7 @@ flowchart TD
 ### Main Components
 - `docmcp-auth` starts the browser and saves the authenticated session state.
 - `docmcp-crawl` opens the site in Playwright, walks the documentation tree, converts HTML to Markdown, and stores results in SQLite.
+- `docmcp-vectorize` reads the crawl index after a crawl and writes the optional local vector sidecar.
 - `docmcp-server` starts the MCP server in stdio mode through `src/docmcp/main.py`.
 - `src/docmcp/tools.py` exposes the MCP tools used by clients.
 - `src/docmcp/config/loader.py` loads `config/sites.yaml` and resolves `${ENV_VAR}` placeholders from the runtime `.env` plus process env.
@@ -51,11 +55,13 @@ flowchart TD
 2. The user authenticates once with `docmcp-auth`.
 3. The crawler reuses the saved session if it is still valid.
 4. Each crawled page is normalized, converted to Markdown, and written to SQLite.
-5. The MCP server reads from SQLite and returns site lists, page lists, search results, or page content to AI clients.
+5. The vectorizer can optionally build a local vector sidecar from the crawl index.
+6. The MCP server reads from SQLite and, when available, the vector sidecar to return site lists, page lists, search results, or page content to AI clients.
 
 ### Storage Layout
 - Sessions: `storage/<site>.json`
 - Indexes: `index/<site>.db`
+- Vector sidecars: `index/<site>.vec.db`
 - Configuration: `config/sites.yaml`
 - Local secrets and overrides: `.env`
 

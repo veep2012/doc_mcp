@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-06-14
-- Version: v1.9
+- Last Updated: 2026-06-21
+- Version: v2.0
 
 ## Change Log
+- 2026-06-21 | v2.0 | Reframed the search contract section as release-facing behavior and removed implementation-stage wording.
 - 2026-06-14 | v1.9 | Documented vector-search fallback to keyword for missing, stale, incompatible, unreadable, and empty sidecars.
 - 2026-06-13 | v1.8 | Clarified hybrid degradation logging and same-page keyword preservation semantics.
 - 2026-06-06 | v1.7 | Documented the experimental `0.99.3` hybrid `search_docs` behavior, including mode selection, source labels, and keyword fallback when the vector sidecar is missing or unreadable.
@@ -62,9 +63,8 @@ python -m src.main
 - `search_docs` uses the site-level `search_engine` setting to choose keyword-only, vector-only, or hybrid search while preserving the current JSON response contract.
 - `fetch_page` returns the full Markdown content for a single indexed page.
 
-### Experimental Search Contract (`0.99.3`)
-`search_docs(site_name, query, limit=10)` currently returns a JSON string with this
-shape:
+### Search Contract
+`search_docs(site_name, query, limit=10)` returns a JSON string with this shape:
 
 ```json
 {
@@ -83,7 +83,7 @@ shape:
 }
 ```
 
-Implementation notes:
+Mode and fallback behavior:
 - `mode` is `"hybrid"` when the site is configured for hybrid search and both vector and keyword search contribute at least one unique merged result.
 - `mode` is `"vector"` when vector search returns the only usable results for the response.
 - `mode` falls back to `"keyword"` when vector search cannot produce usable results, including missing, unreadable, stale, incompatible, empty, or fully deduplicated vector sidecars.

@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-06-14
-- Version: v1.8
+- Last Updated: 2026-06-21
+- Version: v1.9
 
 ## Change Log
+- 2026-06-21 | v1.9 | Reorganized the site configuration section so the search and vector settings read as a single release-facing block.
 - 2026-06-14 | v1.8 | Added FastEmbed model-selection guidance, clarified that supported models depend on the installed FastEmbed version, and documented when to use multilingual versus English-focused embeddings.
 - 2026-05-26 | v1.7 | Documented crawl timing constraints for `delay_seconds` and `start_delay_seconds`, clarified redirect behavior, and updated the site examples to reflect the merged crawl config.
 - 2026-05-24 | v1.6 | Documented vectorizer `--debug` diagnostics, clarified that chained crawl/vectorize inherits debug output, and kept the vector table inspection guidance platform-neutral.
@@ -65,11 +66,13 @@ SITE1_PASSWORD=replace-me
 - `crawl.allow_patterns`: optional allow-list glob patterns
 - `crawl.deny_patterns`: optional deny-list glob patterns
 - `index_file`: SQLite database path for the site index
-- `search_engine`: per-site search mode. Default: `hybrid`. Use `keyword` to disable vector lookup entirely, `vector` for vector-only semantic search, or `hybrid` to merge keyword and vector results
-- `vector_index_file`: local sqlite-vec sidecar path for that site's chunk embeddings; if omitted, the runtime uses the same directory and file stem as `index_file` with a `.vec.db` suffix
-- `vectorizer.chunk_size`: maximum normalized chunk length in characters for post-crawl vector records
-- `vectorizer.chunk_overlap`: overlapping trailing characters reused when the vectorizer creates the next chunk
-- `vectorizer.embedding_model`: FastEmbed text model used to build and query the vector sidecar. Default: `BAAI/bge-small-en-v1.5`
+- `search_engine`: per-site search mode. Default: `hybrid`. Use `keyword` to disable vector lookup entirely, `vector` for vector-only semantic search, or `hybrid` to merge keyword and vector results.
+
+### Search And Vector Settings
+- `vector_index_file`: local sqlite-vec sidecar path for that site's chunk embeddings; if omitted, the runtime uses the same directory and file stem as `index_file` with a `.vec.db` suffix.
+- `vectorizer.chunk_size`: maximum normalized chunk length in characters for post-crawl vector records.
+- `vectorizer.chunk_overlap`: overlapping trailing characters reused when the vectorizer creates the next chunk.
+- `vectorizer.embedding_model`: FastEmbed text model used to build and query the vector sidecar. Default: `BAAI/bge-small-en-v1.5`.
 - Before changing this value, check the models supported by the installed FastEmbed package. Supported models depend on the FastEmbed version installed in your environment:
   ```bash
   .venv/bin/python - <<'PY'
@@ -140,7 +143,7 @@ sites:
       embedding_model: "BAAI/bge-small-en-v1.5"  # English-focused default; multilingual docs can use sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
 ```
 
-### Notes On Example Fields
+### Optional And Informational Fields
 The sample config file also includes a few future-facing keys such as `auth_mode`, `auth_type`, and `respect_robots_txt`.
 - `auth_mode` is currently informational only.
 - `auth_type` is currently informational only.
@@ -167,7 +170,6 @@ The sample config file also includes a few future-facing keys such as `auth_mode
 - Workspace `.env` values are only used for config resolution; loading config does not mutate process env.
 - `CONFIG_FILE` can override the default config path.
 - Relative `CONFIG_FILE`, `session_file`, `index_file`, and `vector_index_file` values should be interpreted from `DOC_MCP_HOME` or the process working directory.
-- `crawl.start_url` is used as the initial crawl seed and is preserved exactly as configured, including any query string.
 - `crawl.start_url` is used as the initial crawl seed and is preserved exactly as configured, including any query string.
 - `crawl.redirect_policy: requested` stores the original requested URL when a page redirects, while `skip` leaves redirected pages out of the index but still crawls the loaded page and discovers links from it.
 - `crawl.start_delay_seconds` only applies in headful mode; headless runs ignore it. When it is used, the crawl starts from the page that is open when the pause ends.

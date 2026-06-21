@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-05-26
-- Version: v1.9
+- Last Updated: 2026-06-21
+- Version: v2.0
 
 ## Change Log
+- 2026-06-21 | v2.0 | Removed duplicated crawl guidance and aligned the section structure with the current crawl, index, and vectorize flow.
 - 2026-05-26 | v1.9 | Documented the optional `--vectorize` crawl flag, the separate post-crawl vectorizer sidecar, and clarified that chained vectorization inherits `--debug` output while keeping the crawl/vectorize command surface in sync with the current CLI behavior.
 - 2026-05-24 | v1.8 | Documented crawl timing constraints for `delay_seconds` and `start_delay_seconds`, and clarified redirect skip semantics.
 - 2026-05-21 | v1.6 | Tightened query-link wording so start URLs are preserved exactly and discovered query links are described consistently.
@@ -107,8 +108,6 @@ docmcp-crawl --version
 - Optional vector sidecar after a separate vectorizer run: `index/<site>.vec.db`
 - Normal runs keep the existing progress output focused on page indexing progress.
 - `--debug` adds crawler-only trace lines for navigation, extracted content sizes, discovered links, skip reasons, queued URLs, and the next breadth-first queue preview before the crawler descends to the next level.
-- Normal runs keep the existing progress output focused on page indexing progress.
-- `--debug` adds crawler-only trace lines for navigation, redirect-policy decisions, extracted content sizes, discovered links, skip reasons, queued URLs, and the next breadth-first queue preview before the crawler descends to the next level.
 - Debug traces are written to `stderr`, which keeps them separate from the normal crawl progress stream.
 - Queue previews summarize the next depth, show up to five URLs, and explicitly mark an empty next queue.
 
@@ -119,7 +118,7 @@ docmcp-crawl --version
 - Anchor-heavy documentation sites remain indexed as canonical pages instead of fragment-only records.
 - Query-driven documentation can opt into separate records for distinct query URLs by setting `crawl.ignore_query_links: false`.
 - Redirected navigation is indexed using the final page URL, not the original requested URL.
-- Redirected navigation defaults to indexing the final page URL, but `crawl.redirect_policy` can preserve the requested URL or skip redirected pages from indexing while still crawling the loaded page in v0.1.4.
+- Redirected navigation defaults to indexing the final page URL, but `crawl.redirect_policy` can preserve the requested URL or skip redirected pages from indexing while still crawling the loaded page.
 - If you need time to click around in the browser before crawling starts, use `crawl.start_delay_seconds` in headful mode instead of increasing `delay_seconds`.
 
 ## Edge Cases
