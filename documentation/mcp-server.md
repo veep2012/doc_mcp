@@ -5,12 +5,18 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-05-21
-- Version: v1.4
+- Last Updated: 2026-06-21
+- Version: v2.2
 
 ## Change Log
-- 2026-05-21 | v1.4 | Documented the server log-level environment variable and clarified startup diagnostics.
-- 2026-05-20 | v1.3 | Added current server version/help guidance and clarified startup diagnostics.
+- 2026-06-21 | v2.2 | Defined the vector sidecar compatibility contract with strict schema-version checks, deterministic keyword fallback reasons, rebuild-based migration guidance, crawl-fingerprint stale detection based on source content hashes and crawl timestamps, and release-facing search contract wording.
+- 2026-06-14 | v1.9 | Documented vector-search fallback to keyword for missing, stale, incompatible, unreadable, and empty sidecars.
+- 2026-06-13 | v1.8 | Clarified hybrid degradation logging and same-page keyword preservation semantics.
+- 2026-06-06 | v1.7 | Documented the experimental `0.99.3` hybrid `search_docs` behavior, including mode selection, source labels, and keyword fallback when the vector sidecar is missing or unreadable.
+- 2026-05-24 | v1.6 | Corrected the historical search_docs contract entry, kept the current `0.99.2` response contract documentation, and bumped the document control record.
+- 2026-05-21 | v1.5 | Documented the server log-level environment variable, added current server version/help guidance, and clarified startup diagnostics.
+- 2026-05-17 | v1.4 | Clarified that `search_docs` is keyword-only today, that the vector search counters remain zero until a vector backend is added, that `score` is an ordinal value derived from result order rather than a semantic relevance score, and that lookup failures return structured JSON.
+- 2026-05-09 | v1.3 | Documented the experimental `0.99.1` JSON response contract for `search_docs`.
 - 2026-04-25 | v1.2 | Added VS Code GitHub Copilot MCP setup instructions with the stable wheel-installed docmcp-server entry point and workspace runtime env values.
 - 2026-04-24 | v1.0 | Reformatted the MCP server reference and clarified stdio startup, tools, and client wiring.
 
@@ -45,15 +51,96 @@ python -m src.main
 
 ### Available Tools
 - `get_sites`
+- `get_version`
 - `list_pages(site_name)`
 - `search_docs(site_name, query, limit=10)`
 - `fetch_page(site_name, url)`
 
 ### Tool Behavior
 - `get_sites` lists each configured site and counts pages in its SQLite index.
+- `get_version` returns the MCP server name and code-embedded package version for runtime checks.
 - `list_pages` returns indexed page titles, URLs, and last crawled timestamps.
-- `search_docs` runs SQLite FTS5 keyword search and returns snippets.
+- `search_docs` uses the site-level `search_engine` setting to choose keyword-only, vector-only, or hybrid search while preserving the current JSON response contract.
 - `fetch_page` returns the full Markdown content for a single indexed page.
+
+### Search Contract
+`search_docs(site_name, query, limit=10)` returns a JSON string with this shape:
+
+```json
+{
+  "mode": "keyword",
+  "vector_hits": 0,
+  "keyword_hits": 2,
+  "results": [
+    {
+      "text": "Result snippet or chunk text",
+      "page_url": "https://docs.example.com/page",
+      "title": "Page title",
+      "score": 0.87,
+      "source": "keyword"
+    }
+  ]
+}
+```
+
+Mode and fallback behavior:
+- `mode` is `"hybrid"` when the site is configured for hybrid search and both vector and keyword search contribute at least one unique merged result.
+- `mode` is `"vector"` when vector search returns the only usable results for the response.
+- `mode` falls back to `"keyword"` when vector search cannot produce usable results, including missing, unreadable, stale, incompatible, empty, or fully deduplicated vector sidecars.
+- `vector_hits` reflects the number of vector rows read before merge-time deduplication.
+- `keyword_hits` reflects the number of SQLite FTS5 matches returned for the query before merge-time deduplication.
+- `results` are merged deterministically with vector rows first (ordered by nearest-neighbor distance) and keyword rows second (ordered by existing FTS rank).
+- `search_engine: keyword` skips vector lookup entirely.
+- `search_engine: vector` still falls back to keyword results when vector search cannot answer, and includes an `error` object when the vector sidecar is missing, unreadable, stale, incompatible, or the embedding backend is unavailable.
+- `search_engine: hybrid` also includes the same `error` object when vector lookup degrades, while preserving keyword results when available.
+- `vector_index_schema_mismatch` is returned when the sidecar header or stored schema version does not match the current runtime contract; rebuild the sidecar with `docmcp-vectorize` to migrate it.
+- `vector_index_incompatible` covers configuration problems such as a missing usable `index_file` and query-time metadata mismatches such as an embedding-model change or missing embedding dimensions.
+- Vector queries require the sidecar header version and the stored metadata schema version to match the current runtime contract, and also require the metadata to match the current `index_file` and `vectorizer.embedding_model`; rebuild the sidecar after changing any of those inputs.
+- `vector_index_stale` is driven by durable crawl fingerprints: the stored source content hash and crawl timestamp must match the current crawl index. Filesystem mtime does not participate in the stale decision.
+- Cross-source duplicates are removed deterministically using stable chunk/page-text identity, and the retained row keeps its original `source` label.
+- In hybrid mode, vector lookup failures are logged and the tool still falls back to keyword results when they are available.
+- Hybrid merge does not suppress distinct keyword snippets from the same page just because one vector chunk from that page was retained.
+- `limit` defaults to `10` and bounds the merged response.
+- `score` remains experimental and should be treated as an ordering hint, not as an absolute relevance measure.
+
+If no keyword results are available, the tool still returns valid JSON:
+
+```json
+{
+  "mode": "keyword",
+  "vector_hits": 0,
+  "keyword_hits": 0,
+  "results": []
+}
+```
+
+If the site name is unknown, the tool returns structured JSON with an `error` object instead of plain text:
+
+```json
+{
+  "mode": "keyword",
+  "vector_hits": 0,
+  "keyword_hits": 0,
+  "results": [],
+  "error": {
+    "type": "site_not_found",
+    "message": "Site 'Missing Docs' not found."
+  }
+}
+```
+
+Successful search calls and empty-index search calls still return the base JSON search contract.
+
+When vector fallback is explicit, the response may also include:
+
+```json
+{
+  "error": {
+    "type": "vector_index_missing | vector_index_unreadable | vector_index_stale | vector_index_schema_mismatch | vector_index_incompatible | vector_backend_unavailable",
+    "message": "Human-readable fallback reason"
+  }
+}
+```
 
 ### Client Setup
 - The server is designed for MCP clients that connect over stdio, such as VS Code / Copilot or Claude Desktop.

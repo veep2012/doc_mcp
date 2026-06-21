@@ -5,17 +5,17 @@ from pathlib import Path
 
 
 def _read_version_from_pyproject() -> str:
-    """Fallback to the project version when the package is run from source."""
+    """Read the project version from the source-tree pyproject.toml."""
     try:
         import tomllib
     except ModuleNotFoundError:
-        return "0.0.0"
+        raise RuntimeError("tomllib is required to read pyproject.toml")
 
     pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
     try:
         pyproject_text = pyproject.read_text(encoding="utf-8")
     except FileNotFoundError:
-        return "0.0.0"
+        raise
     except OSError as exc:
         raise RuntimeError(f"Unable to read version from {pyproject}") from exc
 
@@ -32,7 +32,17 @@ def _read_version_from_pyproject() -> str:
         raise RuntimeError(f"Invalid project.version structure in {pyproject}") from exc
 
 
-try:
-    __version__ = package_version("doc-mcp")
-except PackageNotFoundError:
-    __version__ = _read_version_from_pyproject()
+def _load_version() -> str:
+    """Resolve the package version for source checkouts and installed wheels."""
+    try:
+        return _read_version_from_pyproject()
+    except (FileNotFoundError, RuntimeError):
+        pass
+
+    try:
+        return package_version("doc-mcp")
+    except PackageNotFoundError:
+        return "0.0.0"
+
+
+__version__ = _load_version()

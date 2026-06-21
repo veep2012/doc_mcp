@@ -5,13 +5,15 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-05-09
-- Version: v1.3
+- Last Updated: 2026-06-21
+- Version: v1.7
 
 ## Change Log
+- 2026-06-21 | v1.7 | Grouped the documentation index into getting started, runtime behavior, reference, and support sections and removed the obsolete semantic search planning page from the documentation index.
+- 2026-05-24 | v1.5 | Added the sqlite vector query reference to the documentation index and moved the manual test scenarios link under `test_scenarios/`.
 - 2026-05-09 | v1.3 | Added the story template to the documentation index.
 - 2026-04-26 | v1.2 | Added the manual test scenarios document and documentation actualization state to the index.
-- 2026-04-25 | v1.1 | Added the semantic search implementation stages document to the index.
+- 2026-04-25 | v1.1 | Added the semantic search documentation to the index.
 - 2026-04-24 | v1.0 | Reformatted the documentation index to the standard control/log layout and kept the navigation list current.
 
 ## Purpose
@@ -25,18 +27,24 @@ Provide a single entry point for all files in `documentation/` and make it easy 
   - The detailed content of each individual document.
 
 ## Design / Behavior
-### Core Architecture
+### Getting Started
 - `index.md` - Documentation landing page and quick links.
-- `overview.md` - High-level architecture and data flow for the documentation MCP server.
 - `installation.md` - Setup and first-run instructions.
-- `configuration.md` - Environment, site, and runtime configuration reference.
+- `overview.md` - High-level architecture and data flow for the documentation MCP server.
 - `authentication.md` - Authentication session flow and Playwright login process.
+
+### Runtime Behavior
 - `crawling.md` - Crawler behavior, indexing flow, and crawl tuning.
 - `mcp-server.md` - MCP server entry points and client connection details.
-- `manual-test-scenarios.md` - Manual QA checklist for setup, authentication, crawling, indexing, and MCP client smoke tests.
-- `test_scenarios/testing_framework_test_scenarios.md` - Automated pytest and smoke scenario catalog for the repository test framework.
-- `semantic_search_implementation_stages.md` - Staged implementation plan for external vector index semantic and hybrid search.
 - `operations.md` - Operational workflow, maintenance, and runtime notes.
+
+### Configuration And Reference
+- `configuration.md` - Environment, site, and runtime configuration reference.
+- `sqlite_vector_queries.md` - sqlite3 shell commands and SQL examples for inspecting the local vector index.
+
+### Testing And Support
+- `test_scenarios/manual-test-scenarios.md` - Manual QA checklist for setup, authentication, crawling, indexing, and MCP client smoke tests.
+- `test_scenarios/testing_framework_test_scenarios.md` - Automated pytest and smoke scenario catalog for the repository test framework.
 - `troubleshooting.md` - Common failure modes and recovery steps.
 
 ### Standards And Templates

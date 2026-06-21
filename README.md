@@ -72,8 +72,7 @@ Copy-Item config\sites.yaml.example config\sites.yaml
 
 3. Edit `config/sites.yaml` and `.env` for your site, credentials, and paths.
 
-   `--help` and `--version` are lightweight for the auth, crawl, and server CLIs. The current auth flow is headful only, and the sample `auth_mode` / `auth_type` fields in `config/sites.yaml.example` are informational rather than runtime switches. The crawler also writes detailed debug traces to `stderr`, which keeps them separate from normal crawl progress output if you want to pipe or capture the main stream.
-
+   `--help` and `--version` are lightweight for the auth, crawl, and server CLIs. The current auth flow is manual and headful only: Playwright opens a visible browser and you complete the login yourself. The sample `auth_type` and `auth_mode` fields in `config/sites.yaml.example` are informational metadata rather than runtime switches, so the active configuration is driven by `auth_required`, `session_file`, `crawl`, and `index_file`. The crawler also writes detailed debug traces to `stderr`, which keeps them separate from normal crawl progress output if you want to pipe or capture the main stream.
 4. Authenticate the site:
 
 ```bash
@@ -93,6 +92,8 @@ docmcp-crawl --site "My Docs"
 docmcp-server
 ```
 
+Since `0.99.0`, `search_docs(site_name, query, limit=10)` returns JSON text, not Markdown or prose snippets. MCP clients and prompt flows should parse the JSON response instead of rendering it directly as display text.
+
 ## Smoke Tests
 
 The repository includes smoke tests that exercise crawl and MCP behavior end to end. They have a few explicit prerequisites:
@@ -104,6 +105,7 @@ The repository includes smoke tests that exercise crawl and MCP behavior end to 
 Common limitations:
 
 - Rootless Podman can fail in CI or locked-down environments if user namespaces or port forwarding are restricted.
+- If Podman reports that the machine is running but the socket refuses connections, reinitialize it or switch the default connection to `podman-machine-default-root`.
 - Docker may work where Podman does not, and vice versa.
 - If no container runtime is available, smoke tests should be skipped rather than expected to pass.
 - If Chromium is missing, Playwright-based auth, crawl, and smoke paths will fail before the first site run.

@@ -292,6 +292,76 @@ def test_main_accepts_debug_and_threads_it_to_crawler(monkeypatch):
     assert captured == {"site": site, "headless": True, "debug": True}
 
 
+def test_main_vectorizes_after_successful_crawl_when_requested(monkeypatch, capsys):
+    site = {
+        "name": "Example Docs",
+        "url": "https://example.test",
+        "auth_required": False,
+        "index_file": "index/docs.db",
+    }
+    calls = []
+
+    async def fake_crawl(arg_site, headless=False, debug=False):
+        calls.append(("crawl", arg_site, headless, debug))
+        return True
+
+    def fake_vectorize(arg_site, debug=False):
+        calls.append(("vectorize", arg_site, debug))
+
+    monkeypatch.setattr(crawl_cli, "get_sites", lambda: [site])
+    monkeypatch.setattr(crawl_cli, "crawl_site_headful", fake_crawl)
+    monkeypatch.setattr(crawl_cli, "rebuild_vector_index", fake_vectorize)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["docmcp-crawl", "--site", "Example Docs", "--vectorize"],
+    )
+
+    crawl_cli.main()
+
+    output = capsys.readouterr()
+    assert calls == [
+        ("crawl", site, False, False),
+        ("vectorize", site, False),
+    ]
+    assert "[crawl] Vectorize : enabled" in output.out
+
+
+def test_main_skips_vectorize_when_crawl_does_not_complete(monkeypatch, capsys):
+    site = {
+        "name": "Example Docs",
+        "url": "https://example.test",
+        "auth_required": False,
+        "index_file": "index/docs.db",
+    }
+    calls = []
+
+    async def fake_crawl(arg_site, headless=False, debug=False):
+        calls.append(("crawl", arg_site, headless, debug))
+        return False
+
+    def fake_vectorize(arg_site, debug=False):
+        calls.append(("vectorize", arg_site, debug))
+        raise AssertionError("vectorize should not run when the crawl does not complete")
+
+    monkeypatch.setattr(crawl_cli, "get_sites", lambda: [site])
+    monkeypatch.setattr(crawl_cli, "crawl_site_headful", fake_crawl)
+    monkeypatch.setattr(crawl_cli, "rebuild_vector_index", fake_vectorize)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["docmcp-crawl", "--site", "Example Docs", "--vectorize"],
+    )
+
+    crawl_cli.main()
+
+    output = capsys.readouterr()
+    assert calls == [
+        ("crawl", site, False, False),
+    ]
+    assert "[crawl] Skipping vectorize: crawl did not complete successfully" in output.out
+
+
 def test_main_authenticates_before_crawling_when_required(monkeypatch):
     site = {"name": "Example Docs", "url": "https://example.test", "auth_required": True}
     calls = []
@@ -312,6 +382,79 @@ def test_main_authenticates_before_crawling_when_required(monkeypatch):
     assert calls == [
         ("auth", site, False),
         ("crawl", site, False, False),
+    ]
+
+
+def test_main_authenticates_and_vectorizes_after_successful_crawl(monkeypatch, capsys):
+    site = {
+        "name": "Example Docs",
+        "url": "https://example.test",
+        "auth_required": True,
+        "index_file": "index/docs.db",
+    }
+    calls = []
+
+    def fake_authenticate(arg_site, force=False):
+        calls.append(("auth", arg_site, force))
+
+    async def fake_crawl(arg_site, headless=False, debug=False):
+        calls.append(("crawl", arg_site, headless, debug))
+        return True
+
+    def fake_vectorize(arg_site, debug=False):
+        calls.append(("vectorize", arg_site, debug))
+
+    monkeypatch.setattr(crawl_cli, "get_sites", lambda: [site])
+    monkeypatch.setattr(crawl_cli, "_authenticate_site", fake_authenticate)
+    monkeypatch.setattr(crawl_cli, "crawl_site_headful", fake_crawl)
+    monkeypatch.setattr(crawl_cli, "rebuild_vector_index", fake_vectorize)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["docmcp-crawl", "--site", "Example Docs", "--vectorize"],
+    )
+
+    crawl_cli.main()
+
+    output = capsys.readouterr()
+    assert calls == [
+        ("auth", site, False),
+        ("crawl", site, False, False),
+        ("vectorize", site, False),
+    ]
+    assert "[crawl] Vectorize : enabled" in output.out
+
+
+def test_main_threads_debug_to_vectorize_when_requested(monkeypatch):
+    site = {
+        "name": "Example Docs",
+        "url": "https://example.test",
+        "auth_required": False,
+        "index_file": "index/docs.db",
+    }
+    calls = []
+
+    async def fake_crawl(arg_site, headless=False, debug=False):
+        calls.append(("crawl", arg_site, headless, debug))
+        return True
+
+    def fake_vectorize(arg_site, debug=False):
+        calls.append(("vectorize", arg_site, debug))
+
+    monkeypatch.setattr(crawl_cli, "get_sites", lambda: [site])
+    monkeypatch.setattr(crawl_cli, "crawl_site_headful", fake_crawl)
+    monkeypatch.setattr(crawl_cli, "rebuild_vector_index", fake_vectorize)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["docmcp-crawl", "--site", "Example Docs", "--debug", "--vectorize"],
+    )
+
+    crawl_cli.main()
+
+    assert calls == [
+        ("crawl", site, False, True),
+        ("vectorize", site, True),
     ]
 
 
@@ -501,6 +644,8 @@ def test_crawl_site_headful_debug_outputs_queue_and_link_reasons(monkeypatch, tm
             "ignore_anchor_links": True,
         },
     }
+
+    import asyncio
 
     asyncio.run(crawl_cli.crawl_site_headful(site, headless=True, debug=True))
 
@@ -819,6 +964,8 @@ def test_crawl_site_headful_preserves_query_start_url_and_indexes_query_links(
         },
     }
 
+    import asyncio
+
     asyncio.run(crawl_cli.crawl_site_headful(site, headless=True, debug=True))
 
     output = capsys.readouterr()
@@ -916,6 +1063,8 @@ def test_crawl_site_headful_keeps_query_anchor_links_as_current_page_targets(
             "ignore_anchor_links": True,
         },
     }
+
+    import asyncio
 
     asyncio.run(crawl_cli.crawl_site_headful(site, headless=True, debug=True))
 
@@ -1064,6 +1213,8 @@ def test_crawl_site_headful_runtime_config_matrix(monkeypatch, tmp_path, crawl_c
         "index_file": str(tmp_path / "docs.db"),
         "crawl": crawl_cfg,
     }
+
+    import asyncio
 
     asyncio.run(crawl_cli.crawl_site_headful(site, headless=True, debug=False))
 

@@ -5,12 +5,13 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-05-26
-- Version: v1.8
+- Last Updated: 2026-06-21
+- Version: v2.0
 
 ## Change Log
-- 2026-05-26 | v1.8 | Documented crawl timing constraints for `delay_seconds` and `start_delay_seconds`, and clarified redirect skip semantics.
-- 2026-05-22 | v1.7 | Documented `crawl.redirect_policy`, expanded redirect diagnostics, and aligned the crawl behavior guide with the v0.1.4 release.
+- 2026-06-21 | v2.0 | Removed duplicated crawl guidance and aligned the section structure with the current crawl, index, and vectorize flow.
+- 2026-05-26 | v1.9 | Documented the optional `--vectorize` crawl flag, the separate post-crawl vectorizer sidecar, and clarified that chained vectorization inherits `--debug` output while keeping the crawl/vectorize command surface in sync with the current CLI behavior.
+- 2026-05-24 | v1.8 | Documented crawl timing constraints for `delay_seconds` and `start_delay_seconds`, and clarified redirect skip semantics.
 - 2026-05-21 | v1.6 | Tightened query-link wording so start URLs are preserved exactly and discovered query links are described consistently.
 - 2026-05-20 | v1.4 | Clarified debug output routing, queue preview formatting, redirected URL indexing, and crawler trace expectations.
 - 2026-04-25 | v1.1 | Updated commands and references for installed docmcp-crawl package entry point and moved index store.
@@ -37,6 +38,11 @@ docmcp-crawl --list
 - Crawl a site:
 ```bash
 docmcp-crawl --site "My Docs"
+```
+
+- Crawl a site and refresh the vector sidecar after a successful crawl:
+```bash
+docmcp-crawl --site "My Docs" --vectorize
 ```
 
 - Force re-authentication before crawling:
@@ -75,6 +81,7 @@ docmcp-crawl --version
 - It waits `delay_seconds` between pages; the value must be a finite number greater than or equal to 0.
 - It can wait `start_delay_seconds` after the start page loads only in headful mode; the value must be a finite number greater than or equal to 0.
 - It stops if it detects a redirect to a login page.
+- If a page redirects to another canonical URL, the crawler indexes the final normalized URL, preserving its query string for pages that were actually crawled.
 - It applies `crawl.redirect_policy` when navigation lands on a different URL than the one that was requested.
 - `crawl.redirect_policy: final` indexes the final normalized landing URL and preserves the current default behavior.
 - `crawl.redirect_policy: requested` stores the original requested URL in the index while still crawling the landing page content.
@@ -91,21 +98,27 @@ docmcp-crawl --version
 - The SQLite index stores page URL, page title, Markdown content, and last crawled timestamp.
 - The database also includes SQLite FTS5 tables for full-text keyword search.
 - Repeated crawls update existing rows by URL, so re-running the crawler refreshes pages in place.
+- Crawling does not write vector data during page fetches. The local vector sidecar can be built later by `docmcp-vectorize` from the completed SQLite crawl index, or chained immediately afterward with `docmcp-crawl --vectorize`.
+- If you run `docmcp-crawl --debug --vectorize`, the chained vectorizer inherits the same debug mode and emits chunk-level diagnostics instead of page-only progress.
+- Standalone vectorizer runs keep page-level progress unless you add `--debug`.
 
 ### Runtime Outputs
 - Session file: `storage/<site>.json`
 - SQLite index: `index/<site>.db`
+- Optional vector sidecar after a separate vectorizer run: `index/<site>.vec.db`
 - Normal runs keep the existing progress output focused on page indexing progress.
-- `--debug` adds crawler-only trace lines for navigation, redirect-policy decisions, extracted content sizes, discovered links, skip reasons, queued URLs, and the next breadth-first queue preview before the crawler descends to the next level.
+- `--debug` adds crawler-only trace lines for navigation, extracted content sizes, discovered links, skip reasons, queued URLs, and the next breadth-first queue preview before the crawler descends to the next level.
 - Debug traces are written to `stderr`, which keeps them separate from the normal crawl progress stream.
 - Queue previews summarize the next depth, show up to five URLs, and explicitly mark an empty next queue.
 
 ### Useful Behavior To Know
 - A site can be crawled again after content changes without creating duplicate rows.
+- A crawl can succeed without any vector sidecar present; run the vectorizer explicitly when you want to refresh semantic-search data, or pass `--vectorize` to chain the refresh after a successful crawl.
 - If a session expires during a crawl, the crawler stops and tells you to re-authenticate.
 - Anchor-heavy documentation sites remain indexed as canonical pages instead of fragment-only records.
 - Query-driven documentation can opt into separate records for distinct query URLs by setting `crawl.ignore_query_links: false`.
-- Redirected navigation defaults to indexing the final page URL, but `crawl.redirect_policy` can preserve the requested URL or skip redirected pages from indexing while still crawling the loaded page in v0.1.4.
+- Redirected navigation is indexed using the final page URL, not the original requested URL.
+- Redirected navigation defaults to indexing the final page URL, but `crawl.redirect_policy` can preserve the requested URL or skip redirected pages from indexing while still crawling the loaded page.
 - If you need time to click around in the browser before crawling starts, use `crawl.start_delay_seconds` in headful mode instead of increasing `delay_seconds`.
 
 ## Edge Cases

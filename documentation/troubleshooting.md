@@ -5,14 +5,17 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-05-26
-- Version: v1.7
+- Last Updated: 2026-06-21
+- Version: v1.10
 
 ## Change Log
+- 2026-06-21 | v1.10 | Added versioned sidecar contract guidance, schema-mismatch fallback, rebuild-based migration notes, and crawl-fingerprint stale detection guidance that does not rely on filesystem mtimes.
+- 2026-06-14 | v1.8 | Added vector-sidecar fallback and rebuild guidance for degraded search results.
 - 2026-05-26 | v1.7 | Added guidance for `crawl.delay_seconds` and `crawl.start_delay_seconds`, and clarified redirect skip semantics.
-- 2026-05-22 | v1.6 | Added redirect-policy troubleshooting guidance and aligned crawl diagnostics notes with the v0.1.4 release behavior.
-- 2026-05-21 | v1.5 | Consolidated same-day crawl diagnostics updates and kept the startup and recovery guidance aligned with the current code.
-- 2026-05-20 | v1.4 | Clarified debug stderr routing, redirected-navigation diagnostics, and crawl debug guidance for queue, link, and page-level behavior.
+- 2026-05-24 | v1.6 | Added Podman machine recovery guidance for smoke-test environments and documented the rootful connection option.
+- 2026-05-22 | v1.5 | Added redirect-policy troubleshooting guidance and aligned crawl diagnostics notes with the v0.1.4 release behavior.
+- 2026-05-21 | v1.4 | Consolidated same-day crawl diagnostics updates and kept the startup and recovery guidance aligned with the current code.
+- 2026-05-20 | v1.3 | Clarified debug stderr routing, redirected-navigation diagnostics, and crawl debug guidance for queue, link, and page-level behavior.
 - 2026-04-27 | v1.2 | Added Windows Playwright module verification and recovery steps.
 - 2026-04-25 | v1.1 | Updated troubleshooting notes for the package entry point and VS Code MCP configuration.
 - 2026-04-24 | v1.0 | Reformatted the troubleshooting guide and grouped the common failures into standard sections.
@@ -52,6 +55,15 @@ List the most common failure modes for `doc-mcp` and the first corrective step f
 - Check whether the site was crawled from the right `start_url`.
 - Make sure the query terms actually exist in the indexed Markdown.
 
+### Search Falls Back From Vector To Keyword
+- `search_docs` now treats vector lookup as best-effort and keeps returning valid JSON when the vector sidecar is missing, unreadable, stale, incompatible, or empty.
+- If the response includes an `error` object such as `vector_index_missing`, `vector_index_stale`, `vector_index_schema_mismatch`, or `vector_index_incompatible`, rebuild the sidecar with `docmcp-vectorize --site "My Docs"` after confirming the crawl index is current.
+- `vector_index_stale` is based on durable crawl fingerprints, not file mtimes. If the crawl content or crawl timestamp changes, rebuild the sidecar.
+- `vector_index_schema_mismatch` means the sidecar header or stored schema version is too old or too new for the current runtime contract; `docmcp-vectorize` recreates the sidecar with the current schema.
+- `vector_index_incompatible` can also mean the site config is missing a usable `index_file`, the embedding model changed, or the sidecar is missing required runtime metadata.
+- Rebuild the sidecar after changing `vectorizer.embedding_model` or replacing the site's `index_file`.
+- In hybrid mode, the same fallback reason is logged and also attached to the JSON response when the SQLite index can answer.
+
 ### Pages Look Truncated
 - The crawler tries several page containers, but some sites still expose incomplete content to automation.
 - Re-run with `docmcp-crawl --site "My Docs" --debug` to inspect navigation, extraction, and discovered-link diagnostics before inspecting the site structure manually.
@@ -60,7 +72,7 @@ List the most common failure modes for `doc-mcp` and the first corrective step f
 ### Crawl Behavior Is Hard To Explain
 - Run `docmcp-crawl --site "My Docs" --debug` to print crawler-only queue previews, per-page navigation details, discovered links, and skip reasons.
 - Compare the debug trace with your `allow_patterns`, `deny_patterns`, and `start_url` configuration when pages are unexpectedly skipped or queued.
-- If a page redirects before indexing, compare the requested URL, the final normalized URL, and the `crawl.redirect_policy` decision in the debug trace.
+- If a page redirects before indexing, compare the requested URL and the final normalized URL in the debug trace.
 - The crawler compares hosts exactly when it decides whether a discovered URL stays inside the site scope. If the site uses `www.example.com`, but `start_url` or `url` is set to `example.com`, links on the canonical host can be skipped as "outside start host". Use the canonical hostname consistently in the site config.
 - If you need to set up the browser manually before crawling starts, use `crawl.start_delay_seconds` instead of stretching `delay_seconds`.
 - If `docmcp-crawl` reports an invalid `crawl.delay_seconds` or `crawl.start_delay_seconds` value, make sure the configured value is numeric, finite, and greater than or equal to 0.
@@ -97,11 +109,29 @@ List the most common failure modes for `doc-mcp` and the first corrective step f
 - Site-specific output directories are created when that site is authenticated, crawled, or queried, so one unused site's paths do not block server startup.
 - For VS Code, check the `docs-mcp` output from `MCP: List Servers` to see the exact startup configuration error.
 
+### Podman Smoke Runtime Is Stale Or Unreachable
+- If `make test` reaches the smoke phase and Podman reports that the machine is already running but the socket refuses connections, treat the local Podman machine state as stale.
+- Reinitialize the default machine with:
+```bash
+podman machine stop
+podman machine rm -f podman-machine-default
+podman machine init
+podman machine start
+```
+- If you need the default connection to point at the rootful socket, run:
+```bash
+podman machine set --rootful
+podman system connection default podman-machine-default-root
+```
+- If you want to set the default Podman service connection explicitly after reinitialization, the rootful connection is typically named `podman-machine-default-root`.
+- If Podman is installed but unusable in the current environment, rerun the smoke target with `CONTAINER_BIN=docker`.
+
 ## Edge Cases
 - If a site uses a non-standard login redirect, the session validity check may classify it as expired.
 - If redirected pages still appear unexpectedly, confirm the active site config is the one being loaded and that `crawl.redirect_policy` is spelled exactly as documented.
 - If the crawler returns partial pages, the site may require a different content container or a manual browser review.
 - If search is empty after a crawl, check both the index path and the crawl start URL before re-running the job.
+- If Podman is reachable but the smoke container still fails to start, confirm the current remote connection with `podman system connection list` before retrying.
 
 ## References
 - [authentication.md](authentication.md)

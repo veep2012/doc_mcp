@@ -10,6 +10,7 @@ Usage:
     docmcp-crawl --site "LD documentation" --force-auth
     docmcp-crawl --site "LD documentation" --headless
     docmcp-crawl --site "LD documentation" --debug
+    docmcp-crawl --site "LD documentation" --vectorize
     docmcp-crawl --list
 """
 
@@ -28,6 +29,11 @@ from dotenv import load_dotenv
 from . import __version__
 from .config.loader import ConfigError, get_sites
 from .index_store import init_db, upsert_page
+from .vector_index import (
+    VectorBackendUnavailableError,
+    VectorIndexError,
+    rebuild_vector_index,
+)
 
 load_dotenv()
 
@@ -321,12 +327,14 @@ def _authenticate_site(site: dict, force: bool = False) -> None:
 # ---------------------------------------------------------------------------
 
 
-async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = False) -> None:
+async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = False) -> bool:
     """
     Crawl a site using a real Playwright browser (headful by default).
     Uses the saved session from auth_cli.py, or prompts auth if missing.
+    Returns True when the crawl reaches normal completion.
     """
     name = site["name"]
+    stop_crawl = True
     crawl_cfg = site.get("crawl", {})
     start_url = crawl_cfg.get("start_url", site["url"])
     max_depth = crawl_cfg.get("max_depth", 3)
@@ -355,7 +363,6 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
 
     # Login indicators used to detect redirect to auth page
     login_indicators = ["login", "signin", "sign-in", "/auth", "/sso"]
-
     page_count = 0
 
     def _debug(message: str) -> None:
@@ -456,7 +463,6 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
                         except Exception as e:
                             print(f"[crawl]   ✗ Navigation error: {e}")
                             continue
-
                     strip_query = ignore_query_links and not (
                         url == seed_url and seed_preserves_query
                     )
@@ -565,6 +571,7 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
             await browser.close()
 
     print(f"\n[crawl] Done. {page_count} pages indexed → {index_file}")
+    return not stop_crawl
 
 
 # ---------------------------------------------------------------------------
@@ -591,12 +598,24 @@ def main():
         help="Run browser in headless mode (may trigger anti-bot)",
     )
     parser.add_argument("--debug", action="store_true", help="Print detailed crawler diagnostics")
+    parser.add_argument(
+        "--vectorize",
+        action="store_true",
+        help="Build or refresh the local vector index after a successful crawl",
+    )
     parser.add_argument("--list", action="store_true", help="List all configured sites")
     parser.add_argument("--version", action="store_true", help="Show the current version and exit")
     args = parser.parse_args()
 
     if args.version:
-        if args.site or args.force_auth or args.headless or args.debug or args.list:
+        if (
+            args.site
+            or args.force_auth
+            or args.headless
+            or args.debug
+            or args.vectorize
+            or args.list
+        ):
             parser.error("--version cannot be combined with other arguments")
         print(f"{parser.prog} {__version__}")
         sys.exit(0)
@@ -629,10 +648,25 @@ def main():
 
     # Then crawl
     try:
-        asyncio.run(crawl_site_headful(site, headless=args.headless, debug=args.debug))
+        crawl_completed = asyncio.run(
+            crawl_site_headful(site, headless=args.headless, debug=args.debug)
+        )
     except ConfigError as exc:
         print(f"[docmcp-crawl] Configuration error:\n{exc}", file=sys.stderr)
         sys.exit(1)
+
+    if args.vectorize and crawl_completed:
+        print("[crawl] Vectorize : enabled")
+        try:
+            rebuild_vector_index(site, debug=args.debug)
+        except VectorBackendUnavailableError as exc:
+            print(f"[vectorize] sqlite-vec backend unavailable:\n{exc}", file=sys.stderr)
+            sys.exit(1)
+        except VectorIndexError as exc:
+            print(f"[vectorize] Vectorization failed:\n{exc}", file=sys.stderr)
+            sys.exit(1)
+    elif args.vectorize:
+        print("[crawl] Skipping vectorize: crawl did not complete successfully")
 
 
 if __name__ == "__main__":

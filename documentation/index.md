@@ -5,12 +5,14 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-04-26
-- Version: v1.2
+- Last Updated: 2026-06-21
+- Version: v1.6
 
 ## Change Log
+- 2026-06-21 | v1.6 | Grouped the landing page into getting started, runtime behavior, reference, and support sections and removed the obsolete semantic search planning page from the landing page navigation.
+- 2026-05-24 | v1.4 | Added a direct link to the sqlite vector query reference and moved the manual test scenarios link under `test_scenarios/`.
 - 2026-04-26 | v1.2 | Added the manual test scenarios document to the documentation navigation.
-- 2026-04-25 | v1.1 | Added semantic search implementation stages to the documentation navigation.
+- 2026-04-25 | v1.1 | Added semantic search documentation to the documentation navigation.
 - 2026-04-24 | v1.0 | Reformatted the landing page to the repository documentation standard and refreshed navigation links.
 
 ## Purpose
@@ -25,17 +27,23 @@ Provide the entry point for the repository documentation set and link to the ope
   - Exhaustive API and database references.
 
 ## Design / Behavior
-### Start Here
-- [Overview](overview.md)
+### Getting Started
 - [Quick Start](installation.md)
-- [Configuration](configuration.md)
+- [Overview](overview.md)
 - [Authentication](authentication.md)
+
+### Runtime Behavior
 - [Crawling and Indexing](crawling.md)
 - [MCP Server](mcp-server.md)
-- [Manual Test Scenarios](manual-test-scenarios.md)
-- [Testing Framework Test Scenarios](test_scenarios/testing_framework_test_scenarios.md)
-- [Semantic Search Implementation Stages](semantic_search_implementation_stages.md)
 - [Operations](operations.md)
+
+### Configuration And Reference
+- [Configuration](configuration.md)
+- [SQLite Vector Queries](sqlite_vector_queries.md)
+
+### Testing And Support
+- [Manual Test Scenarios](test_scenarios/manual-test-scenarios.md)
+- [Testing Framework Test Scenarios](test_scenarios/testing_framework_test_scenarios.md)
 - [Troubleshooting](troubleshooting.md)
 
 ### What This Project Does
