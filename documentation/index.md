@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-05-24
-- Version: v1.4
+- Last Updated: 2026-06-21
+- Version: v1.5
 
 ## Change Log
+- 2026-06-21 | v1.5 | Removed the obsolete semantic search planning page from the landing page navigation and kept the release docs as the source of truth.
 - 2026-05-24 | v1.4 | Added a direct link to the sqlite vector query reference and moved the manual test scenarios link under `test_scenarios/`.
 - 2026-04-26 | v1.2 | Added the manual test scenarios document to the documentation navigation.
 - 2026-04-25 | v1.1 | Added semantic search implementation stages to the documentation navigation.
@@ -36,7 +37,6 @@ Provide the entry point for the repository documentation set and link to the ope
 - [MCP Server](mcp-server.md)
 - [Manual Test Scenarios](test_scenarios/manual-test-scenarios.md)
 - [Testing Framework Test Scenarios](test_scenarios/testing_framework_test_scenarios.md)
-- [Semantic Search Implementation Stages](semantic_search_implementation_stages.md)
 - [Operations](operations.md)
 - [Troubleshooting](troubleshooting.md)
 
