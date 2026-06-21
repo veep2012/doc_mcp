@@ -46,6 +46,8 @@ from .index_store import (
 from .vector_index import (
     VectorBackendUnavailableError,
     VectorIndexError,
+    VectorSidecarIncompatibleError,
+    VectorSidecarStaleError,
     resolve_vector_index_file,
     search_vector_chunks,
 )
@@ -117,43 +119,69 @@ def _keyword_lookup(site: dict, query: str, limit: int) -> list[dict]:
         return []
 
 
-def _vector_lookup(site: dict, query: str, limit: int) -> list[dict]:
-    try:
-        return search_vector_chunks(site, query, limit)
-    except (sqlite3.Error, OSError, VectorIndexError) as exc:
-        logger.warning(
-            "Hybrid search degraded to keyword for site %r because vector lookup failed: %s",
-            site["name"],
-            type(exc).__name__,
-        )
-        return []
-
-
-def _vector_lookup_strict(site: dict, query: str, limit: int) -> tuple[list[dict], dict | None]:
-    vector_index_file = resolve_vector_index_file(site)
-    if not Path(vector_index_file).exists():
-        return [], {
+def _vector_lookup_error(site: dict, vector_index_file: str, exc: Exception | None = None) -> dict:
+    if exc is None:
+        return {
             "type": "vector_index_missing",
             "message": (
                 f"Vector search is enabled for '{site['name']}' but the sidecar is missing: "
                 f"{vector_index_file}"
             ),
         }
+    if isinstance(exc, VectorBackendUnavailableError):
+        return {
+            "type": "vector_backend_unavailable",
+            "message": str(exc) or "Vector search backend is unavailable.",
+        }
+    if isinstance(exc, VectorSidecarStaleError):
+        return {"type": "vector_index_stale", "message": str(exc)}
+    if isinstance(exc, VectorSidecarIncompatibleError):
+        return {"type": "vector_index_incompatible", "message": str(exc)}
+    exc_text = str(exc).rstrip(".")
+    exc_detail = f" ({exc_text})" if exc_text else ""
+    return {
+        "type": "vector_index_unreadable",
+        "message": f"Vector sidecar for '{site['name']}' is unreadable{exc_detail}: {vector_index_file}",
+    }
+
+
+def _vector_lookup(site: dict, query: str, limit: int) -> tuple[list[dict], dict | None]:
+    vector_index_file = resolve_vector_index_file(site)
+    if not Path(vector_index_file).exists():
+        error = _vector_lookup_error(site, vector_index_file)
+        logger.warning(
+            "Hybrid search degraded to keyword for site %r because %s: %s",
+            site["name"],
+            error["type"],
+            error["message"],
+        )
+        return [], error
+    try:
+        return search_vector_chunks(site, query, limit), None
+    except (sqlite3.Error, OSError, VectorIndexError) as exc:
+        error = _vector_lookup_error(site, vector_index_file, exc)
+        logger.warning(
+            "Hybrid search degraded to keyword for site %r because %s: %s",
+            site["name"],
+            error["type"],
+            error["message"],
+        )
+        return [], error
+
+
+def _vector_lookup_strict(site: dict, query: str, limit: int) -> tuple[list[dict], dict | None]:
+    vector_index_file = resolve_vector_index_file(site)
+    if not Path(vector_index_file).exists():
+        return [], _vector_lookup_error(site, vector_index_file)
 
     try:
         return search_vector_chunks(site, query, limit), None
     except VectorBackendUnavailableError as exc:
-        return [], {
-            "type": "vector_backend_unavailable",
-            "message": str(exc) or "Vector search backend is unavailable.",
-        }
+        return [], _vector_lookup_error(site, vector_index_file, exc)
+    # VectorSidecarStaleError and VectorSidecarIncompatibleError inherit from VectorIndexError,
+    # so they intentionally flow through this shared fallback branch for consistent classification.
     except (sqlite3.Error, OSError, VectorIndexError) as exc:
-        return [], {
-            "type": "vector_index_unreadable",
-            "message": (
-                f"Vector sidecar for '{site['name']}' is unreadable: {vector_index_file}. " f"{exc}"
-            ),
-        }
+        return [], _vector_lookup_error(site, vector_index_file, exc)
 
 
 def _normalize_keyword_results(results: list[dict]) -> list[dict]:
@@ -226,7 +254,9 @@ def _select_search_mode(contributors: set[str]) -> str:
     return "keyword"
 
 
-def _search_response(keyword_results: list[dict], vector_results: list[dict], limit: int) -> dict:
+def _search_response(
+    keyword_results: list[dict], vector_results: list[dict], limit: int, error: dict | None = None
+) -> dict:
     response = _empty_search_response()
     normalized_keyword_results = _normalize_keyword_results(keyword_results)
     normalized_vector_results = _normalize_vector_results(vector_results)
@@ -237,6 +267,8 @@ def _search_response(keyword_results: list[dict], vector_results: list[dict], li
     response["vector_hits"] = len(vector_results)
     response["keyword_hits"] = len(keyword_results)
     response["results"] = merged_results
+    if error:
+        response["error"] = error
     return response
 
 
@@ -250,12 +282,18 @@ def _keyword_search_response(site: dict, query: str, limit: int) -> dict:
 
 def _vector_search_response(site: dict, query: str, limit: int) -> dict:
     vector_results, error = _vector_lookup_strict(site, query, limit)
-    if error:
-        return _search_error_response("vector", error["type"], error["message"])
+    if vector_results:
+        response = _empty_search_response("vector")
+        response["vector_hits"] = len(vector_results)
+        response["results"] = _public_search_results(_normalize_vector_results(vector_results))
+        return response
 
-    response = _empty_search_response("vector")
-    response["vector_hits"] = len(vector_results)
-    response["results"] = _public_search_results(_normalize_vector_results(vector_results))
+    keyword_results = _keyword_lookup(site, query, limit)
+    response = _empty_search_response("keyword")
+    response["keyword_hits"] = len(keyword_results)
+    response["results"] = _public_search_results(_normalize_keyword_results(keyword_results))
+    if error:
+        response["error"] = error
     return response
 
 
@@ -333,8 +371,11 @@ def search_docs(site_name: str, query: str, limit: int = 10) -> str:
         return json.dumps(_vector_search_response(site, query, normalized_limit), indent=2)
 
     keyword_results = _keyword_lookup(site, query, normalized_limit)
-    vector_results = _vector_lookup(site, query, normalized_limit)
-    return json.dumps(_search_response(keyword_results, vector_results, normalized_limit), indent=2)
+    vector_results, error = _vector_lookup(site, query, normalized_limit)
+    return json.dumps(
+        _search_response(keyword_results, vector_results, normalized_limit, error),
+        indent=2,
+    )
 
 
 @mcp.tool()

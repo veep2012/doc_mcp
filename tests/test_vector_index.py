@@ -13,6 +13,8 @@ from docmcp.vector_index import (
     DEFAULT_EMBEDDING_MODEL,
     EmbeddingBackendUnavailableError,
     VectorIndexError,
+    VectorSidecarIncompatibleError,
+    VectorSidecarStaleError,
     VectorSourceError,
     build_vector_records,
     chunk_markdown,
@@ -366,6 +368,128 @@ def test_search_vector_chunks_rejects_stale_embedding_dimensions(monkeypatch, tm
     )
 
     with pytest.raises(VectorIndexError, match="embedding dimension mismatch"):
+        search_vector_chunks(site, "Alpha", limit=2)
+
+
+def test_search_vector_chunks_rejects_stale_source_index_metadata(tmp_path):
+    _require_vector_backend()
+    source_index = tmp_path / "index" / "docs.db"
+    vector_index_file = tmp_path / "index" / "docs.vec.db"
+    init_db(str(source_index))
+    upsert_page(
+        str(source_index),
+        "https://example.test/vector-best",
+        "Vector Best",
+        "Alpha alpha alpha beta",
+    )
+
+    site = {
+        "name": "Example Docs",
+        "index_file": str(source_index),
+        "vector_index_file": str(vector_index_file),
+        "vectorizer": {
+            "chunk_size": 100,
+            "chunk_overlap": 20,
+            "embedding_model": "fake-fastembed-model",
+        },
+    }
+    rebuild_vector_index(site)
+
+    with sqlite3.connect(str(vector_index_file)) as conn:
+        conn.execute(
+            "UPDATE vector_meta SET source_index_file = ? WHERE site_name = ?",
+            (str(tmp_path / "other" / "docs.db"), site["name"]),
+        )
+        conn.commit()
+
+    with pytest.raises(VectorSidecarStaleError, match="built from a different keyword index"):
+        search_vector_chunks(site, "Alpha", limit=2)
+
+
+def test_search_vector_chunks_rejects_missing_site_index_file(tmp_path):
+    _require_vector_backend()
+    source_index = tmp_path / "index" / "docs.db"
+    vector_index_file = tmp_path / "index" / "docs.vec.db"
+    init_db(str(source_index))
+    upsert_page(
+        str(source_index),
+        "https://example.test/vector-best",
+        "Vector Best",
+        "Alpha alpha alpha beta",
+    )
+
+    site = {
+        "name": "Example Docs",
+        "index_file": "",
+        "vector_index_file": str(vector_index_file),
+        "vectorizer": {
+            "chunk_size": 100,
+            "chunk_overlap": 20,
+            "embedding_model": "fake-fastembed-model",
+        },
+    }
+    rebuild_vector_index({**site, "index_file": str(source_index)})
+
+    with pytest.raises(VectorSidecarIncompatibleError, match="missing index_file"):
+        search_vector_chunks(site, "Alpha", limit=2)
+
+
+def test_search_vector_chunks_rejects_legacy_vector_meta_schema(tmp_path):
+    _require_vector_backend()
+    source_index = tmp_path / "index" / "docs.db"
+    vector_index_file = tmp_path / "index" / "docs.vec.db"
+    init_db(str(source_index))
+    upsert_page(
+        str(source_index),
+        "https://example.test/vector-best",
+        "Vector Best",
+        "Alpha alpha alpha beta",
+    )
+
+    with sqlite3.connect(str(vector_index_file)) as conn:
+        conn.execute(
+            """
+            CREATE TABLE vector_meta (
+                site_name TEXT PRIMARY KEY,
+                page_count INTEGER NOT NULL,
+                chunk_count INTEGER NOT NULL,
+                built_at TEXT NOT NULL,
+                embedding_model TEXT NOT NULL,
+                embedding_dimensions INTEGER NOT NULL,
+                chunk_size INTEGER NOT NULL,
+                chunk_overlap INTEGER NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO vector_meta(
+                site_name,
+                page_count,
+                chunk_count,
+                built_at,
+                embedding_model,
+                embedding_dimensions,
+                chunk_size,
+                chunk_overlap
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("Example Docs", 1, 1, "2026-06-20T00:00:00Z", "fake-fastembed-model", 3, 100, 20),
+        )
+        conn.commit()
+
+    site = {
+        "name": "Example Docs",
+        "index_file": str(source_index),
+        "vector_index_file": str(vector_index_file),
+        "vectorizer": {
+            "chunk_size": 100,
+            "chunk_overlap": 20,
+            "embedding_model": "fake-fastembed-model",
+        },
+    }
+
+    with pytest.raises(VectorSidecarIncompatibleError, match="source_index_file"):
         search_vector_chunks(site, "Alpha", limit=2)
 
 

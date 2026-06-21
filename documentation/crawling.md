@@ -97,7 +97,7 @@ docmcp-crawl --version
 - The SQLite index stores page URL, page title, Markdown content, and last crawled timestamp.
 - The database also includes SQLite FTS5 tables for full-text keyword search.
 - Repeated crawls update existing rows by URL, so re-running the crawler refreshes pages in place.
-- Crawling does not write vector data during page fetches. The local vector sidecar can be built later by `docmcp-vectorize` or `docmcp_vectorizer` from the completed SQLite crawl index, or chained immediately afterward with `docmcp-crawl --vectorize`.
+- Crawling does not write vector data during page fetches. The local vector sidecar can be built later by `docmcp-vectorize` from the completed SQLite crawl index, or chained immediately afterward with `docmcp-crawl --vectorize`.
 - If you run `docmcp-crawl --debug --vectorize`, the chained vectorizer inherits the same debug mode and emits chunk-level diagnostics instead of page-only progress.
 - Standalone vectorizer runs keep page-level progress unless you add `--debug`.
 
