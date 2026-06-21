@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-06-14
-- Version: v1.8
+- Last Updated: 2026-06-21
+- Version: v1.10
 
 ## Change Log
+- 2026-06-21 | v1.10 | Added versioned sidecar contract guidance, schema-mismatch fallback, rebuild-based migration notes, and crawl-fingerprint stale detection guidance that does not rely on filesystem mtimes.
 - 2026-06-14 | v1.8 | Added vector-sidecar fallback and rebuild guidance for degraded search results.
 - 2026-05-26 | v1.7 | Added guidance for `crawl.delay_seconds` and `crawl.start_delay_seconds`, and clarified redirect skip semantics.
 - 2026-05-24 | v1.6 | Added Podman machine recovery guidance for smoke-test environments and documented the rootful connection option.
@@ -56,8 +57,10 @@ List the most common failure modes for `doc-mcp` and the first corrective step f
 
 ### Search Falls Back From Vector To Keyword
 - `search_docs` now treats vector lookup as best-effort and keeps returning valid JSON when the vector sidecar is missing, unreadable, stale, incompatible, or empty.
-- If the response includes an `error` object such as `vector_index_missing`, `vector_index_stale`, or `vector_index_incompatible`, rebuild the sidecar with `docmcp-vectorize --site "My Docs"` after confirming the crawl index is current.
-- `vector_index_incompatible` can also mean the site config is missing a usable `index_file` or the vector sidecar was built from an older schema that lacks `source_index_file`.
+- If the response includes an `error` object such as `vector_index_missing`, `vector_index_stale`, `vector_index_schema_mismatch`, or `vector_index_incompatible`, rebuild the sidecar with `docmcp-vectorize --site "My Docs"` after confirming the crawl index is current.
+- `vector_index_stale` is based on durable crawl fingerprints, not file mtimes. If the crawl content or crawl timestamp changes, rebuild the sidecar.
+- `vector_index_schema_mismatch` means the sidecar header or stored schema version is too old or too new for the current runtime contract; `docmcp-vectorize` recreates the sidecar with the current schema.
+- `vector_index_incompatible` can also mean the site config is missing a usable `index_file`, the embedding model changed, or the sidecar is missing required runtime metadata.
 - Rebuild the sidecar after changing `vectorizer.embedding_model` or replacing the site's `index_file`.
 - In hybrid mode, the same fallback reason is logged and also attached to the JSON response when the SQLite index can answer.
 

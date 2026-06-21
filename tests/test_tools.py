@@ -203,7 +203,9 @@ def test_search_docs_keyword_mode_skips_vector_lookup(monkeypatch, tmp_path):
     assert isinstance(response["results"][0]["score"], float)
 
 
-def test_search_docs_vector_mode_returns_vector_results_and_skips_keyword(monkeypatch, tmp_path):
+def test_search_docs_vector_mode_returns_vector_results_and_skips_keyword(
+    monkeypatch, tmp_path, caplog
+):
     index_file = tmp_path / "docs.db"
     vector_index_file = tmp_path / "docs.vec.db"
     init_db(str(index_file))
@@ -243,6 +245,7 @@ def test_search_docs_vector_mode_returns_vector_results_and_skips_keyword(monkey
         ],
     )
 
+    caplog.set_level(logging.INFO, logger="docmcp.observability")
     response = json.loads(tools.search_docs("Vector Docs", "Alpha"))
 
     assert response["mode"] == "vector"
@@ -257,6 +260,16 @@ def test_search_docs_vector_mode_returns_vector_results_and_skips_keyword(monkey
             "source": "vector",
         }
     ]
+    observation = next(
+        json.loads(record.message)
+        for record in caplog.records
+        if record.name == "docmcp.observability"
+        and json.loads(record.message)["event"] == "vector_path_decision"
+    )
+    assert observation["vector_search_used"] is True
+    assert observation["fallback_reason"] is None
+    assert observation["index_doc_count"] == 0
+    assert observation["index_age"] is None
 
 
 def test_search_docs_vector_mode_falls_back_to_keyword_when_vector_results_are_empty(
@@ -301,7 +314,7 @@ def test_search_docs_vector_mode_falls_back_to_keyword_when_vector_results_are_e
     assert isinstance(response["results"][0]["score"], float)
 
 
-def test_search_docs_vector_mode_reports_missing_sidecar(monkeypatch, tmp_path):
+def test_search_docs_vector_mode_reports_missing_sidecar(monkeypatch, tmp_path, caplog):
     index_file = tmp_path / "docs.db"
     vector_index_file = tmp_path / "docs.vec.db"
     init_db(str(index_file))
@@ -326,6 +339,7 @@ def test_search_docs_vector_mode_reports_missing_sidecar(monkeypatch, tmp_path):
         lambda *args, **kwargs: pytest.fail("vector search should not be called"),
     )
 
+    caplog.set_level(logging.INFO, logger="docmcp.observability")
     response = json.loads(tools.search_docs("Vector Docs", "Alpha"))
 
     assert response["mode"] == "keyword"
@@ -334,6 +348,14 @@ def test_search_docs_vector_mode_reports_missing_sidecar(monkeypatch, tmp_path):
     assert response["results"] == []
     assert response["error"]["type"] == "vector_index_missing"
     assert "sidecar is missing" in response["error"]["message"]
+    observation = next(
+        json.loads(record.message)
+        for record in caplog.records
+        if record.name == "docmcp.observability"
+        and json.loads(record.message)["event"] == "vector_path_decision"
+    )
+    assert observation["vector_search_used"] is False
+    assert observation["fallback_reason"] == "vector_index_missing"
 
 
 def test_search_docs_vector_mode_reports_unreadable_sidecar(monkeypatch, tmp_path):
@@ -370,6 +392,44 @@ def test_search_docs_vector_mode_reports_unreadable_sidecar(monkeypatch, tmp_pat
     assert response["results"] == []
     assert response["error"]["type"] == "vector_index_unreadable"
     assert "unreadable" in response["error"]["message"]
+
+
+def test_search_docs_vector_mode_reports_stale_sidecar_when_source_content_changes(
+    monkeypatch, tmp_path
+):
+    _require_vector_backend()
+    index_file = tmp_path / "docs.db"
+    vector_index_file = tmp_path / "docs.vec.db"
+    init_db(str(index_file))
+    upsert_page(str(index_file), "https://example.test/vector", "Vector", "Alpha beta")
+
+    site = {
+        "name": "Vector Docs",
+        "url": "https://example.test",
+        "auth_required": False,
+        "search_engine": "vector",
+        "index_file": str(index_file),
+        "vector_index_file": str(vector_index_file),
+        "vectorizer": {"embedding_model": "fake-fastembed-model"},
+    }
+    rebuild_vector_index(site)
+
+    with sqlite3.connect(str(index_file)) as conn:
+        conn.execute(
+            "UPDATE pages SET content_md = ? WHERE url = ?",
+            ("Alpha beta gamma", "https://example.test/vector"),
+        )
+        conn.commit()
+
+    monkeypatch.setattr(tools, "_get_sites", lambda: [site])
+
+    response = json.loads(tools.search_docs("Vector Docs", "Alpha"))
+
+    assert response["mode"] == "keyword"
+    assert response["vector_hits"] == 0
+    assert response["keyword_hits"] == 1
+    assert response["error"]["type"] == "vector_index_stale"
+    assert "content hash" in response["error"]["message"]
 
 
 def test_search_docs_vector_mode_reports_missing_fastembed_backend(monkeypatch, tmp_path):
@@ -783,18 +843,18 @@ def test_merge_search_results_keeps_distinct_keyword_snippets_from_same_page():
     assert contributors == {"keyword", "vector"}
     assert merged_results == [
         {
-            "text": "Alpha beta",
-            "page_url": "https://example.test/guide",
-            "title": "Guide",
-            "score": 0.9,
-            "source": "vector",
-        },
-        {
             "text": "Alpha beta gamma",
             "page_url": "https://example.test/guide",
             "title": "Guide",
             "score": 1.0,
             "source": "keyword",
+        },
+        {
+            "text": "Alpha beta",
+            "page_url": "https://example.test/guide",
+            "title": "Guide",
+            "score": 0.9,
+            "source": "vector",
         },
     ]
 
@@ -827,10 +887,93 @@ def test_merge_search_results_preserves_same_page_keyword_hits_in_hybrid_mode():
     merged_results, contributors = tools._merge_search_results(vector_results, keyword_results, 10)
 
     assert contributors == {"keyword", "vector"}
-    assert [result["source"] for result in merged_results] == ["vector", "keyword"]
-    assert merged_results[0]["page_url"] == "https://example.test/guide"
-    assert merged_results[1]["page_url"] == "https://example.test/guide"
-    assert merged_results[1]["text"] == "Alpha beta gamma"
+    assert merged_results == [
+        {
+            "text": "Alpha beta gamma",
+            "page_url": "https://example.test/guide",
+            "title": "Guide",
+            "score": 1.0,
+            "source": "keyword",
+        },
+        {
+            "text": "Alpha beta",
+            "page_url": "https://example.test/guide",
+            "title": "Guide",
+            "score": 0.92,
+            "source": "vector",
+        },
+    ]
+
+
+def test_search_response_ranks_mixed_keyword_and_vector_results_deterministically():
+    vector_results = [
+        {
+            "chunk_id": "chunk-1",
+            "page_url": "https://example.test/vector",
+            "title": "Vector",
+            "text": "Vector alpha",
+            "distance": 0.0,
+        },
+        {
+            "chunk_id": "chunk-2",
+            "page_url": "https://example.test/shared",
+            "title": "Shared",
+            "text": "Shared vector",
+            "distance": 0.25,
+        },
+    ]
+    keyword_results = [
+        {
+            "url": "https://example.test/keyword",
+            "title": "Keyword",
+            "excerpt": "Keyword alpha",
+            "rank": -1.0,
+        },
+        {
+            "url": "https://example.test/shared",
+            "title": "Shared",
+            "excerpt": "Shared keyword",
+            "rank": -2.0,
+        },
+    ]
+
+    response = tools._search_response(keyword_results, vector_results, limit=10)
+
+    assert response == {
+        "mode": "hybrid",
+        "vector_hits": 2,
+        "keyword_hits": 2,
+        "results": [
+            {
+                "text": "Vector alpha",
+                "page_url": "https://example.test/vector",
+                "title": "Vector",
+                "score": 1.0,
+                "source": "vector",
+            },
+            {
+                "text": "Keyword alpha",
+                "page_url": "https://example.test/keyword",
+                "title": "Keyword",
+                "score": 1.0,
+                "source": "keyword",
+            },
+            {
+                "text": "Shared vector",
+                "page_url": "https://example.test/shared",
+                "title": "Shared",
+                "score": 0.8,
+                "source": "vector",
+            },
+            {
+                "text": "Shared keyword",
+                "page_url": "https://example.test/shared",
+                "title": "Shared",
+                "score": 0.5,
+                "source": "keyword",
+            },
+        ],
+    }
 
 
 @pytest.mark.parametrize(
@@ -1004,6 +1147,7 @@ def test_search_docs_reports_legacy_vector_meta_schema_as_incompatible(monkeypat
     upsert_page(str(index_file), "https://example.test/guide", "Guide", "Alpha beta")
 
     with sqlite3.connect(str(vector_index_file)) as conn:
+        conn.execute("PRAGMA user_version = 2")
         conn.execute(
             """
             CREATE TABLE vector_meta (
@@ -1068,8 +1212,95 @@ def test_search_docs_reports_legacy_vector_meta_schema_as_incompatible(monkeypat
             "source": "keyword",
         }
     ]
-    assert response["error"]["type"] == "vector_index_incompatible"
-    assert "source_index_file" in response["error"]["message"]
+    assert response["error"]["type"] == "vector_index_schema_mismatch"
+    assert "schema_version" in response["error"]["message"]
+
+
+def test_search_docs_reports_unsupported_vector_sidecar_header_version(monkeypatch, tmp_path):
+    _require_vector_backend()
+
+    index_file = tmp_path / "docs.db"
+    vector_index_file = tmp_path / "docs.vec.db"
+    init_db(str(index_file))
+    upsert_page(str(index_file), "https://example.test/guide", "Guide", "Alpha beta")
+
+    with sqlite3.connect(str(vector_index_file)) as conn:
+        conn.execute("PRAGMA user_version = 0")
+        conn.execute(
+            """
+            CREATE TABLE vector_meta (
+                site_name TEXT PRIMARY KEY,
+                schema_version INTEGER NOT NULL,
+                source_index_file TEXT NOT NULL,
+                built_at TEXT NOT NULL,
+                embedding_model TEXT NOT NULL,
+                page_count INTEGER NOT NULL,
+                chunk_count INTEGER NOT NULL,
+                embedding_dimensions INTEGER NOT NULL,
+                chunk_size INTEGER NOT NULL,
+                chunk_overlap INTEGER NOT NULL,
+                source_max_last_crawled TEXT
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO vector_meta(
+                site_name,
+                schema_version,
+                source_index_file,
+                built_at,
+                embedding_model,
+                page_count,
+                chunk_count,
+                embedding_dimensions,
+                chunk_size,
+                chunk_overlap,
+                source_max_last_crawled
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "Example Docs",
+                1,
+                str(index_file),
+                "2026-06-20T00:00:00Z",
+                "fake-fastembed-model",
+                1,
+                1,
+                3,
+                100,
+                20,
+                None,
+            ),
+        )
+        conn.commit()
+
+    monkeypatch.setattr(
+        tools,
+        "_get_sites",
+        lambda: [
+            {
+                "name": "Example Docs",
+                "url": "https://example.test",
+                "auth_required": False,
+                "index_file": str(index_file),
+                "vector_index_file": str(vector_index_file),
+                "vectorizer": {
+                    "chunk_size": 100,
+                    "chunk_overlap": 20,
+                    "embedding_model": "fake-fastembed-model",
+                },
+            }
+        ],
+    )
+
+    response = json.loads(tools.search_docs("Example Docs", "Alpha"))
+
+    assert response["mode"] == "keyword"
+    assert response["vector_hits"] == 0
+    assert response["keyword_hits"] == 1
+    assert response["error"]["type"] == "vector_index_schema_mismatch"
+    assert "unsupported header version" in response["error"]["message"]
 
 
 def test_search_docs_reports_missing_site_index_file_as_incompatible(monkeypatch, tmp_path):
@@ -1153,7 +1384,7 @@ def test_search_docs_returns_keyword_results_when_vector_lookup_returns_no_hits(
     )
 
 
-def test_search_docs_returns_hybrid_results_with_partial_vector_sidecar(monkeypatch, tmp_path):
+def test_search_docs_reports_stale_sidecar_when_source_grows_after_rebuild(monkeypatch, tmp_path):
     _require_vector_backend()
 
     index_file = tmp_path / "docs.db"
@@ -1197,21 +1428,17 @@ def test_search_docs_returns_hybrid_results_with_partial_vector_sidecar(monkeypa
 
     response = json.loads(tools.search_docs("Example Docs", "Alpha", limit=3))
 
-    assert response["mode"] == "hybrid"
-    assert response["vector_hits"] == 2
+    assert response["mode"] == "keyword"
+    assert response["vector_hits"] == 0
     assert response["keyword_hits"] == 2
-    assert [result["source"] for result in response["results"]] == [
-        "vector",
-        "vector",
-        "keyword",
-    ]
+    assert [result["source"] for result in response["results"]] == ["keyword", "keyword"]
     assert response["results"][0]["page_url"] == "https://example.test/vector-best"
-    assert response["results"][1]["page_url"] == "https://example.test/vector-only"
-    assert response["results"][2]["page_url"] == "https://example.test/vector-best"
-    assert response["results"][2]["title"] == "Vector Best"
-    assert response["results"][2]["text"].startswith("[Alpha]")
+    assert response["results"][1]["page_url"] == "https://example.test/keyword-only"
+    assert response["results"][0]["title"] == "Vector Best"
+    assert response["results"][1]["title"] == "Keyword Only"
+    assert response["results"][0]["text"].startswith("[Alpha]")
     assert all(isinstance(result["score"], float) for result in response["results"])
-    assert "error" not in response
+    assert response["error"]["type"] == "vector_index_stale"
 
 
 def test_search_docs_falls_back_when_vector_sidecar_is_unreadable(monkeypatch, tmp_path):

@@ -48,12 +48,16 @@ from .vector_index import (
     VectorIndexError,
     VectorSidecarIncompatibleError,
     VectorSidecarStaleError,
+    VectorSidecarSchemaMismatchError,
+    _age_seconds_from_timestamp,
+    _source_index_fingerprint,
     resolve_vector_index_file,
     search_vector_chunks,
 )
 
 mcp = FastMCP(os.getenv("MCP_SERVER_NAME", "docs-mcp"))
 logger = logging.getLogger("docmcp.tools")
+obs_logger = logging.getLogger("docmcp.observability")
 
 
 def _find_site(name: str) -> dict | None:
@@ -65,6 +69,11 @@ def _find_site(name: str) -> dict | None:
 
 def _site_search_engine(site: dict) -> str:
     return _normalize_search_engine(site.get("search_engine"), site.get("name"))
+
+
+def _emit_observation(event: str, **fields) -> None:
+    payload = {"event": event, **fields}
+    obs_logger.info(json.dumps(payload, sort_keys=True, default=str))
 
 
 def _empty_search_response(mode: str = "keyword") -> dict:
@@ -119,6 +128,47 @@ def _keyword_lookup(site: dict, query: str, limit: int) -> list[dict]:
         return []
 
 
+def _vector_index_observation(site: dict) -> dict[str, int | float | None]:
+    index_file = site.get("index_file")
+    if not index_file:
+        return {"index_doc_count": None, "index_age": None}
+
+    snapshot = _source_index_fingerprint(index_file)
+    if snapshot is None:
+        return {"index_doc_count": None, "index_age": None}
+
+    index_doc_count, source_max_last_crawled, _ = snapshot
+    return {
+        "index_doc_count": index_doc_count,
+        "index_age": _age_seconds_from_timestamp(source_max_last_crawled),
+    }
+
+
+def _log_vector_path_decision(
+    *,
+    site: dict | None,
+    search_engine: str,
+    vector_search_used: bool,
+    fallback_reason: str | None,
+    mode: str,
+    vector_hits: int,
+    keyword_hits: int,
+) -> None:
+    payload = {
+        "site_name": site["name"] if site else None,
+        "search_engine": search_engine,
+        "vector_search_used": vector_search_used,
+        "fallback_reason": fallback_reason,
+        "mode": mode,
+        "vector_hits": vector_hits,
+        "keyword_hits": keyword_hits,
+    }
+    payload.update(
+        _vector_index_observation(site) if site else {"index_doc_count": None, "index_age": None}
+    )
+    _emit_observation("vector_path_decision", **payload)
+
+
 def _vector_lookup_error(site: dict, vector_index_file: str, exc: Exception | None = None) -> dict:
     if exc is None:
         return {
@@ -135,6 +185,8 @@ def _vector_lookup_error(site: dict, vector_index_file: str, exc: Exception | No
         }
     if isinstance(exc, VectorSidecarStaleError):
         return {"type": "vector_index_stale", "message": str(exc)}
+    if isinstance(exc, VectorSidecarSchemaMismatchError):
+        return {"type": "vector_index_schema_mismatch", "message": str(exc)}
     if isinstance(exc, VectorSidecarIncompatibleError):
         return {"type": "vector_index_incompatible", "message": str(exc)}
     exc_text = str(exc).rstrip(".")
@@ -218,6 +270,17 @@ def _public_search_results(results: list[dict]) -> list[dict]:
     ]
 
 
+def _search_result_sort_key(result: dict) -> tuple[float, int, str, str, str]:
+    source_priority = 0 if result.get("source") == "vector" else 1
+    return (
+        -float(result.get("score") or 0.0),
+        source_priority,
+        result.get("page_url") or "",
+        result.get("title") or "",
+        result.get("text") or "",
+    )
+
+
 def _merge_search_results(
     vector_results: list[dict], keyword_results: list[dict], limit: int
 ) -> tuple[list[dict], set[str]]:
@@ -240,10 +303,9 @@ def _merge_search_results(
                 "source": result["source"],
             }
         )
-        if len(merged) >= limit:
-            break
 
-    return merged, contributors
+    merged.sort(key=_search_result_sort_key)
+    return merged[:limit], contributors
 
 
 def _select_search_mode(contributors: set[str]) -> str:
@@ -277,6 +339,15 @@ def _keyword_search_response(site: dict, query: str, limit: int) -> dict:
     response = _empty_search_response("keyword")
     response["keyword_hits"] = len(keyword_results)
     response["results"] = _public_search_results(_normalize_keyword_results(keyword_results))
+    _log_vector_path_decision(
+        site=site,
+        search_engine=_site_search_engine(site),
+        vector_search_used=False,
+        fallback_reason="search_engine_keyword",
+        mode=response["mode"],
+        vector_hits=response["vector_hits"],
+        keyword_hits=response["keyword_hits"],
+    )
     return response
 
 
@@ -286,6 +357,15 @@ def _vector_search_response(site: dict, query: str, limit: int) -> dict:
         response = _empty_search_response("vector")
         response["vector_hits"] = len(vector_results)
         response["results"] = _public_search_results(_normalize_vector_results(vector_results))
+        _log_vector_path_decision(
+            site=site,
+            search_engine=_site_search_engine(site),
+            vector_search_used=True,
+            fallback_reason=None,
+            mode=response["mode"],
+            vector_hits=response["vector_hits"],
+            keyword_hits=response["keyword_hits"],
+        )
         return response
 
     keyword_results = _keyword_lookup(site, query, limit)
@@ -294,6 +374,15 @@ def _vector_search_response(site: dict, query: str, limit: int) -> dict:
     response["results"] = _public_search_results(_normalize_keyword_results(keyword_results))
     if error:
         response["error"] = error
+    _log_vector_path_decision(
+        site=site,
+        search_engine=_site_search_engine(site),
+        vector_search_used=False,
+        fallback_reason=error["type"] if error else "vector_empty",
+        mode=response["mode"],
+        vector_hits=response["vector_hits"],
+        keyword_hits=response["keyword_hits"],
+    )
     return response
 
 
@@ -372,10 +461,17 @@ def search_docs(site_name: str, query: str, limit: int = 10) -> str:
 
     keyword_results = _keyword_lookup(site, query, normalized_limit)
     vector_results, error = _vector_lookup(site, query, normalized_limit)
-    return json.dumps(
-        _search_response(keyword_results, vector_results, normalized_limit, error),
-        indent=2,
+    response = _search_response(keyword_results, vector_results, normalized_limit, error)
+    _log_vector_path_decision(
+        site=site,
+        search_engine=search_engine,
+        vector_search_used=bool(vector_results),
+        fallback_reason=error["type"] if error and not vector_results else None,
+        mode=response["mode"],
+        vector_hits=response["vector_hits"],
+        keyword_hits=response["keyword_hits"],
     )
+    return json.dumps(response, indent=2)
 
 
 @mcp.tool()

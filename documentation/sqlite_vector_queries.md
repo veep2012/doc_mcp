@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-05-24
-- Last Updated: 2026-06-14
-- Version: v1.1
+- Last Updated: 2026-06-21
+- Version: v1.3
 
 ## Change Log
+- 2026-06-21 | v1.3 | Documented the versioned sidecar header and metadata schema used by the runtime contract, and added the source crawl fingerprint columns used for stale-sidecar validation.
 - 2026-06-14 | v1.1 | Clarified rebuild-needed guidance when vector query dimensions no longer match the recorded FastEmbed model.
 - 2026-05-24 | v1.0 | Added practical sqlite3 commands for inspecting the local vector index and running nearest-neighbor queries against `chunk_embeddings`.
 
@@ -61,6 +62,14 @@ Show build metadata:
 ```sql
 SELECT *
 FROM vector_meta;
+```
+
+The runtime stores the source fingerprint in `vector_meta.source_content_hash` and `vector_meta.source_max_last_crawled`.
+
+Check the sidecar format header:
+
+```sql
+PRAGMA user_version;
 ```
 
 ### Find The 2 Nearest Chunks To A Query Vector
@@ -155,6 +164,8 @@ ORDER BY chunk_index;
 - If `.load` fails, confirm you are using a `sqlite3` build that supports extension loading and the platform-appropriate `vec0` library from the active Python environment (`vec0.dylib` on macOS, `vec0.so` on Linux, or `vec0.dll` on Windows).
 - If `MATCH` reports a JSON parsing error, the query vector is not valid JSON or does not have the correct number of dimensions.
 - If a `k` query returns no rows, confirm the vector table was built and the query vector dimension matches the table definition.
+- If `PRAGMA user_version` does not match the runtime contract or `vector_meta` does not include `schema_version`, rebuild the sidecar with `docmcp-vectorize`.
+- If `vector_meta.source_content_hash` or `vector_meta.source_max_last_crawled` no longer matches the crawl index, the sidecar is stale and should be rebuilt.
 - If a query raises a dimension mismatch in the application layer, the sidecar metadata likely no longer matches the current FastEmbed model and the vector index should be rebuilt.
 - The brute-force closest-pair query gets expensive as the vector index grows.
 

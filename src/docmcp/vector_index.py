@@ -3,6 +3,8 @@ Local vector-index helpers and post-crawl vectorization support.
 """
 
 import hashlib
+import json
+import logging
 import os
 import re
 import sqlite3
@@ -18,11 +20,14 @@ try:
 except ImportError:  # pragma: no cover - exercised via backend availability checks
     sqlite_vec = None
 
-from .index_store import _normalize_search_limit, count_pages, iter_page_documents
+from .index_store import _get_ro_conn, _normalize_search_limit, count_pages, iter_page_documents
+
+logger = logging.getLogger("docmcp.observability")
 
 DEFAULT_EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 DEFAULT_CHUNK_SIZE = 800
 DEFAULT_CHUNK_OVERLAP = 120
+VECTOR_SIDECAR_SCHEMA_VERSION = 2
 
 
 class VectorIndexError(RuntimeError):
@@ -47,6 +52,10 @@ class VectorSidecarStaleError(VectorIndexError):
 
 class VectorSidecarIncompatibleError(VectorIndexError):
     """Raised when vector metadata no longer matches the current query configuration."""
+
+
+class VectorSidecarSchemaMismatchError(VectorSidecarIncompatibleError):
+    """Raised when the sidecar header or metadata schema version is unsupported."""
 
 
 @dataclass(frozen=True)
@@ -129,6 +138,152 @@ def _normalize_index_path(value: str | None) -> str | None:
     if not value:
         return None
     return str(Path(value).expanduser().resolve(strict=False))
+
+
+def _source_fingerprint_key(
+    url: str, title: str, content_md: str, last_crawled: str | None
+) -> bytes:
+    return "\0".join((url, title, content_md, last_crawled or "")).encode("utf-8")
+
+
+def _source_index_fingerprint(index_file: str) -> tuple[int, str | None, str] | None:
+    conn = _get_ro_conn(index_file)
+    if conn is None:
+        return None
+
+    digest = hashlib.sha256()
+    page_count = 0
+    source_max_last_crawled: str | None = None
+    try:
+        with conn as conn:
+            rows = conn.execute(
+                "SELECT url, title, content_md, last_crawled FROM pages ORDER BY url"
+            )
+            for url, title, content_md, last_crawled in rows:
+                page_count += 1
+                if last_crawled:
+                    source_max_last_crawled = (
+                        max(source_max_last_crawled, last_crawled)
+                        if source_max_last_crawled
+                        else last_crawled
+                    )
+                digest.update(
+                    _source_fingerprint_key(url, title or "", content_md or "", last_crawled)
+                )
+                digest.update(b"\0")
+    finally:
+        conn.close()
+
+    return page_count, source_max_last_crawled, digest.hexdigest()
+
+
+def _parse_utc_timestamp(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    normalized = value.replace("Z", "+00:00")
+    try:
+        return datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+
+
+def _age_seconds_from_timestamp(value: str | None) -> float | None:
+    timestamp = _parse_utc_timestamp(value)
+    if timestamp is None:
+        return None
+    now = datetime.now(timezone.utc)
+    age = (now - timestamp.astimezone(timezone.utc)).total_seconds()
+    return max(age, 0.0)
+
+
+def _emit_observation(event: str, **fields) -> None:
+    payload = {"event": event, **fields}
+    logger.info(json.dumps(payload, sort_keys=True, default=str))
+
+
+def _fsync_file(path: Path) -> None:
+    with path.open("rb") as handle:
+        os.fsync(handle.fileno())
+
+
+def _fsync_directory(path: Path) -> None:
+    if not hasattr(os, "O_DIRECTORY"):
+        return
+    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _sidecar_schema_mismatch(site_name: str, detail: str) -> VectorSidecarSchemaMismatchError:
+    return VectorSidecarSchemaMismatchError(
+        f"Vector sidecar schema mismatch for '{site_name}': {detail}. "
+        "Rebuild the sidecar with docmcp-vectorize to migrate it."
+    )
+
+
+def _read_vector_sidecar_meta(
+    conn: sqlite3.Connection, site_name: str
+) -> tuple[str | None, str, int, str | None, str | None]:
+    header_version_row = conn.execute("PRAGMA user_version").fetchone()
+    header_version = int(header_version_row[0] if header_version_row else 0)
+    if header_version != VECTOR_SIDECAR_SCHEMA_VERSION:
+        raise _sidecar_schema_mismatch(
+            site_name,
+            f"unsupported header version {header_version} (expected {VECTOR_SIDECAR_SCHEMA_VERSION})",
+        )
+
+    try:
+        meta = conn.execute(
+            """
+            SELECT
+                schema_version,
+                source_index_file,
+                embedding_model,
+                embedding_dimensions,
+                source_content_hash,
+                source_max_last_crawled
+            FROM vector_meta
+            WHERE site_name = ?
+            LIMIT 1
+            """,
+            (site_name,),
+        ).fetchone()
+    except sqlite3.OperationalError as exc:
+        lowered = str(exc).lower()
+        if "no such column" in lowered or "no such table" in lowered:
+            raise _sidecar_schema_mismatch(
+                site_name,
+                "legacy metadata schema missing schema_version",
+            ) from exc
+        raise
+
+    if meta is None:
+        raise VectorSidecarIncompatibleError(
+            f"Vector sidecar for '{site_name}' is missing metadata for that site. "
+            "Rebuild the sidecar with docmcp-vectorize."
+        )
+
+    schema_version = int(meta[0] or 0)
+    if schema_version != VECTOR_SIDECAR_SCHEMA_VERSION:
+        raise _sidecar_schema_mismatch(
+            site_name,
+            f"metadata schema version {schema_version} (expected {VECTOR_SIDECAR_SCHEMA_VERSION})",
+        )
+
+    source_index_file = meta[1] if meta[1] else None
+    embedding_model = meta[2] or DEFAULT_EMBEDDING_MODEL
+    embedding_dimensions = int(meta[3] or 0)
+    source_content_hash = meta[4] if meta[4] else None
+    source_max_last_crawled = meta[5] if meta[5] else None
+    return (
+        source_index_file,
+        embedding_model,
+        embedding_dimensions,
+        source_content_hash,
+        source_max_last_crawled,
+    )
 
 
 @lru_cache(maxsize=None)
@@ -222,29 +377,13 @@ def search_vector_chunks(site: dict, query: str, limit: int = 10) -> list[dict]:
         return []
 
     try:
-        try:
-            meta = conn.execute(
-                """
-                SELECT source_index_file, embedding_model, embedding_dimensions
-                FROM vector_meta
-                WHERE site_name = ?
-                LIMIT 1
-                """,
-                (site["name"],),
-            ).fetchone()
-            if meta is None:
-                return []
-        except sqlite3.OperationalError as exc:
-            if "no such column" in str(exc).lower():
-                raise VectorSidecarIncompatibleError(
-                    f"Vector sidecar for '{site['name']}' is missing expected metadata columns "
-                    "(source_index_file). Rebuild with docmcp-vectorize."
-                ) from exc
-            raise
-
-        source_index_file = _normalize_index_path(meta[0])
-        embedding_model = meta[1] or DEFAULT_EMBEDDING_MODEL
-        embedding_dimensions = int(meta[2] or 0)
+        (
+            _source_index_file,
+            embedding_model,
+            embedding_dimensions,
+            source_content_hash,
+            source_max_last_crawled,
+        ) = _read_vector_sidecar_meta(conn, site["name"])
         if not site.get("index_file"):
             raise VectorSidecarIncompatibleError(
                 f"Vector sidecar for '{site['name']}' cannot be validated because the "
@@ -252,11 +391,23 @@ def search_vector_chunks(site: dict, query: str, limit: int = 10) -> list[dict]:
                 "after fixing the site config."
             )
 
-        current_index_file = _normalize_index_path(site.get("index_file"))
-        if source_index_file and current_index_file and source_index_file != current_index_file:
+        current_fingerprint = _source_index_fingerprint(site["index_file"])
+        if current_fingerprint is None:
+            raise VectorSidecarIncompatibleError(
+                f"Vector sidecar for '{site['name']}' cannot be validated because the "
+                f"source index is missing or unreadable: {site['index_file']}. "
+                "Rebuild the sidecar with docmcp-vectorize after restoring the crawl index."
+            )
+
+        _current_page_count, current_max_last_crawled, current_content_hash = current_fingerprint
+        if (
+            source_content_hash != current_content_hash
+            or source_max_last_crawled != current_max_last_crawled
+        ):
             raise VectorSidecarStaleError(
-                f"Vector sidecar for '{site['name']}' was built from a different keyword index: "
-                f"{source_index_file}. Current index: {current_index_file}. "
+                f"Vector sidecar for '{site['name']}' is stale: "
+                f"stored content hash={source_content_hash}, current content hash={current_content_hash}; "
+                f"stored crawl timestamp={source_max_last_crawled}, current crawl timestamp={current_max_last_crawled}. "
                 "Rebuild the sidecar with docmcp-vectorize."
             )
 
@@ -505,10 +656,12 @@ def _init_vector_db(
     conn.execute("PRAGMA temp_store=FILE")
     conn.execute("PRAGMA cache_size=-2048")
     conn.execute("PRAGMA mmap_size=0")
+    conn.execute(f"PRAGMA user_version = {VECTOR_SIDECAR_SCHEMA_VERSION}")
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS vector_meta (
             site_name TEXT PRIMARY KEY,
+            schema_version INTEGER NOT NULL,
             source_index_file TEXT NOT NULL,
             built_at TEXT NOT NULL,
             embedding_model TEXT NOT NULL,
@@ -517,6 +670,7 @@ def _init_vector_db(
             embedding_dimensions INTEGER NOT NULL,
             chunk_size INTEGER NOT NULL,
             chunk_overlap INTEGER NOT NULL,
+            source_content_hash TEXT NOT NULL,
             source_max_last_crawled TEXT
         )
         """
@@ -578,6 +732,7 @@ def rebuild_vector_index(site: dict, *, debug: bool = False) -> VectorBuildSumma
         temp_path.unlink()
 
     _emit_progress("Initializing vector index")
+    started_at = time.perf_counter()
     conn = _connect_vector_index(str(temp_path))
     try:
         _init_vector_db(
@@ -587,14 +742,23 @@ def rebuild_vector_index(site: dict, *, debug: bool = False) -> VectorBuildSumma
         )
         chunk_count = 0
         page_count = 0
+        source_content_digest = hashlib.sha256()
         source_max_last_crawled = None
-        started_at = time.perf_counter()
         try:
             source_pages = iter_page_documents(site["index_file"])
             for page_index, page in enumerate(source_pages, start=1):
                 page_started_at = time.perf_counter()
                 page_count += 1
                 page_title = page.get("title") or page["url"]
+                source_content_digest.update(
+                    _source_fingerprint_key(
+                        page["url"],
+                        page.get("title") or "",
+                        page.get("content_md") or "",
+                        page.get("last_crawled"),
+                    )
+                )
+                source_content_digest.update(b"\0")
                 if page.get("last_crawled"):
                     source_max_last_crawled = (
                         max(source_max_last_crawled, page["last_crawled"])
@@ -692,10 +856,12 @@ def rebuild_vector_index(site: dict, *, debug: bool = False) -> VectorBuildSumma
             ) from exc
 
         built_at = datetime.now(timezone.utc).isoformat()
+        source_content_hash = source_content_digest.hexdigest()
         conn.execute(
             """
             INSERT INTO vector_meta(
                 site_name,
+                schema_version,
                 source_index_file,
                 built_at,
                 embedding_model,
@@ -704,11 +870,13 @@ def rebuild_vector_index(site: dict, *, debug: bool = False) -> VectorBuildSumma
                 embedding_dimensions,
                 chunk_size,
                 chunk_overlap,
+                source_content_hash,
                 source_max_last_crawled
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 site["name"],
+                VECTOR_SIDECAR_SCHEMA_VERSION,
                 site["index_file"],
                 built_at,
                 embedding_model,
@@ -717,6 +885,7 @@ def rebuild_vector_index(site: dict, *, debug: bool = False) -> VectorBuildSumma
                 embedding_dimensions,
                 chunk_size,
                 chunk_overlap,
+                source_content_hash,
                 source_max_last_crawled,
             ),
         )
@@ -727,9 +896,27 @@ def rebuild_vector_index(site: dict, *, debug: bool = False) -> VectorBuildSumma
     _emit_progress(
         f"Wrote temporary index {temp_path} in {_format_duration(time.perf_counter() - started_at)}"
     )
+    _fsync_file(temp_path)
     os.replace(temp_path, target_path)
+    _fsync_directory(target_path.parent)
+    vectorizer_duration = time.perf_counter() - started_at
     _emit_progress(
-        f"Replaced vector index {target_path} in {_format_duration(time.perf_counter() - started_at)}"
+        f"Replaced vector index {target_path} in {_format_duration(vectorizer_duration)}"
+    )
+    _emit_observation(
+        "vectorizer_completed",
+        site_name=site["name"],
+        source_index_file=site["index_file"],
+        vector_index_file=str(target_path),
+        vectorizer_duration=round(vectorizer_duration, 6),
+        index_doc_count=page_count,
+        page_count=page_count,
+        chunk_count=chunk_count,
+        source_max_last_crawled=source_max_last_crawled,
+        embedding_model=embedding_model,
+        embedding_dimensions=embedding_dimensions,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
     )
     return VectorBuildSummary(
         site_name=site["name"],

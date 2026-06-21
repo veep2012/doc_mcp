@@ -118,6 +118,7 @@ def test_load_config_does_not_mutate_process_env_between_workspace_loads(monkeyp
         + "\n",
         encoding="utf-8",
     )
+    (runtime_b / ".env").write_text("DOCS_URL=https://workspace-b.test/docs\n", encoding="utf-8")
 
     monkeypatch.delenv("DOCS_URL", raising=False)
     monkeypatch.setenv("DOC_MCP_HOME", str(runtime_a))
@@ -129,8 +130,38 @@ def test_load_config_does_not_mutate_process_env_between_workspace_loads(monkeyp
 
     monkeypatch.setenv("DOC_MCP_HOME", str(runtime_b))
     second = load_config()
-    assert second["sites"][0]["url"] == ""
+    assert second["sites"][0]["url"] == "https://workspace-b.test/docs"
     assert "DOCS_URL" not in os.environ
+
+
+def test_load_config_prefers_workspace_dotenv_over_process_env(monkeypatch, tmp_path):
+    runtime_root = tmp_path / "runtime"
+    (runtime_root / "config").mkdir(parents=True)
+    (runtime_root / ".env").write_text(
+        "DOCS_URL=https://workspace-dotenv.test/docs\n", encoding="utf-8"
+    )
+    (runtime_root / "config" / "sites.yaml").write_text(
+        textwrap.dedent(
+            """
+            sites:
+              - name: "Workspace Dotenv"
+                url: "${DOCS_URL}"
+                auth_required: false
+                session_file: "storage/dotenv.json"
+                index_file: "index/dotenv.db"
+            """
+        ).strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("DOC_MCP_HOME", str(runtime_root))
+    monkeypatch.setenv("DOCS_URL", "https://process-env.test/docs")
+    monkeypatch.delenv("CONFIG_FILE", raising=False)
+
+    config = load_config()
+
+    assert config["sites"][0]["url"] == "https://workspace-dotenv.test/docs"
 
 
 def test_load_config_missing_file_raises_friendly_error(monkeypatch, tmp_path):
@@ -183,4 +214,74 @@ def test_load_config_rejects_invalid_search_engine(monkeypatch, tmp_path):
     monkeypatch.setenv("DOC_MCP_HOME", str(runtime_root))
 
     with pytest.raises(ConfigError, match="Invalid search_engine"):
+        load_config()
+
+
+@pytest.mark.parametrize(
+    "config_text, expected",
+    [
+        (
+            """
+            sites:
+              - name: "Bad Redirect"
+                url: "https://example.test/docs"
+                auth_required: false
+                crawl:
+                  redirect_policy: "unexpected"
+                index_file: "index/bad.db"
+            """,
+            r"Invalid crawl\.redirect_policy for site 'Bad Redirect'",
+        ),
+        (
+            """
+            sites:
+              - name: "Bad Delay"
+                url: "https://example.test/docs"
+                auth_required: false
+                crawl:
+                  delay_seconds: "fast"
+                index_file: "index/bad.db"
+            """,
+            r"Invalid crawl\.delay_seconds for site 'Bad Delay'",
+        ),
+        (
+            """
+            sites:
+              - name: "Bad Start Delay"
+                url: "https://example.test/docs"
+                auth_required: false
+                crawl:
+                  start_delay_seconds: -1
+                index_file: "index/bad.db"
+            """,
+            r"Invalid crawl\.start_delay_seconds for site 'Bad Start Delay'",
+        ),
+        (
+            """
+                sites:
+                  - name: "Bad Vectorizer"
+                    url: "https://example.test/docs"
+                    auth_required: false
+                    index_file: "index/bad.db"
+                    vectorizer:
+                      chunk_size: 0
+                      chunk_overlap: 0
+                """,
+            r"Invalid vectorizer settings for site 'Bad Vectorizer': chunk_size must be positive",
+        ),
+    ],
+)
+def test_load_config_rejects_invalid_new_config_values(
+    monkeypatch, tmp_path, config_text, expected
+):
+    runtime_root = tmp_path / "runtime"
+    (runtime_root / "config").mkdir(parents=True)
+    (runtime_root / "config" / "sites.yaml").write_text(
+        textwrap.dedent(config_text).strip() + "\n", encoding="utf-8"
+    )
+
+    monkeypatch.setenv("DOC_MCP_HOME", str(runtime_root))
+    monkeypatch.delenv("CONFIG_FILE", raising=False)
+
+    with pytest.raises(ConfigError, match=expected):
         load_config()

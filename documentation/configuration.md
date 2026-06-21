@@ -29,6 +29,14 @@ Describe the local configuration files used by `doc-mcp` and the fields the runt
   - Fields that are not consumed by the current runtime.
 
 ## Design / Behavior
+### Configuration Precedence
+- Built-in defaults apply first. Examples: `search_engine: hybrid`, `crawl.redirect_policy: final`, `crawl.delay_seconds: 1.0` in the crawler, `crawl.start_delay_seconds: 0.0`, and `vectorizer.embedding_model: BAAI/bge-small-en-v1.5`.
+- `config/sites.yaml` overrides those defaults.
+- CLI flags override runtime behavior at invocation time when a flag exists. Examples: `--site`, `--debug`, `--headless`, `--vectorize`, and `--force-auth`.
+- For placeholder expansion, `${NAME}` values come from the workspace `.env` file first and then the process environment. The workspace `.env` therefore wins when both define the same name.
+- `CONFIG_FILE` sets the config file path; if it is relative, it is resolved from `DOC_MCP_HOME`.
+- `DOC_MCP_HOME` sets the runtime root for relative config, session, index, and vector paths; if it is unset, the current working directory is used.
+
 ### Environment Variables
 - The loader resolves `${NAME}` placeholders recursively in `config/sites.yaml`.
 - The loader reads `.env` from the runtime root when it exists and merges those values with the process environment for config resolution.
@@ -67,6 +75,20 @@ SITE1_PASSWORD=replace-me
 - `crawl.deny_patterns`: optional deny-list glob patterns
 - `index_file`: SQLite database path for the site index
 - `search_engine`: per-site search mode. Default: `hybrid`. Use `keyword` to disable vector lookup entirely, `vector` for vector-only semantic search, or `hybrid` to merge keyword and vector results.
+- `crawl.start_url`: defaults to `url` when omitted in the crawler.
+- `crawl.max_depth`: defaults to `3` in the crawler.
+- `crawl.delay_seconds`: defaults to `1.0` in the crawler.
+- `crawl.start_delay_seconds`: defaults to `0.0` in the crawler.
+- `crawl.block_images`: defaults to `false`.
+- `crawl.redirect_policy`: defaults to `final`.
+- `crawl.ignore_query_links`: defaults to `true`.
+- `crawl.ignore_anchor_links`: defaults to `true`.
+- `crawl.ignore_https_errors`: defaults to `false`.
+- `crawl.allow_patterns`: defaults to an empty list.
+- `crawl.deny_patterns`: defaults to an empty list.
+- `vectorizer.chunk_size`: defaults to `800`.
+- `vectorizer.chunk_overlap`: defaults to `120`.
+- `vectorizer.embedding_model`: defaults to `BAAI/bge-small-en-v1.5`.
 
 ### Search And Vector Settings
 - `vector_index_file`: local sqlite-vec sidecar path for that site's chunk embeddings; if omitted, the runtime uses the same directory and file stem as `index_file` with a `.vec.db` suffix.
@@ -156,6 +178,8 @@ The sample config file also includes a few future-facing keys such as `auth_mode
 - `docmcp-crawl` still writes only the keyword SQLite index in this stage.
 - Build or refresh the local vector sidecar explicitly with `docmcp-vectorize --site "<Site Name>"` or `docmcp-crawl --vectorize --site "<Site Name>"` after crawling.
 - The vectorizer reads the existing `index_file`, chunks page Markdown deterministically, generates FastEmbed embeddings, and rewrites the configured `vector_index_file`.
+- The sidecar format is versioned; `docmcp-vectorize` rewrites it atomically with the current header and metadata schema, and older sidecars degrade to keyword search until they are rebuilt.
+- Stale-sidecar validation uses durable crawl fingerprints from the source content hash and crawl timestamp, not the filesystem modification time of either database file.
 - Install the vector backend with `pip install sqlite-vec fastembed` if you are running from source. The packaged project now declares both dependencies as runtime requirements.
 - Changing `vectorizer.embedding_model` changes the vector space and requires rebuilding the sidecar.
 - `docmcp-vectorize --debug` enables chunk-level vectorizer diagnostics; normal runs stay at page-level progress.

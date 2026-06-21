@@ -6,10 +6,10 @@
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
 - Last Updated: 2026-06-21
-- Version: v2.0
+- Version: v2.2
 
 ## Change Log
-- 2026-06-21 | v2.0 | Reframed the search contract section as release-facing behavior and removed implementation-stage wording.
+- 2026-06-21 | v2.2 | Defined the vector sidecar compatibility contract with strict schema-version checks, deterministic keyword fallback reasons, rebuild-based migration guidance, crawl-fingerprint stale detection based on source content hashes and crawl timestamps, and release-facing search contract wording.
 - 2026-06-14 | v1.9 | Documented vector-search fallback to keyword for missing, stale, incompatible, unreadable, and empty sidecars.
 - 2026-06-13 | v1.8 | Clarified hybrid degradation logging and same-page keyword preservation semantics.
 - 2026-06-06 | v1.7 | Documented the experimental `0.99.3` hybrid `search_docs` behavior, including mode selection, source labels, and keyword fallback when the vector sidecar is missing or unreadable.
@@ -93,8 +93,10 @@ Mode and fallback behavior:
 - `search_engine: keyword` skips vector lookup entirely.
 - `search_engine: vector` still falls back to keyword results when vector search cannot answer, and includes an `error` object when the vector sidecar is missing, unreadable, stale, incompatible, or the embedding backend is unavailable.
 - `search_engine: hybrid` also includes the same `error` object when vector lookup degrades, while preserving keyword results when available.
-- `vector_index_incompatible` covers both metadata mismatches and site configuration problems such as a missing usable `index_file`, as well as legacy vector sidecars that lack the `source_index_file` column.
-- Vector queries require the sidecar metadata to match the current `index_file` and `vectorizer.embedding_model`; rebuild the sidecar after changing either input.
+- `vector_index_schema_mismatch` is returned when the sidecar header or stored schema version does not match the current runtime contract; rebuild the sidecar with `docmcp-vectorize` to migrate it.
+- `vector_index_incompatible` covers configuration problems such as a missing usable `index_file` and query-time metadata mismatches such as an embedding-model change or missing embedding dimensions.
+- Vector queries require the sidecar header version and the stored metadata schema version to match the current runtime contract, and also require the metadata to match the current `index_file` and `vectorizer.embedding_model`; rebuild the sidecar after changing any of those inputs.
+- `vector_index_stale` is driven by durable crawl fingerprints: the stored source content hash and crawl timestamp must match the current crawl index. Filesystem mtime does not participate in the stale decision.
 - Cross-source duplicates are removed deterministically using stable chunk/page-text identity, and the retained row keeps its original `source` label.
 - In hybrid mode, vector lookup failures are logged and the tool still falls back to keyword results when they are available.
 - Hybrid merge does not suppress distinct keyword snippets from the same page just because one vector chunk from that page was retained.
@@ -134,7 +136,7 @@ When vector fallback is explicit, the response may also include:
 ```json
 {
   "error": {
-    "type": "vector_index_missing | vector_index_unreadable | vector_index_stale | vector_index_incompatible | vector_backend_unavailable",
+    "type": "vector_index_missing | vector_index_unreadable | vector_index_stale | vector_index_schema_mismatch | vector_index_incompatible | vector_backend_unavailable",
     "message": "Human-readable fallback reason"
   }
 }

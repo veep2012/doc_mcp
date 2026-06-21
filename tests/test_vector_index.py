@@ -1,3 +1,6 @@
+import json
+import logging
+import os
 import sqlite3
 
 import pytest
@@ -15,6 +18,7 @@ from docmcp.vector_index import (
     VectorIndexError,
     VectorSidecarIncompatibleError,
     VectorSidecarStaleError,
+    VectorSidecarSchemaMismatchError,
     VectorSourceError,
     build_vector_records,
     chunk_markdown,
@@ -191,10 +195,11 @@ def test_rebuild_vector_index_creates_and_refreshes_sidecar(tmp_path):
             "SELECT chunk_id, page_url, title, chunk_text FROM vector_chunks ORDER BY chunk_index"
         ).fetchall()
         meta = conn.execute(
-            "SELECT site_name, page_count, chunk_count, embedding_model, embedding_dimensions FROM vector_meta"
+            "SELECT site_name, schema_version, page_count, chunk_count, embedding_model, embedding_dimensions, source_content_hash, source_max_last_crawled FROM vector_meta"
         ).fetchone()
 
-    assert meta == ("Example Docs", 1, len(first_rows), "fake-fastembed-model", 8)
+    assert meta[0:6] == ("Example Docs", 2, 1, len(first_rows), "fake-fastembed-model", 8)
+    assert meta[6]
     assert all(row[1] == "https://example.test/guide" for row in first_rows)
 
     upsert_page(
@@ -216,6 +221,98 @@ def test_rebuild_vector_index_creates_and_refreshes_sidecar(tmp_path):
     assert len({row[0] for row in second_rows}) == len(second_rows)
     assert len(second_rows) >= len(first_rows)
     assert any("theta" in row[2] for row in second_rows)
+
+
+def test_rebuild_vector_index_fails_loudly_when_atomic_rename_fails(monkeypatch, tmp_path):
+    _require_vector_backend()
+    source_index = tmp_path / "index" / "docs.db"
+    vector_index_file = tmp_path / "index" / "docs.vec.db"
+    init_db(str(source_index))
+    upsert_page(str(source_index), "https://example.test/guide", "Guide", "Alpha beta gamma")
+
+    site = {
+        "name": "Example Docs",
+        "index_file": str(source_index),
+        "vector_index_file": str(vector_index_file),
+        "vectorizer": {
+            "chunk_size": 18,
+            "chunk_overlap": 5,
+            "embedding_model": "fake-fastembed-model",
+        },
+    }
+
+    def raise_rename_error(*args, **kwargs):
+        raise OSError("simulated atomic rename failure")
+
+    monkeypatch.setattr(vector_index.os, "replace", raise_rename_error)
+
+    with pytest.raises(OSError, match="simulated atomic rename failure"):
+        rebuild_vector_index(site)
+
+    assert not vector_index_file.exists()
+    assert vector_index_file.with_name("docs.vec.db.tmp").exists()
+
+
+def test_rebuild_vector_index_fsyncs_temp_file_and_destination_directory(monkeypatch, tmp_path):
+    _require_vector_backend()
+    source_index = tmp_path / "index" / "docs.db"
+    vector_index_file = tmp_path / "index" / "docs.vec.db"
+    init_db(str(source_index))
+    upsert_page(str(source_index), "https://example.test/guide", "Guide", "Alpha beta gamma")
+
+    site = {
+        "name": "Example Docs",
+        "index_file": str(source_index),
+        "vector_index_file": str(vector_index_file),
+        "vectorizer": {
+            "chunk_size": 18,
+            "chunk_overlap": 5,
+            "embedding_model": "fake-fastembed-model",
+        },
+    }
+
+    fsync_calls: list[int] = []
+    monkeypatch.setattr(vector_index.os, "fsync", lambda fd: fsync_calls.append(fd))
+
+    rebuild_vector_index(site)
+
+    assert vector_index_file.exists()
+    assert not vector_index_file.with_name("docs.vec.db.tmp").exists()
+    assert len(fsync_calls) >= 2
+
+
+def test_rebuild_vector_index_emits_duration_observation(caplog, tmp_path):
+    _require_vector_backend()
+    source_index = tmp_path / "index" / "docs.db"
+    vector_index_file = tmp_path / "index" / "docs.vec.db"
+    init_db(str(source_index))
+    upsert_page(str(source_index), "https://example.test/guide", "Guide", "Alpha beta gamma")
+
+    site = {
+        "name": "Example Docs",
+        "index_file": str(source_index),
+        "vector_index_file": str(vector_index_file),
+        "vectorizer": {
+            "chunk_size": 18,
+            "chunk_overlap": 5,
+            "embedding_model": "fake-fastembed-model",
+        },
+    }
+
+    caplog.set_level(logging.INFO, logger="docmcp.observability")
+    rebuild_vector_index(site)
+
+    records = [
+        json.loads(record.message)
+        for record in caplog.records
+        if record.name == "docmcp.observability"
+    ]
+    observation = next(item for item in records if item["event"] == "vectorizer_completed")
+
+    assert observation["site_name"] == "Example Docs"
+    assert observation["vectorizer_duration"] >= 0
+    assert observation["index_doc_count"] == 1
+    assert observation["chunk_count"] >= 1
 
 
 def test_rebuild_vector_index_requires_existing_keyword_index(tmp_path):
@@ -285,10 +382,13 @@ def test_rebuild_vector_index_handles_empty_source_index(tmp_path):
     assert vector_index.exists()
 
     with _read_vector_db(vector_index) as conn:
-        meta = conn.execute("SELECT site_name, page_count, chunk_count FROM vector_meta").fetchone()
+        meta = conn.execute(
+            "SELECT site_name, schema_version, page_count, chunk_count, source_content_hash, source_max_last_crawled FROM vector_meta"
+        ).fetchone()
         chunk_rows = conn.execute("SELECT COUNT(*) FROM vector_chunks").fetchone()[0]
 
-    assert meta == ("Example Docs", 0, 0)
+    assert meta[0:4] == ("Example Docs", 2, 0, 0)
+    assert meta[4]
     assert chunk_rows == 0
 
 
@@ -371,7 +471,7 @@ def test_search_vector_chunks_rejects_stale_embedding_dimensions(monkeypatch, tm
         search_vector_chunks(site, "Alpha", limit=2)
 
 
-def test_search_vector_chunks_rejects_stale_source_index_metadata(tmp_path):
+def test_search_vector_chunks_ignores_source_index_mtime_without_content_change(tmp_path):
     _require_vector_backend()
     source_index = tmp_path / "index" / "docs.db"
     vector_index_file = tmp_path / "index" / "docs.vec.db"
@@ -395,14 +495,48 @@ def test_search_vector_chunks_rejects_stale_source_index_metadata(tmp_path):
     }
     rebuild_vector_index(site)
 
-    with sqlite3.connect(str(vector_index_file)) as conn:
+    os.utime(source_index, None)
+
+    results = search_vector_chunks(site, "Alpha", limit=2)
+
+    assert results
+    assert results[0]["page_url"] == "https://example.test/vector-best"
+
+
+def test_search_vector_chunks_rejects_changed_source_content_even_if_timestamp_stays_same(
+    tmp_path,
+):
+    _require_vector_backend()
+    source_index = tmp_path / "index" / "docs.db"
+    vector_index_file = tmp_path / "index" / "docs.vec.db"
+    init_db(str(source_index))
+    upsert_page(
+        str(source_index),
+        "https://example.test/vector-best",
+        "Vector Best",
+        "Alpha alpha alpha beta",
+    )
+
+    site = {
+        "name": "Example Docs",
+        "index_file": str(source_index),
+        "vector_index_file": str(vector_index_file),
+        "vectorizer": {
+            "chunk_size": 100,
+            "chunk_overlap": 20,
+            "embedding_model": "fake-fastembed-model",
+        },
+    }
+    rebuild_vector_index(site)
+
+    with sqlite3.connect(str(source_index)) as conn:
         conn.execute(
-            "UPDATE vector_meta SET source_index_file = ? WHERE site_name = ?",
-            (str(tmp_path / "other" / "docs.db"), site["name"]),
+            "UPDATE pages SET content_md = ? WHERE url = ?",
+            ("Alpha alpha alpha beta gamma", "https://example.test/vector-best"),
         )
         conn.commit()
 
-    with pytest.raises(VectorSidecarStaleError, match="built from a different keyword index"):
+    with pytest.raises(VectorSidecarStaleError, match="content hash"):
         search_vector_chunks(site, "Alpha", limit=2)
 
 
@@ -447,6 +581,7 @@ def test_search_vector_chunks_rejects_legacy_vector_meta_schema(tmp_path):
     )
 
     with sqlite3.connect(str(vector_index_file)) as conn:
+        conn.execute("PRAGMA user_version = 2")
         conn.execute(
             """
             CREATE TABLE vector_meta (
@@ -489,7 +624,7 @@ def test_search_vector_chunks_rejects_legacy_vector_meta_schema(tmp_path):
         },
     }
 
-    with pytest.raises(VectorSidecarIncompatibleError, match="source_index_file"):
+    with pytest.raises(VectorSidecarSchemaMismatchError, match="schema_version"):
         search_vector_chunks(site, "Alpha", limit=2)
 
 
