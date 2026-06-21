@@ -468,16 +468,19 @@ def _iter_vector_records_for_page(
     chunk_overlap: int,
     embedding_model: str,
 ):
-    for chunk_index, chunk_text in enumerate(
-        chunk_markdown(source_text, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-    ):
+    chunks = chunk_markdown(source_text, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+    if not chunks:
+        return
+
+    embeddings = _embed_texts(chunks, embedding_model)
+    for chunk_index, (chunk_text, embedding) in enumerate(zip(chunks, embeddings)):
         yield VectorRecord(
             site_name=site_name,
             page_url=page["url"],
             title=page.get("title") or "",
             chunk_id=_chunk_id(site_name, page["url"], chunk_index, chunk_text),
             chunk_text=chunk_text,
-            embedding=_embed_text(chunk_text, embedding_model),
+            embedding=embedding,
             source_last_crawled=page.get("last_crawled"),
             chunk_index=chunk_index,
         )
