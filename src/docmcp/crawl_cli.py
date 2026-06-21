@@ -334,6 +334,7 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
     Returns True when the crawl reaches normal completion.
     """
     name = site["name"]
+    stop_crawl = True
     crawl_cfg = site.get("crawl", {})
     start_url = crawl_cfg.get("start_url", site["url"])
     max_depth = crawl_cfg.get("max_depth", 3)
