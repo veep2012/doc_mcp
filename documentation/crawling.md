@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-07-04
+- Last Updated: 2026-07-05
 - Version: v2.1
 
 ## Change Log
+- 2026-07-05 | v2.2 | Added targeted batch-size guardrails for `docmcp-crawl --pages` and `--pages-file`, including large-batch warnings and a hard refusal above the supported limit.
 - 2026-07-04 | v2.1 | Documented targeted selected-page reindexing through `docmcp-crawl --pages` and `--pages-file`, including validation and summary behavior.
 - 2026-06-21 | v2.0 | Removed duplicated crawl guidance and aligned the section structure with the current crawl, index, and vectorize flow.
 - 2026-05-26 | v1.9 | Documented the optional `--vectorize` crawl flag, the separate post-crawl vectorizer sidecar, and clarified that chained vectorization inherits `--debug` output while keeping the crawl/vectorize command surface in sync with the current CLI behavior.
@@ -88,7 +89,10 @@ docmcp-crawl --version
 - It uses breadth-first traversal up to `crawl.max_depth`.
 - If `--pages` or `--pages-file` is provided, the crawl command switches to targeted reindex mode and processes only those explicit URLs.
 - `--pages` and `--pages-file` values are merged in order; the command does not deduplicate selected URLs.
+- Targeted batches are normalized and deduplicated before crawling starts.
 - An empty selected-pages list means the command keeps the normal crawl path.
+- The CLI warns when a targeted batch reaches 100 pages or more because large selected-page runs can behave like a near-full crawl and are more expensive for SQLite-backed runs.
+- The CLI refuses targeted batches above 500 pages and asks you to split the file or use the normal crawl path instead.
 - It normalizes URLs by stripping fragments.
 - It skips discovered links that contain a query string when `crawl.ignore_query_links` is `true`.
 - It crawls and indexes discovered query links as distinct URLs when `crawl.ignore_query_links` is `false`.
@@ -97,6 +101,10 @@ docmcp-crawl --version
 - It optionally skips discovered query links and anchor-only links independently.
 - It applies `allow_patterns` and `deny_patterns`.
 - Targeted reindex mode validates each selected URL against the same host/path, allow-list, deny-list, and static-asset rules before navigation.
+- After navigation, targeted reindex checks the landed URL again and skips it as `out_of_scope` if the redirect escaped the allowed host/path policy.
+- Targeted reindex results include a stable `reason_code` for skipped and failed pages. Current codes include `out_of_scope`, `asset_url`, `navigation_error`, `parse_error`, `db_error`, `login_redirect`, and `redirect_policy_skip`.
+- Targeted reindex prints a machine-readable reason breakdown line at the end of the run so tests and automation can assert failure classes without parsing free-form error text.
+- Targeted reindex writes each page independently through SQLite, so a later page failure does not roll back pages that were already indexed successfully.
 - It waits `delay_seconds` between pages; the value must be a finite number greater than or equal to 0.
 - It can wait `start_delay_seconds` after the start page loads only in headful mode; the value must be a finite number greater than or equal to 0.
 - It stops if it detects a redirect to a login page.
