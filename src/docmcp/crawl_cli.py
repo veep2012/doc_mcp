@@ -639,7 +639,7 @@ async def reindex_selected_pages(
             print(f"[crawl][debug] {message}", file=sys.stderr)
 
     print(f"\n[crawl] Site     : {name}")
-    print(f"[crawl] Mode     : targeted reindex")
+    print("[crawl] Mode     : targeted reindex")
     print(f"[crawl] Start URL: {start_url}")
     print(f"[crawl] Index    : {index_file}")
     print(f"[crawl] Pages    : {len(page_urls)}")
@@ -677,7 +677,6 @@ async def reindex_selected_pages(
         page = await context.new_page()
 
         try:
-            stop_reindex = False
             for index, raw_url in enumerate(page_urls, start=1):
                 normalized_url, reason = _validate_selected_page_url(
                     raw_url,
@@ -723,7 +722,6 @@ async def reindex_selected_pages(
                             "reason": message,
                         }
                     )
-                    stop_reindex = True
                     break
 
                 index_url, title = await _index_loaded_page(
