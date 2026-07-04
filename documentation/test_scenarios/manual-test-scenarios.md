@@ -343,6 +343,7 @@ Run these scenarios after either `MT-003A` or `MT-003B`, using the command set f
   - The keyword SQLite index refreshes first.
   - The vector sidecar rebuild then reflects the refreshed crawl data.
   - No separate crawl-time vectorization toggle is required; the operator still runs the vectorizer explicitly.
+  - There is no page-only vector refresh path yet; the sidecar still rebuilds as a full pass.
   - If the crawl is run with `--debug --vectorize`, the chained vectorizer inherits the debug mode and emits chunk-level diagnostics.
   - Pass/Fail:
     - Pass if the sidecar updates after recrawl and keyword search remains usable throughout.

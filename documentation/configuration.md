@@ -173,6 +173,7 @@ The sample config file also includes a few future-facing keys such as `auth_mode
 - `respect_robots_txt` is not consumed by the current crawler implementation.
 - `crawl.redirect_policy` defaults to `final`, which preserves the existing behavior of indexing the landing URL after a redirect.
 - `crawl.start_delay_seconds` is off by default. Use it when you want a visible headful browser to load the start page, pause, and let you switch to the exact page you want to scan.
+- `--pages` and `--pages-file` are crawl CLI inputs, not site configuration keys.
 
 ### Local Vector Sidecar Notes
 - `search_engine: keyword` keeps the site on keyword-only search, `search_engine: vector` uses the vector sidecar only, and `search_engine: hybrid` combines both.
@@ -185,6 +186,7 @@ The sample config file also includes a few future-facing keys such as `auth_mode
 - Changing `vectorizer.embedding_model` changes the vector space and requires rebuilding the sidecar.
 - `docmcp-vectorize --debug` enables chunk-level vectorizer diagnostics; normal runs stay at page-level progress.
 - When `docmcp-crawl --debug --vectorize` runs the vectorizer immediately after a successful crawl, that debug mode is inherited.
+- There is no page-only vector update path yet; refreshing vector search still requires rebuilding the full sidecar from the crawl index.
 - To inspect the vector tables with `sqlite3`, use a shell that supports extension loading, open `index/<site>.vec.db`, and load the platform-appropriate `vec0` library before running `.tables`:
   - `sqlite3 index/<site>.vec.db`
   - `.load <path-to-sqlite_vec>/vec0.<platform-extension>` where the platform-specific filename is `vec0.dylib` on macOS, `vec0.so` on Linux, or `vec0.dll` on Windows

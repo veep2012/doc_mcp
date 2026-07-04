@@ -71,6 +71,10 @@ docmcp-crawl --site "My Docs" --pages "https://docs.example.com/docs/guide" "htt
 docmcp-crawl --site "My Docs" --pages-file pages.txt
 ```
 
+- `--pages` and `--pages-file` can be combined; the CLI keeps the URLs in the order they were provided and preserves duplicates.
+- If `--pages-file` cannot be read, the command fails with a file-read error before crawling starts.
+- If `--pages-file` is empty or contains only comments and blank lines, the crawl falls back to the normal full-site crawl.
+
 - Show the current crawler version:
 ```bash
 docmcp-crawl --version
@@ -83,6 +87,8 @@ docmcp-crawl --version
 - If `crawl.start_delay_seconds` is set and the crawl is running headful, it loads the start page first, then waits so you can finish any manual setup in the browser before crawling begins.
 - It uses breadth-first traversal up to `crawl.max_depth`.
 - If `--pages` or `--pages-file` is provided, the crawl command switches to targeted reindex mode and processes only those explicit URLs.
+- `--pages` and `--pages-file` values are merged in order; the command does not deduplicate selected URLs.
+- An empty selected-pages list means the command keeps the normal crawl path.
 - It normalizes URLs by stripping fragments.
 - It skips discovered links that contain a query string when `crawl.ignore_query_links` is `true`.
 - It crawls and indexes discovered query links as distinct URLs when `crawl.ignore_query_links` is `false`.
@@ -114,6 +120,7 @@ docmcp-crawl --version
 - Repeated crawls update existing rows by URL, so re-running the crawler refreshes pages in place.
 - Targeted reindex uses the same page capture and `upsert_page` path as the full crawler, so selected URLs refresh existing rows in place without touching non-selected pages.
 - Crawling does not write vector data during page fetches. The local vector sidecar can be built later by `docmcp-vectorize` from the completed SQLite crawl index, or chained immediately afterward with `docmcp-crawl --vectorize`.
+- Vector refresh remains a full rebuild over the crawl index; page-only vector revectorization is intentionally deferred.
 - If you run `docmcp-crawl --debug --vectorize`, the chained vectorizer inherits the same debug mode and emits chunk-level diagnostics instead of page-only progress.
 - Standalone vectorizer runs keep page-level progress unless you add `--debug`.
 
@@ -131,6 +138,7 @@ docmcp-crawl --version
 - A site can be crawled again after content changes without creating duplicate rows.
 - You can refresh a small set of known pages without re-running link discovery by passing `--pages` or `--pages-file`.
 - A crawl can succeed without any vector sidecar present; run the vectorizer explicitly when you want to refresh semantic-search data, or pass `--vectorize` to chain the refresh after a successful crawl.
+- There is no page-only vector update path yet; the vector sidecar still requires a full rebuild from the crawl index.
 - If a session expires during a crawl, the crawler stops and tells you to re-authenticate.
 - Anchor-heavy documentation sites remain indexed as canonical pages instead of fragment-only records.
 - Query-driven documentation can opt into separate records for distinct query URLs by setting `crawl.ignore_query_links: false`.
@@ -146,6 +154,7 @@ docmcp-crawl --version
 - If a site needs query-based pages, `crawl.ignore_query_links` must be set to `false`; otherwise discovered query links are skipped while the configured `crawl.start_url` keeps its query string exactly as configured.
 - `crawl.start_delay_seconds` is ignored in headless mode.
 - If redirect behavior is surprising, check the debug trace for both the requested URL, the normalized landing URL, and the redirect policy line that was applied.
+- Incremental page-only vector updates are deferred technical debt and should not be assumed by operators or test scenarios.
 
 ## References
 - [crawl_cli.py](../crawl_cli.py)

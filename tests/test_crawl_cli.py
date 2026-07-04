@@ -207,6 +207,30 @@ def test_load_selected_pages_merges_cli_and_file_entries(tmp_path):
     ]
 
 
+def test_load_selected_pages_preserves_duplicates_from_cli_and_file(tmp_path):
+    pages_file = tmp_path / "pages.txt"
+    pages_file.write_text(
+        "https://example.test/docs/api\nhttps://example.test/docs/guide\n",
+        encoding="utf-8",
+    )
+
+    assert _load_selected_pages(
+        ["https://example.test/docs/api"],
+        str(pages_file),
+    ) == [
+        "https://example.test/docs/api",
+        "https://example.test/docs/api",
+        "https://example.test/docs/guide",
+    ]
+
+
+def test_load_selected_pages_returns_empty_list_for_empty_or_comment_only_file(tmp_path):
+    pages_file = tmp_path / "pages.txt"
+    pages_file.write_text("# ignore comments\n\n   \n", encoding="utf-8")
+
+    assert _load_selected_pages([], str(pages_file)) == []
+
+
 def test_format_queue_preview_summarizes_next_depth():
     queue = deque(
         [
@@ -405,6 +429,29 @@ def test_main_routes_targeted_reindex_inputs_to_selected_pages(
         "headless": False,
         "debug": False,
     }
+
+
+def test_main_exits_when_pages_file_cannot_be_read(monkeypatch, capsys):
+    site = {"name": "Example Docs", "url": "https://example.test", "auth_required": False}
+
+    monkeypatch.setattr(crawl_cli, "get_sites", lambda: [site])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "docmcp-crawl",
+            "--site",
+            "Example Docs",
+            "--pages-file",
+            "/tmp/does-not-exist-pages.txt",
+        ],
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        crawl_cli.main()
+
+    assert excinfo.value.code == 1
+    assert "[docmcp-crawl] Failed to read --pages-file:" in capsys.readouterr().err
 
 
 def test_main_vectorizes_after_successful_crawl_when_requested(monkeypatch, capsys):
