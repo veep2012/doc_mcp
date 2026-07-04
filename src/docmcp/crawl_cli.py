@@ -756,8 +756,6 @@ async def reindex_selected_pages(
 
                 await asyncio.sleep(delay_seconds)
 
-            if stop_reindex:
-                pass
         finally:
             await browser.close()
 
