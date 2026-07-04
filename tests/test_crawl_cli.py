@@ -11,13 +11,16 @@ from docmcp.crawl_cli import (
     _disallowed_reason,
     _extract_links,
     _format_queue_preview,
+    _load_selected_pages,
     _html_to_markdown,
     _is_allowed,
     _is_page_url,
     _link_discovery_decision,
     _normalize_url,
+    _validate_selected_page_url,
     _get_redirect_policy,
 )
+from docmcp.index_store import get_page, init_db, upsert_page
 
 
 def test_normalize_url_strips_fragments_queries_and_trailing_slashes_by_default():
@@ -162,6 +165,48 @@ def test_html_to_markdown_removes_non_content_blocks():
     assert "Footer text" not in markdown
 
 
+def test_validate_selected_page_url_rejects_external_and_static_assets():
+    start_url = "https://example.test/docs"
+    allow_patterns = ["https://example.test/docs/*"]
+    deny_patterns = ["https://example.test/docs/private/*"]
+
+    assert _validate_selected_page_url(
+        "https://example.test/docs/guide#intro",
+        start_url,
+        allow_patterns,
+        deny_patterns,
+    ) == ("https://example.test/docs/guide", None)
+    assert _validate_selected_page_url(
+        "https://other.test/docs/guide",
+        start_url,
+        allow_patterns,
+        deny_patterns,
+    ) == (None, "host 'other.test' is outside start host 'example.test'")
+    assert _validate_selected_page_url(
+        "https://example.test/docs/static/logo.png",
+        start_url,
+        allow_patterns,
+        deny_patterns,
+    ) == (None, "URL points to a non-page asset")
+
+
+def test_load_selected_pages_merges_cli_and_file_entries(tmp_path):
+    pages_file = tmp_path / "pages.txt"
+    pages_file.write_text(
+        "# ignore comments\nhttps://example.test/docs/api\n\nhttps://example.test/docs/install\n",
+        encoding="utf-8",
+    )
+
+    assert _load_selected_pages(
+        ["https://example.test/docs/guide"],
+        str(pages_file),
+    ) == [
+        "https://example.test/docs/guide",
+        "https://example.test/docs/api",
+        "https://example.test/docs/install",
+    ]
+
+
 def test_format_queue_preview_summarizes_next_depth():
     queue = deque(
         [
@@ -290,6 +335,76 @@ def test_main_accepts_debug_and_threads_it_to_crawler(monkeypatch):
     crawl_cli.main()
 
     assert captured == {"site": site, "headless": True, "debug": True}
+
+
+@pytest.mark.parametrize(
+    ("argv", "expected_pages"),
+    [
+        (
+            [
+                "docmcp-crawl",
+                "--site",
+                "Example Docs",
+                "--pages",
+                "https://example.test/docs/guide",
+                "https://example.test/docs/api",
+            ],
+            [
+                "https://example.test/docs/guide",
+                "https://example.test/docs/api",
+            ],
+        ),
+        (
+            None,
+            [
+                "https://example.test/docs/guide",
+                "https://example.test/docs/api",
+            ],
+        ),
+    ],
+)
+def test_main_routes_targeted_reindex_inputs_to_selected_pages(
+    monkeypatch, tmp_path, argv, expected_pages
+):
+    site = {"name": "Example Docs", "url": "https://example.test", "auth_required": False}
+    captured = {}
+    pages_file = tmp_path / "pages.txt"
+    pages_file.write_text(
+        "https://example.test/docs/guide\nhttps://example.test/docs/api\n",
+        encoding="utf-8",
+    )
+    if argv is None:
+        argv = [
+            "docmcp-crawl",
+            "--site",
+            "Example Docs",
+            "--pages-file",
+            str(pages_file),
+        ]
+
+    async def fake_reindex(arg_site, page_urls, headless=False, debug=False):
+        captured["site"] = arg_site
+        captured["page_urls"] = page_urls
+        captured["headless"] = headless
+        captured["debug"] = debug
+        return [{"url": page_urls[0], "outcome": "indexed"}]
+
+    async def fail_crawl(*args, **kwargs):
+        raise AssertionError("full crawl should not run for targeted reindex inputs")
+
+    monkeypatch.setattr(crawl_cli, "get_sites", lambda: [site])
+    monkeypatch.setattr(crawl_cli, "reindex_selected_pages", fake_reindex)
+    monkeypatch.setattr(crawl_cli, "crawl_site_headful", fail_crawl)
+    monkeypatch.setattr(sys, "argv", argv)
+
+    crawl_cli.main()
+
+    assert captured == {
+        "site": site,
+        "page_urls": expected_pages,
+        "headless": False,
+        "debug": False,
+    }
 
 
 def test_main_vectorizes_after_successful_crawl_when_requested(monkeypatch, capsys):
@@ -678,6 +793,224 @@ def test_crawl_site_headful_debug_outputs_queue_and_link_reasons(monkeypatch, tm
         "[crawl][debug] Next queue for level 2/2: 1 queued URL -> "
         "https://example.test/docs/install" in output
     )
+
+
+def test_reindex_selected_pages_updates_only_selected_rows(monkeypatch, tmp_path, capsys):
+    class FakePage:
+        def __init__(self):
+            self.current = {}
+            self.url = ""
+
+        async def goto(self, url, wait_until, timeout):
+            self.current = {
+                "title": "Guide Updated",
+                "html": "<html><body><main><h1>Guide Updated</h1><p>Fresh content.</p></main></body></html>",
+                "url": url,
+            }
+            self.url = url
+
+        async def title(self):
+            return self.current["title"]
+
+        async def content(self):
+            return self.current["html"]
+
+        async def query_selector(self, selector):
+            return None
+
+    class FakeContext:
+        async def new_page(self):
+            return FakePage()
+
+    class FakeBrowser:
+        async def new_context(self, **kwargs):
+            return FakeContext()
+
+        async def close(self):
+            return None
+
+    class FakeChromium:
+        async def launch(self, headless):
+            return FakeBrowser()
+
+    class FakePlaywrightManager:
+        async def __aenter__(self):
+            return types.SimpleNamespace(chromium=FakeChromium())
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    async def fake_sleep(delay):
+        return None
+
+    monkeypatch.setitem(
+        sys.modules,
+        "playwright.async_api",
+        types.SimpleNamespace(async_playwright=lambda: FakePlaywrightManager()),
+    )
+    monkeypatch.setattr(crawl_cli.asyncio, "sleep", fake_sleep)
+
+    index_file = tmp_path / "docs.db"
+    init_db(str(index_file))
+    upsert_page(str(index_file), "https://example.test/docs/guide", "Guide", "Old guide content")
+    upsert_page(
+        str(index_file),
+        "https://example.test/docs/unchanged",
+        "Unchanged",
+        "Leave me alone",
+    )
+    original_other_page = get_page(str(index_file), "https://example.test/docs/unchanged")
+
+    site = {
+        "name": "Example Docs",
+        "url": "https://example.test/docs",
+        "index_file": str(index_file),
+        "crawl": {
+            "start_url": "https://example.test/docs",
+            "delay_seconds": 0,
+        },
+    }
+
+    results = asyncio.run(
+        crawl_cli.reindex_selected_pages(
+            site,
+            ["https://example.test/docs/guide"],
+            headless=True,
+        )
+    )
+
+    output = capsys.readouterr().out
+    updated_page = get_page(str(index_file), "https://example.test/docs/guide")
+    other_page = get_page(str(index_file), "https://example.test/docs/unchanged")
+
+    assert results == [
+        {
+            "url": "https://example.test/docs/guide",
+            "requested_url": "https://example.test/docs/guide",
+            "outcome": "indexed",
+            "title": "Guide Updated",
+        }
+    ]
+    assert updated_page is not None
+    assert updated_page["title"] == "Guide Updated"
+    assert "Fresh content" in updated_page["content_md"]
+    assert other_page == original_other_page
+    assert "[crawl] Targeted reindex summary: indexed=1 skipped=0 failed=0" in output
+
+
+def test_reindex_selected_pages_reports_mixed_indexed_skipped_and_failed_results(
+    monkeypatch, tmp_path, capsys
+):
+    page_payloads = {
+        "https://example.test/docs/guide": {
+            "title": "Guide Updated",
+            "html": "<html><body><main><h1>Guide Updated</h1></main></body></html>",
+            "url": "https://example.test/docs/guide",
+        },
+        "https://example.test/docs/api": {
+            "title": "API Updated",
+            "html": "<html><body><main><h1>API Updated</h1></main></body></html>",
+            "url": "https://example.test/docs/api",
+        },
+    }
+
+    class FakePage:
+        def __init__(self):
+            self.current = {}
+            self.url = ""
+
+        async def goto(self, url, wait_until, timeout):
+            if url == "https://example.test/docs/failing":
+                raise RuntimeError("boom")
+            self.current = page_payloads[url]
+            self.url = self.current["url"]
+
+        async def title(self):
+            return self.current["title"]
+
+        async def content(self):
+            return self.current["html"]
+
+        async def query_selector(self, selector):
+            return None
+
+    class FakeContext:
+        async def new_page(self):
+            return FakePage()
+
+    class FakeBrowser:
+        async def new_context(self, **kwargs):
+            return FakeContext()
+
+        async def close(self):
+            return None
+
+    class FakeChromium:
+        async def launch(self, headless):
+            return FakeBrowser()
+
+    class FakePlaywrightManager:
+        async def __aenter__(self):
+            return types.SimpleNamespace(chromium=FakeChromium())
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    async def fake_sleep(delay):
+        return None
+
+    monkeypatch.setitem(
+        sys.modules,
+        "playwright.async_api",
+        types.SimpleNamespace(async_playwright=lambda: FakePlaywrightManager()),
+    )
+    monkeypatch.setattr(crawl_cli.asyncio, "sleep", fake_sleep)
+
+    index_file = tmp_path / "docs.db"
+    init_db(str(index_file))
+    upsert_page(str(index_file), "https://example.test/docs/guide", "Guide", "Old guide content")
+    upsert_page(str(index_file), "https://example.test/docs/api", "API", "Old api content")
+
+    site = {
+        "name": "Example Docs",
+        "url": "https://example.test/docs",
+        "index_file": str(index_file),
+        "crawl": {
+            "start_url": "https://example.test/docs",
+            "delay_seconds": 0,
+            "allow_patterns": ["https://example.test/docs/*"],
+        },
+    }
+
+    results = asyncio.run(
+        crawl_cli.reindex_selected_pages(
+            site,
+            [
+                "https://example.test/docs/guide",
+                "https://other.test/docs/offsite",
+                "https://example.test/docs/static/logo.png",
+                "https://example.test/docs/api",
+                "https://example.test/docs/failing",
+            ],
+            headless=True,
+        )
+    )
+
+    output = capsys.readouterr().out
+
+    assert [item["outcome"] for item in results] == [
+        "indexed",
+        "skipped",
+        "skipped",
+        "indexed",
+        "failed",
+    ]
+    assert results[1]["reason"] == "host 'other.test' is outside start host 'example.test'"
+    assert results[2]["reason"] == "URL points to a non-page asset"
+    assert results[4]["reason"] == "navigation error: boom"
+    assert get_page(str(index_file), "https://example.test/docs/guide")["title"] == "Guide Updated"
+    assert get_page(str(index_file), "https://example.test/docs/api")["title"] == "API Updated"
+    assert "[crawl] Targeted reindex summary: indexed=2 skipped=2 failed=1" in output
 
 
 @pytest.mark.parametrize(
