@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-06-21
-- Version: v1.9
+- Last Updated: 2026-07-04
+- Version: v2.0
 
 ## Change Log
+- 2026-07-04 | v2.0 | Documented the targeted crawl CLI page-selection flags that override normal breadth-first crawling without adding new site configuration keys.
 - 2026-06-21 | v1.9 | Reorganized the site configuration section so the search and vector settings read as a single release-facing block.
 - 2026-06-14 | v1.8 | Added FastEmbed model-selection guidance, clarified that supported models depend on the installed FastEmbed version, and documented when to use multilingual versus English-focused embeddings.
 - 2026-05-26 | v1.7 | Documented crawl timing constraints for `delay_seconds` and `start_delay_seconds`, clarified redirect behavior, and updated the site examples to reflect the merged crawl config.
@@ -32,7 +33,7 @@ Describe the local configuration files used by `doc-mcp` and the fields the runt
 ### Configuration Precedence
 - Built-in defaults apply first. Examples: `search_engine: hybrid`, `crawl.redirect_policy: final`, `crawl.delay_seconds: 1.0` in the crawler, `crawl.start_delay_seconds: 0.0`, and `vectorizer.embedding_model: BAAI/bge-small-en-v1.5`.
 - `config/sites.yaml` overrides those defaults.
-- CLI flags override runtime behavior at invocation time when a flag exists. Examples: `--site`, `--debug`, `--headless`, `--vectorize`, and `--force-auth`.
+- CLI flags override runtime behavior at invocation time when a flag exists. Examples: `--site`, `--debug`, `--headless`, `--vectorize`, `--force-auth`, `--pages`, and `--pages-file`.
 - For placeholder expansion, `${NAME}` values come from the workspace `.env` file first and then the process environment. The workspace `.env` therefore wins when both define the same name.
 - `CONFIG_FILE` sets the config file path; if it is relative, it is resolved from `DOC_MCP_HOME`.
 - `DOC_MCP_HOME` sets the runtime root for relative config, session, index, and vector paths; if it is unset, the current working directory is used.
@@ -172,6 +173,7 @@ The sample config file also includes a few future-facing keys such as `auth_mode
 - `respect_robots_txt` is not consumed by the current crawler implementation.
 - `crawl.redirect_policy` defaults to `final`, which preserves the existing behavior of indexing the landing URL after a redirect.
 - `crawl.start_delay_seconds` is off by default. Use it when you want a visible headful browser to load the start page, pause, and let you switch to the exact page you want to scan.
+- `--pages` and `--pages-file` are crawl CLI inputs, not site configuration keys.
 
 ### Local Vector Sidecar Notes
 - `search_engine: keyword` keeps the site on keyword-only search, `search_engine: vector` uses the vector sidecar only, and `search_engine: hybrid` combines both.
@@ -184,6 +186,7 @@ The sample config file also includes a few future-facing keys such as `auth_mode
 - Changing `vectorizer.embedding_model` changes the vector space and requires rebuilding the sidecar.
 - `docmcp-vectorize --debug` enables chunk-level vectorizer diagnostics; normal runs stay at page-level progress.
 - When `docmcp-crawl --debug --vectorize` runs the vectorizer immediately after a successful crawl, that debug mode is inherited.
+- There is no page-only vector update path yet; refreshing vector search still requires rebuilding the full sidecar from the crawl index.
 - To inspect the vector tables with `sqlite3`, use a shell that supports extension loading, open `index/<site>.vec.db`, and load the platform-appropriate `vec0` library before running `.tables`:
   - `sqlite3 index/<site>.vec.db`
   - `.load <path-to-sqlite_vec>/vec0.<platform-extension>` where the platform-specific filename is `vec0.dylib` on macOS, `vec0.so` on Linux, or `vec0.dll` on Windows

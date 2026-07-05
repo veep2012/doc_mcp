@@ -18,6 +18,7 @@ import argparse
 import asyncio
 import math
 import re
+import sqlite3
 import sys
 from collections import deque
 from fnmatch import fnmatch
@@ -98,6 +99,8 @@ _STATIC_EXTENSIONS = {
 
 
 _REDIRECT_POLICIES = frozenset({"final", "requested", "skip"})
+_TARGETED_REINDEX_WARN_THRESHOLD = 100
+_TARGETED_REINDEX_HARD_CAP = 500
 
 
 def _invalid_redirect_policy_message(received_value: str, site_name: str | None = None) -> str:
@@ -195,6 +198,72 @@ def _html_to_markdown(html: str) -> str:
     # Fallback: strip all HTML tags
     text = re.sub(r"<[^>]+>", " ", html)
     return re.sub(r"\s{2,}", " ", text).strip()
+
+
+def _validate_selected_page_url(
+    url: str, start_url: str, allow_patterns: list[str], deny_patterns: list[str]
+) -> tuple[str | None, str | None, str | None]:
+    """Normalize and validate a targeted reindex URL."""
+    normalized_url = _normalize_url(url, strip_query=False)
+    if not _is_page_url(normalized_url):
+        return None, "asset_url", "URL points to a non-page asset"
+    reason = _disallowed_reason(normalized_url, start_url, allow_patterns, deny_patterns)
+    if reason:
+        return None, "out_of_scope", reason
+    return normalized_url, None, None
+
+
+def _selected_page_scope_reason(
+    url: str, start_url: str, allow_patterns: list[str], deny_patterns: list[str]
+) -> str | None:
+    """Return a selected-page scope violation reason using the targeted reindex policy."""
+    return _disallowed_reason(url, start_url, allow_patterns, deny_patterns)
+
+
+def _selected_page_result(
+    *,
+    url: str,
+    outcome: str,
+    reason_code: str | None = None,
+    reason: str | None = None,
+    requested_url: str | None = None,
+    title: str | None = None,
+) -> dict:
+    result = {"url": url, "outcome": outcome}
+    if requested_url is not None:
+        result["requested_url"] = requested_url
+    if reason_code is not None:
+        result["reason_code"] = reason_code
+    if reason is not None:
+        result["reason"] = reason
+    if title is not None:
+        result["title"] = title
+    return result
+
+
+def _load_selected_pages(page_urls: list[str] | None, pages_file: str | None) -> list[str]:
+    """Load targeted reindex URLs from CLI arguments and an optional file."""
+    selected_pages = list(page_urls or [])
+    raw_pages = selected_pages
+    if pages_file:
+        with Path(pages_file).open(encoding="utf-8") as handle:
+            for line in handle:
+                candidate = line.strip()
+                if candidate and not candidate.startswith("#"):
+                    raw_pages.append(candidate)
+
+    normalized_pages: list[str] = []
+    seen_pages: set[str] = set()
+    for raw_page in raw_pages:
+        candidate = raw_page.strip()
+        if not candidate:
+            continue
+        normalized_page = _normalize_url(candidate, strip_query=False)
+        if normalized_page in seen_pages:
+            continue
+        seen_pages.add(normalized_page)
+        normalized_pages.append(normalized_page)
+    return normalized_pages
 
 
 async def _extract_page_html(page) -> str:
@@ -320,6 +389,41 @@ def _authenticate_site(site: dict, force: bool = False) -> None:
     result = authenticate(site, force=force)
     if asyncio.iscoroutine(result):
         asyncio.run(result)
+
+
+async def _index_loaded_page(
+    page,
+    *,
+    requested_url: str,
+    current_url: str,
+    index_file: str,
+    redirect_policy: str,
+    debug,
+) -> tuple[str | None, str]:
+    """Capture, convert, and upsert the current page into the SQLite index."""
+    if current_url != requested_url:
+        if redirect_policy == "requested":
+            index_url = requested_url
+            debug(f"Redirect policy=requested -> indexing requested URL {index_url}")
+        elif redirect_policy == "skip":
+            index_url = None
+            debug("Redirect policy=skip -> skipping redirected page")
+        else:
+            index_url = current_url
+            debug(f"Redirect policy=final -> indexing final URL {index_url}")
+    else:
+        index_url = current_url
+
+    title = await page.title() or requested_url
+    html = await _extract_page_html(page)
+    content_md = _html_to_markdown(html) if html else ""
+    debug(
+        f"Page title={title!r}; extracted {len(html)} HTML chars -> {len(content_md)} Markdown chars"
+    )
+
+    if index_url is not None:
+        upsert_page(index_file, index_url, title, content_md)
+    return index_url, title
 
 
 # ---------------------------------------------------------------------------
@@ -488,37 +592,17 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
                         stop_crawl = True
                         break
 
-                    if redirected:
-                        if redirect_policy == "requested":
-                            index_url = url
-                            _debug(
-                                f"Redirect policy=requested -> indexing requested URL {index_url}"
-                            )
-                        elif redirect_policy == "skip":
-                            index_url = None
-                            _debug("Redirect policy=skip -> skipping redirected page")
-                        else:
-                            index_url = current_url
-                            _debug(f"Redirect policy=final -> indexing final URL {index_url}")
-                    else:
-                        index_url = current_url
-
-                    # Extract title
-                    title = await page.title() or url
-
-                    # Extract the most complete rendered HTML we can find.
-                    html = await _extract_page_html(page)
-
-                    content_md = _html_to_markdown(html) if html else ""
-                    _debug(
-                        f"Page title={title!r}; extracted {len(html)} HTML chars -> {len(content_md)} Markdown chars"
+                    index_url, title = await _index_loaded_page(
+                        page,
+                        requested_url=url,
+                        current_url=current_url,
+                        index_file=index_file,
+                        redirect_policy=redirect_policy,
+                        debug=_debug,
                     )
-
-                    # Save to index
                     if index_url is None:
                         print("[crawl]   ↷ Skipped: redirect_policy=skip")
                     else:
-                        upsert_page(index_file, index_url, title, content_md)
                         page_count += 1
                         print(f"[crawl]   ✓ Indexed: {title[:70]}")
 
@@ -574,6 +658,219 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
     return not stop_crawl
 
 
+async def reindex_selected_pages(
+    site: dict, page_urls: list[str], headless: bool = False, debug: bool = False
+) -> list[dict]:
+    """Reindex only the explicitly selected page URLs for a configured site."""
+    name = site["name"]
+    crawl_cfg = site.get("crawl", {})
+    start_url = crawl_cfg.get("start_url", site["url"])
+    delay_seconds = _validate_delay_seconds(crawl_cfg.get("delay_seconds", 1.0), name)
+    redirect_policy = _get_redirect_policy(crawl_cfg, name)
+    allow_patterns = crawl_cfg.get("allow_patterns", [])
+    deny_patterns = crawl_cfg.get("deny_patterns", [])
+    block_images = crawl_cfg.get("block_images", False)
+    ignore_https_errors = crawl_cfg.get("ignore_https_errors", False)
+    index_file = site["index_file"]
+    session_file = site.get("session_file")
+    login_indicators = ["login", "signin", "sign-in", "/auth", "/sso"]
+    results: list[dict] = []
+
+    def _debug(message: str) -> None:
+        if debug:
+            print(f"[crawl][debug] {message}", file=sys.stderr)
+
+    print(f"\n[crawl] Site     : {name}")
+    print("[crawl] Mode     : targeted reindex")
+    print(f"[crawl] Start URL: {start_url}")
+    print(f"[crawl] Index    : {index_file}")
+    print(f"[crawl] Pages    : {len(page_urls)}")
+
+    init_db(index_file)
+
+    from playwright.async_api import async_playwright
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=headless)
+
+        context_kwargs = {}
+        if session_file and Path(session_file).exists():
+            context_kwargs["storage_state"] = session_file
+            print(f"[crawl] Loaded session: {session_file}")
+
+        context = await browser.new_context(
+            viewport={"width": 1280, "height": 900},
+            ignore_https_errors=ignore_https_errors,
+            **context_kwargs,
+        )
+
+        if block_images:
+            blocked = {"image", "media", "font"}
+
+            async def _block_resources(route, request):
+                if request.resource_type in blocked:
+                    await route.abort()
+                else:
+                    await route.continue_()
+
+            await context.route("**/*", _block_resources)
+            print("[crawl] Resource blocking: images/fonts/media disabled")
+
+        page = await context.new_page()
+
+        try:
+            for index, raw_url in enumerate(page_urls, start=1):
+                normalized_url, reason_code, reason = _validate_selected_page_url(
+                    raw_url,
+                    start_url,
+                    allow_patterns,
+                    deny_patterns,
+                )
+                if reason is not None:
+                    print(f"[crawl] [{index} of {len(page_urls)}] {raw_url}")
+                    print(f"[crawl]   ↷ Skipped: {reason}")
+                    results.append(
+                        _selected_page_result(
+                            url=raw_url,
+                            outcome="skipped",
+                            reason_code=reason_code,
+                            reason=reason,
+                        )
+                    )
+                    continue
+
+                print(f"[crawl] [{index} of {len(page_urls)}] {normalized_url}")
+                _debug(f"Navigating to {normalized_url}")
+                try:
+                    await page.goto(normalized_url, wait_until="networkidle", timeout=60000)
+                except Exception as exc:
+                    print(f"[crawl]   ✗ Navigation error: {exc}")
+                    results.append(
+                        _selected_page_result(
+                            url=normalized_url,
+                            outcome="failed",
+                            reason_code="navigation_error",
+                            reason=f"navigation error: {exc}",
+                        )
+                    )
+                    continue
+
+                current_url = _normalize_url(page.url, strip_query=False)
+                if current_url != normalized_url:
+                    _debug(f"Navigation redirected to {current_url}")
+                else:
+                    _debug(f"Navigation stayed on {current_url}")
+
+                if any(ind in current_url for ind in login_indicators):
+                    message = "redirected to login — session may be expired"
+                    print(f"[crawl]   ✗ {message}. Stopping.")
+                    print(f'[crawl]   Run: docmcp-auth --site "{name}" --force')
+                    results.append(
+                        _selected_page_result(
+                            url=normalized_url,
+                            outcome="failed",
+                            reason_code="login_redirect",
+                            reason=message,
+                        )
+                    )
+                    break
+
+                post_redirect_reason = _selected_page_scope_reason(
+                    current_url,
+                    start_url,
+                    allow_patterns,
+                    deny_patterns,
+                )
+                if post_redirect_reason is not None:
+                    print(f"[crawl]   ↷ Skipped: {post_redirect_reason}")
+                    results.append(
+                        _selected_page_result(
+                            url=normalized_url,
+                            requested_url=normalized_url,
+                            outcome="skipped",
+                            reason_code="out_of_scope",
+                            reason=f"redirected to out-of-scope URL: {post_redirect_reason}",
+                        )
+                    )
+                    continue
+
+                try:
+                    index_url, title = await _index_loaded_page(
+                        page,
+                        requested_url=normalized_url,
+                        current_url=current_url,
+                        index_file=index_file,
+                        redirect_policy=redirect_policy,
+                        debug=_debug,
+                    )
+                except sqlite3.Error as exc:
+                    print(f"[crawl]   ✗ Database error: {exc}")
+                    results.append(
+                        _selected_page_result(
+                            url=normalized_url,
+                            outcome="failed",
+                            reason_code="db_error",
+                            reason=f"database error: {exc}",
+                        )
+                    )
+                    continue
+                except Exception as exc:
+                    print(f"[crawl]   ✗ Page processing error: {exc}")
+                    results.append(
+                        _selected_page_result(
+                            url=normalized_url,
+                            outcome="failed",
+                            reason_code="parse_error",
+                            reason=f"page processing error: {exc}",
+                        )
+                    )
+                    continue
+                if index_url is None:
+                    print("[crawl]   ↷ Skipped: redirect_policy=skip")
+                    results.append(
+                        _selected_page_result(
+                            url=normalized_url,
+                            outcome="skipped",
+                            reason_code="redirect_policy_skip",
+                            reason="redirect_policy=skip",
+                        )
+                    )
+                else:
+                    print(f"[crawl]   ✓ Indexed: {title[:70]}")
+                    results.append(
+                        _selected_page_result(
+                            url=index_url,
+                            requested_url=normalized_url,
+                            outcome="indexed",
+                            title=title,
+                        )
+                    )
+
+                await asyncio.sleep(delay_seconds)
+
+        finally:
+            await browser.close()
+
+    counts = {
+        "indexed": sum(1 for item in results if item["outcome"] == "indexed"),
+        "skipped": sum(1 for item in results if item["outcome"] == "skipped"),
+        "failed": sum(1 for item in results if item["outcome"] == "failed"),
+    }
+    reason_counts: dict[str, int] = {}
+    for item in results:
+        reason_code = item.get("reason_code")
+        if reason_code:
+            reason_counts[reason_code] = reason_counts.get(reason_code, 0) + 1
+    print(
+        "\n[crawl] Targeted reindex summary: "
+        f"indexed={counts['indexed']} skipped={counts['skipped']} failed={counts['failed']}"
+    )
+    if reason_counts:
+        breakdown = " ".join(f"{code}={reason_counts[code]}" for code in sorted(reason_counts))
+        print(f"[crawl] Targeted reindex reasons: {breakdown}")
+    return results
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
@@ -603,6 +900,17 @@ def main():
         action="store_true",
         help="Build or refresh the local vector index after a successful crawl",
     )
+    parser.add_argument(
+        "--pages",
+        nargs="+",
+        metavar="URL",
+        help="Reindex only the selected page URL(s)",
+    )
+    parser.add_argument(
+        "--pages-file",
+        type=str,
+        help="Read page URLs to reindex from a file (one URL per line)",
+    )
     parser.add_argument("--list", action="store_true", help="List all configured sites")
     parser.add_argument("--version", action="store_true", help="Show the current version and exit")
     args = parser.parse_args()
@@ -614,6 +922,8 @@ def main():
             or args.headless
             or args.debug
             or args.vectorize
+            or args.pages
+            or args.pages_file
             or args.list
         ):
             parser.error("--version cannot be combined with other arguments")
@@ -646,11 +956,43 @@ def main():
     if site.get("auth_required"):
         _authenticate_site(site, force=args.force_auth)
 
-    # Then crawl
     try:
-        crawl_completed = asyncio.run(
-            crawl_site_headful(site, headless=args.headless, debug=args.debug)
-        )
+        selected_pages = _load_selected_pages(args.pages, args.pages_file)
+    except (OSError, UnicodeError) as exc:
+        print(f"[docmcp-crawl] Failed to read --pages-file:\n{exc}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        if selected_pages:
+            selected_page_count = len(selected_pages)
+            if selected_page_count > _TARGETED_REINDEX_HARD_CAP:
+                print(
+                    "[docmcp-crawl] Refusing targeted reindex with "
+                    f"{selected_page_count} pages; the maximum supported batch size is "
+                    f"{_TARGETED_REINDEX_HARD_CAP}. Split the file or use the normal crawl path.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            if selected_page_count >= _TARGETED_REINDEX_WARN_THRESHOLD:
+                print(
+                    "[docmcp-crawl] Warning: targeted reindex contains "
+                    f"{selected_page_count} pages. Large batches can behave like a near-full crawl "
+                    "and are more expensive for SQLite-backed runs.",
+                    file=sys.stderr,
+                )
+            results = asyncio.run(
+                reindex_selected_pages(
+                    site,
+                    selected_pages,
+                    headless=args.headless,
+                    debug=args.debug,
+                )
+            )
+            crawl_completed = not any(item["outcome"] == "failed" for item in results)
+        else:
+            crawl_completed = asyncio.run(
+                crawl_site_headful(site, headless=args.headless, debug=args.debug)
+            )
     except ConfigError as exc:
         print(f"[docmcp-crawl] Configuration error:\n{exc}", file=sys.stderr)
         sys.exit(1)

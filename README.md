@@ -32,7 +32,7 @@ python3 -m venv "$VENV_DIR"
 source "$VENV_DIR/bin/activate"
 python -m pip install --upgrade pip
 python -m pip install -r requirements-dev.txt
-python -m playwright install chromium
+python -m playwright install --with-deps chromium
 ```
 
 On Windows PowerShell without `make`:
@@ -44,7 +44,7 @@ python -m venv $VenvDir
 & "$VenvDir\Scripts\Activate.ps1"
 python -m pip install --upgrade pip
 python -m pip install -r requirements-dev.txt
-python -m playwright install chromium
+python -m playwright install --with-deps chromium
 ```
 
 The development checkout can run through source-tree wrappers, so editable
@@ -131,7 +131,13 @@ python -m build --wheel
 python -m pip install /path/to/doc_mcp-*.whl
 ```
 
-4. Create or copy runtime files in a workspace directory:
+4. Install Chromium for Playwright in that same environment:
+
+```bash
+python -m playwright install --with-deps chromium
+```
+
+5. Create or copy runtime files in a workspace directory:
 
 ```bash
 mkdir -p config storage index
@@ -141,7 +147,7 @@ cp /path/to/.env .env
 
 Relative `CONFIG_FILE`, `session_file`, and `index_file` values are resolved from `DOC_MCP_HOME`, or from the current working directory when `DOC_MCP_HOME` is not set.
 
-5. Use the installed console commands:
+6. Use the installed console commands:
 
 ```bash
 export DOC_MCP_HOME="$PWD"
