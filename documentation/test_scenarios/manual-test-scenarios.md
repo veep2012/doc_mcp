@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-26
-- Last Updated: 2026-07-04
-- Version: v1.3
+- Last Updated: 2026-07-05
+- Version: v1.4
 
 ## Change Log
+- 2026-07-05 | v1.4 | Updated the manual setup and wheel-install verification steps to use `python -m playwright install --with-deps chromium`.
 - 2026-07-04 | v1.3 | Added manual verification steps for targeted selected-page reindexing through the crawl CLI.
 - 2026-05-24 | v1.2 | Documented the standalone vectorizer CLI, the vectorizer `--debug` option, and the chained crawl-and-vectorize command path with inherited debug mode.
 - 2026-05-23 | v1.0 | Added explicit vectorizer verification steps and documented that crawl and vector refresh remain separate commands.
@@ -82,13 +83,13 @@ Run this block first when validating the repository checkout directly.
        - `source .venv/bin/activate`
        - `python -m pip install --upgrade pip`
        - `python -m pip install -r requirements-dev.txt`
-       - `python -m playwright install chromium`
+       - `python -m playwright install --with-deps chromium`
      - Windows PowerShell:
        - `python -m venv .venv`
        - `.venv\Scripts\Activate.ps1`
        - `python -m pip install --upgrade pip`
        - `python -m pip install -r requirements-dev.txt`
-       - `python -m playwright install chromium`
+       - `python -m playwright install --with-deps chromium`
   3. If `make local-venv` was used, activate the virtual environment:
      - macOS/Linux: `source .venv/bin/activate`
      - Windows PowerShell: `.venv\Scripts\Activate.ps1`
@@ -161,8 +162,8 @@ Run this block after the development environment passes, using a separate runtim
      - macOS/Linux: `python -m pip install /path/to/doc_mcp-*.whl`
      - Windows PowerShell: `python -m pip install /path/to/doc_mcp-*.whl`
   5. Install Chromium:
-     - macOS/Linux: `python -m playwright install chromium`
-     - Windows PowerShell: `python -m playwright install chromium`
+     - macOS/Linux: `python -m playwright install --with-deps chromium`
+     - Windows PowerShell: `python -m playwright install --with-deps chromium`
   6. Run `docmcp-auth --help`.
   7. Run `docmcp-crawl --help`.
   8. Run `docmcp-vectorize --help`.
