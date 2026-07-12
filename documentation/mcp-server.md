@@ -201,6 +201,8 @@ sites:
     index_file: "index/my_docs.db"
 ```
 
+Before crawling an authenticated site, run `docmcp-auth --site "My Docs"` and complete login manually in the visible browser, including any CAPTCHA, MFA, magic-link, or anti-bot steps. Headless crawling is available only after a valid session has been saved.
+
 If a site needs a manual setup window in the browser before crawling starts, add `crawl.start_delay_seconds` to that site and run the crawl headful.
 
 The VS Code MCP server receives `CONFIG_FILE` and `DOC_MCP_HOME` from `.vscode/mcp.json` in step 5.

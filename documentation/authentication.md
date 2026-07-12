@@ -5,12 +5,13 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-05-20
-- Version: v1.3
+- Last Updated: 2026-07-12
+- Version: v1.4
 
 ## Change Log
+- 2026-07-12 | v1.4 | Aligned the guide with the supported manual headful authentication flow and saved-session reuse.
 - 2026-05-20 | v1.3 | Added current CLI version/help behavior and clarified lazy auth-path loading.
-- 2026-05-10 | v1.2 | Clarified that authentication is currently manual headful-only and that the sample auth metadata keys are informational.
+- 2026-05-10 | v1.2 | Clarified that authentication is currently manual headful-only.
 - 2026-04-25 | v1.1 | Updated commands and references for installed docmcp-auth package entry point.
 - 2026-04-24 | v1.0 | Reformatted the authentication guide and documented the current headful session flow.
 
@@ -23,7 +24,7 @@ Describe how `doc-mcp` authenticates to a documentation site, validates stored s
   - Session validation and persistence behavior.
 - Out of scope:
   - Site-specific login page design.
-  - Multi-mode authentication flows that are not implemented.
+  - Scripted login flows or credential injection.
 
 ## Design / Behavior
 ### Commands
@@ -63,9 +64,8 @@ docmcp-auth --version
 
 ### Practical Notes
 - Authentication is per site.
-- The login browser is headful so the user can complete whatever site-specific login flow is required manually.
-- The sample `auth_type` and `auth_mode` keys in `config/sites.yaml` are informational only; the runtime does not branch on them.
-- The crawler reuses the saved session if it is still valid.
+- The only supported login flow is manual and headful. Complete any CAPTCHA, MFA, magic-link, or anti-bot steps in the visible browser window.
+- The crawler reuses a valid saved session. Headless crawling is available only after that session has been created.
 - `--help`, `--list`, and `--version` complete without loading the browser authentication path until it is needed.
 
 ## Edge Cases

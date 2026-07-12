@@ -6,10 +6,6 @@ sites:
   - name: "My Private Docs"
     url: "https://docs.example.com"
     auth_required: true
-    auth_type: "magic_link"         # email_code | magic_link | password_only
-    auth_mode: "headful"            # headful: visible browser, user logs in manually
-    username: "${SITE1_USERNAME}"   # set in .env
-    password: "${SITE1_PASSWORD}"   # set in .env (if needed)
     session_file: "storage/my_private_docs.json"
     crawl:
       start_url: "https://docs.example.com/documentation"

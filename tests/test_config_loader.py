@@ -1,9 +1,35 @@
 import os
 import textwrap
+from pathlib import Path
 
 import pytest
 
 from docmcp.config.loader import ConfigError, get_site_by_name, get_sites, load_config
+
+
+def test_sample_config_loads_with_supported_authentication_fields(monkeypatch, tmp_path):
+    runtime_root = tmp_path / "runtime"
+    config_dir = runtime_root / "config"
+    config_dir.mkdir(parents=True)
+    sample_path = Path(__file__).parents[1] / "config" / "sites.yaml.example"
+    (config_dir / "sites.yaml").write_text(
+        sample_path.read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    monkeypatch.setenv("DOC_MCP_HOME", str(runtime_root))
+    monkeypatch.delenv("CONFIG_FILE", raising=False)
+
+    sites = get_sites()
+
+    private_site, public_site = sites
+    assert private_site["auth_required"] is True
+    assert private_site["session_file"] == str(runtime_root / "storage" / "my_private_docs.json")
+    assert public_site["auth_required"] is False
+    assert public_site["session_file"] is None
+    assert not any(
+        field in site
+        for site in sites
+        for field in ("auth_type", "auth_mode", "username", "password")
+    )
 
 
 def test_load_config_resolves_runtime_paths_and_env(monkeypatch, tmp_path):

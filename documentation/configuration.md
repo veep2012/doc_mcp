@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-07-04
-- Version: v2.0
+- Last Updated: 2026-07-12
+- Version: v2.1
 
 ## Change Log
+- 2026-07-12 | v2.1 | Removed unsupported credential and authentication-mode configuration guidance.
 - 2026-07-04 | v2.0 | Documented the targeted crawl CLI page-selection flags that override normal breadth-first crawling without adding new site configuration keys.
 - 2026-06-21 | v1.9 | Reorganized the site configuration section so the search and vector settings read as a single release-facing block.
 - 2026-06-14 | v1.8 | Added FastEmbed model-selection guidance, clarified that supported models depend on the installed FastEmbed version, and documented when to use multilingual versus English-focused embeddings.
@@ -46,15 +47,12 @@ Describe the local configuration files used by `doc-mcp` and the fields the runt
 - `MCP_SERVER_NAME` sets the MCP server name. Default: `docs-mcp`
 - `MCP_LOG_LEVEL` sets the server log level. Default: `INFO`
 - `HTTP_PROXY` and `HTTPS_PROXY` are available to Playwright and other libraries through the process environment.
-- `SITE1_USERNAME` and `SITE1_PASSWORD` can be used in site definitions.
 
 Example:
 ```env
 CONFIG_FILE=config/sites.yaml
 DOC_MCP_HOME=/path/to/doc_mcp
 MCP_SERVER_NAME=docs-mcp
-SITE1_USERNAME=user@example.com
-SITE1_PASSWORD=replace-me
 ```
 
 ### Site Configuration
@@ -90,6 +88,7 @@ SITE1_PASSWORD=replace-me
 - `vectorizer.chunk_size`: defaults to `800`.
 - `vectorizer.chunk_overlap`: defaults to `120`.
 - `vectorizer.embedding_model`: defaults to `BAAI/bge-small-en-v1.5`.
+- Authentication is completed manually in a visible browser. Complete any CAPTCHA, MFA, magic-link, or anti-bot steps there; headless crawling requires a valid saved session.
 
 ### Search And Vector Settings
 - `vector_index_file`: local sqlite-vec sidecar path for that site's chunk embeddings; if omitted, the runtime uses the same directory and file stem as `index_file` with a `.vec.db` suffix.
@@ -166,11 +165,8 @@ sites:
       embedding_model: "BAAI/bge-small-en-v1.5"  # English-focused default; multilingual docs can use sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
 ```
 
-### Optional And Informational Fields
-The sample config file also includes a few future-facing keys such as `auth_mode`, `auth_type`, and `respect_robots_txt`.
-- `auth_mode` is currently informational only.
-- `auth_type` is currently informational only.
-- `respect_robots_txt` is not consumed by the current crawler implementation.
+### Optional Configuration Notes
+- `respect_robots_txt` is included in the sample configuration but is not consumed by the current crawler implementation.
 - `crawl.redirect_policy` defaults to `final`, which preserves the existing behavior of indexing the landing URL after a redirect.
 - `crawl.start_delay_seconds` is off by default. Use it when you want a visible headful browser to load the start page, pause, and let you switch to the exact page you want to scan.
 - `--pages` and `--pages-file` are crawl CLI inputs, not site configuration keys.
@@ -205,7 +201,6 @@ The sample config file also includes a few future-facing keys such as `auth_mode
 - If `vector_index_file` is omitted, the vectorizer writes `<index_file stem>.vec.db` alongside the keyword SQLite index.
 - An empty or missing `index_file` is invalid for vector search validation and is treated as a site configuration problem rather than a searchable vector state.
 - If sqlite-vec cannot be loaded, `docmcp-vectorize` fails clearly but crawl and keyword-only MCP search still work.
-- Informational keys should not be treated as enforced runtime behavior.
 
 ## References
 - [src/docmcp/config/loader.py](../src/docmcp/config/loader.py)
