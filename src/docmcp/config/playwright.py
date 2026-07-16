@@ -116,7 +116,7 @@ def validate_playwright_config(value: object, site_name: object) -> None:
         if not isinstance(viewport, dict) or set(viewport) != {"width", "height"}:
             raise _invalid("context.viewport", site_name, "expected width and height fields.")
         for key in viewport:
-            if isinstance(viewport[key], bool) or not isinstance(viewport[key], int) or viewport[key] <= 0:
+            if type(viewport[key]) is not int or viewport[key] <= 0:
                 raise _invalid(f"context.viewport.{key}", site_name, "expected an integer > 0.")
     if "extra_http_headers" in context:
         headers = context["extra_http_headers"]
@@ -129,8 +129,17 @@ def validate_playwright_config(value: object, site_name: object) -> None:
         raise _invalid("context.permissions", site_name, "expected a list of strings.")
     if "geolocation" in context:
         geolocation = context["geolocation"]
-        if not isinstance(geolocation, dict) or set(geolocation) - {"latitude", "longitude", "accuracy"} or not {"latitude", "longitude"} <= set(geolocation):
+        if not isinstance(geolocation, dict):
             raise _invalid("context.geolocation", site_name, "expected latitude, longitude, and optional accuracy fields.")
+        geolocation_keys = set(geolocation)
+        unsupported_keys = geolocation_keys - {"latitude", "longitude", "accuracy"}
+        missing_required_keys = {"latitude", "longitude"} - geolocation_keys
+        if unsupported_keys or missing_required_keys:
+            raise _invalid(
+                "context.geolocation",
+                site_name,
+                "expected latitude, longitude, and optional accuracy fields.",
+            )
         _require_number(geolocation["latitude"], "context.geolocation.latitude", site_name, -90)
         if geolocation["latitude"] > 90:
             raise _invalid("context.geolocation.latitude", site_name, "expected a number between -90 and 90.")
