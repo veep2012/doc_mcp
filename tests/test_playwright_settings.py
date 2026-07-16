@@ -1,6 +1,11 @@
 import asyncio
 
 import docmcp.auth.session as session
+from docmcp.config.playwright import (
+    BrowserUnavailableError,
+    launch_browser,
+    resolve_playwright_settings,
+)
 
 
 class _Page:
@@ -89,3 +94,25 @@ def test_authentication_and_session_validation_use_site_playwright_settings(monk
     assert calls["launch"] == {"headless": True, "slow_mo": 10}
     assert calls["context"]["storage_state"] == "session.json"
     assert calls["context"]["ignore_https_errors"] is False
+
+
+def test_launch_browser_reports_missing_browser_installation():
+    class MissingEngine:
+        async def launch(self, **kwargs):
+            raise RuntimeError("Executable doesn't exist at /missing/browser")
+
+    class Playwright:
+        firefox = MissingEngine()
+
+    settings = resolve_playwright_settings({"playwright": {"browser": "firefox"}})
+
+    try:
+        asyncio.run(launch_browser(Playwright(), settings, headless=False))
+    except BrowserUnavailableError as exc:
+        assert str(exc) == (
+            "Playwright browser 'firefox' is not installed.\n"
+            "Install it with:\n"
+            "  python -m playwright install firefox"
+        )
+    else:
+        raise AssertionError("Expected BrowserUnavailableError")

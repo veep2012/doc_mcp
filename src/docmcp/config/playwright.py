@@ -32,6 +32,28 @@ class PlaywrightSettings:
     context_options: dict[str, Any]
 
 
+class BrowserUnavailableError(RuntimeError):
+    """Raised when the configured Playwright browser is not installed."""
+
+
+async def launch_browser(
+    playwright: Any, settings: PlaywrightSettings, **launch_kwargs: Any
+) -> Any:
+    """Launch a configured browser with a useful install error when unavailable."""
+    try:
+        return await getattr(playwright, settings.browser).launch(
+            **launch_kwargs, **settings.launch_options
+        )
+    except Exception as exc:
+        if "Executable doesn't exist" not in str(exc):
+            raise
+        raise BrowserUnavailableError(
+            f"Playwright browser '{settings.browser}' is not installed.\n"
+            "Install it with:\n"
+            f"  python -m playwright install {settings.browser}"
+        ) from None
+
+
 def resolve_playwright_settings(site: dict[str, Any]) -> PlaywrightSettings:
     """Return a site's validated Playwright settings with Chromium defaults."""
     config = site.get("playwright") or {}

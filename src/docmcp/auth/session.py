@@ -12,7 +12,7 @@ from pathlib import Path
 
 from playwright.async_api import async_playwright, BrowserContext
 
-from ..config.playwright import resolve_playwright_settings
+from ..config.playwright import launch_browser, resolve_playwright_settings
 
 
 async def _wait_for_user(prompt: str) -> str:
@@ -64,9 +64,7 @@ async def is_session_valid(
 
     async with async_playwright() as p:
         settings = resolve_playwright_settings(site or {})
-        browser = await getattr(p, settings.browser).launch(
-            headless=True, **settings.launch_options
-        )
+        browser = await launch_browser(p, settings, headless=True)
         context = await browser.new_context(
             **settings.context_options,
             storage_state=session_file,
@@ -101,9 +99,7 @@ async def authenticate_headful(site: dict) -> None:
 
     async with async_playwright() as p:
         settings = resolve_playwright_settings(site)
-        browser = await getattr(p, settings.browser).launch(
-            headless=False, **settings.launch_options
-        )
+        browser = await launch_browser(p, settings, headless=False)
         context = await browser.new_context(
             **settings.context_options, ignore_https_errors=ignore_https_errors
         )

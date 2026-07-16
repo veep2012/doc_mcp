@@ -29,7 +29,7 @@ from dotenv import load_dotenv
 
 from . import __version__
 from .config.loader import ConfigError, get_sites
-from .config.playwright import resolve_playwright_settings
+from .config.playwright import BrowserUnavailableError, launch_browser, resolve_playwright_settings
 from .index_store import init_db, upsert_page
 from .vector_index import (
     VectorBackendUnavailableError,
@@ -480,9 +480,7 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
     async with async_playwright() as p:
         # Launch browser — headful by default to avoid anti-bot detection
         settings = resolve_playwright_settings(site)
-        browser = await getattr(p, settings.browser).launch(
-            headless=headless, **settings.launch_options
-        )
+        browser = await launch_browser(p, settings, headless=headless)
 
         # Load saved session if available
         context_kwargs = {
@@ -699,9 +697,7 @@ async def reindex_selected_pages(
 
     async with async_playwright() as p:
         settings = resolve_playwright_settings(site)
-        browser = await getattr(p, settings.browser).launch(
-            headless=headless, **settings.launch_options
-        )
+        browser = await launch_browser(p, settings, headless=headless)
 
         context_kwargs = {
             "viewport": _DEFAULT_VIEWPORT,
@@ -964,8 +960,12 @@ def main():
         sys.exit(1)
 
     # Authenticate first if required
-    if site.get("auth_required"):
-        _authenticate_site(site, force=args.force_auth)
+    try:
+        if site.get("auth_required"):
+            _authenticate_site(site, force=args.force_auth)
+    except BrowserUnavailableError as exc:
+        print(f"[docmcp-crawl] Browser error:\n{exc}", file=sys.stderr)
+        sys.exit(1)
 
     try:
         selected_pages = _load_selected_pages(args.pages, args.pages_file)
@@ -1006,6 +1006,9 @@ def main():
             )
     except ConfigError as exc:
         print(f"[docmcp-crawl] Configuration error:\n{exc}", file=sys.stderr)
+        sys.exit(1)
+    except BrowserUnavailableError as exc:
+        print(f"[docmcp-crawl] Browser error:\n{exc}", file=sys.stderr)
         sys.exit(1)
 
     if args.vectorize and crawl_completed:
