@@ -102,10 +102,10 @@ def validate_playwright_config(value: object, site_name: object) -> None:
     if value is None:
         return
     if not isinstance(value, dict):
-        raise _invalid("block", site_name, "expected a mapping.")
+        raise ValueError(f"Invalid playwright block for site {site_name!r}: expected a mapping.")
     unknown = set(value) - {"browser", "launch", "context"}
     if unknown:
-        raise _invalid("block", site_name, f"unsupported keys: {', '.join(sorted(unknown))}.")
+        raise ValueError(f"Invalid playwright block for site {site_name!r}: unsupported keys: {', '.join(sorted(unknown))}.")
     browser = value.get("browser", "chromium")
     if not isinstance(browser, str) or browser not in _BROWSERS:
         raise _invalid("browser", site_name, f"expected one of: {', '.join(sorted(_BROWSERS))}.")
