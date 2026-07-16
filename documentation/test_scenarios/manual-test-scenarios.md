@@ -100,7 +100,7 @@ Run this block first when validating the repository checkout directly.
   8. Run `python -c "import src.docmcp.main"` to verify the server module imports.
 - Expected result:
   - The virtual environment is created.
-  - Chromium is installed by Playwright.
+  - Chromium is installed by Playwright. Install Firefox or WebKit with `python -m playwright install --with-deps firefox` or `webkit` before testing a site that selects that engine.
   - Source-tree wrapper commands run without installing the package itself.
   - `docmcp-auth`, `docmcp-crawl`, and `docmcp-server` are not required for this test block, but they should behave the same if installed.
 - Pass/Fail:
@@ -123,6 +123,14 @@ Run this block first when validating the repository checkout directly.
 - Pass/Fail:
   - Pass if the config can be read by the development CLI in the next scenario.
   - Fail if paths point outside the intended runtime workspace or required fields are missing.
+
+### MT-002B: Verify Non-Default Browser Settings
+- Steps:
+  1. Configure a test site with `playwright.browser: firefox` or `webkit` and a visible context option such as `viewport`.
+  2. Install that engine with `python -m playwright install --with-deps <engine>`.
+  3. Run `python auth_cli.py --site "My Docs" --force`, complete login, then run `python crawl_cli.py --site "My Docs" --headless`.
+- Expected result:
+  - Authentication, session validation, and crawling use the selected engine and preserve the configured context behavior; `--headless` remains controlled by the command.
 
 ### MT-003A: List Configured Sites In Development
 - Steps:

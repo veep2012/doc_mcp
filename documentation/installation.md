@@ -31,7 +31,7 @@ Provide the shortest path to a working local environment for `doc-mcp`, includin
 ### Prerequisites
 - Python 3.11 or newer
 - GNU Make, optional but recommended for the fastest setup path
-- A Chromium browser installation through Playwright
+- A Playwright browser installation for each engine configured by a site (Chromium by default)
 
 ### Fastest Setup With Make
 ```bash
@@ -39,6 +39,8 @@ make local-venv
 ```
 
 This creates `.venv`, installs project dependencies, installs dev dependencies, and downloads Chromium for Playwright. The `make` target does not activate the virtual environment in your current shell.
+
+For a configured Firefox or WebKit site, also install that engine: `python -m playwright install --with-deps firefox` or `python -m playwright install --with-deps webkit`.
 
 If you prefer a different virtual environment directory, set `DOC_MCP_VENV` before running the setup commands and substitute that directory consistently in the activation step.
 

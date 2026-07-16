@@ -83,6 +83,7 @@ docmcp-crawl --version
 
 ### Crawl Behavior
 - The current crawler uses Playwright directly instead of Crawl4AI.
+- Crawls use the site's `playwright` browser, launch options, and context options; Chromium remains the default when the block is absent. `--headless`, saved storage state, and `crawl.ignore_https_errors` remain runtime-controlled.
 - If `auth_required` is true for the site, the crawl command authenticates before crawling and reuses any still-valid saved session.
 - It starts from `crawl.start_url` and preserves that URL exactly as configured, including any query string.
 - If `crawl.start_delay_seconds` is set and the crawl is running headful, it loads the start page first, then waits so you can finish any manual setup in the browser before crawling begins.

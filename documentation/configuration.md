@@ -63,6 +63,9 @@ SITE1_PASSWORD=replace-me
 - `url`: the site root or base URL
 - `auth_required`: `true` or `false`
 - `session_file`: where to save Playwright storage state
+- `playwright.browser`: browser engine: `chromium` (default), `firefox`, or `webkit`
+- `playwright.launch`: optional safe launch settings: `channel`, `executable_path`, `proxy`, `timeout`, `slow_mo`, and `args`
+- `playwright.context`: optional context settings: `viewport`, `user_agent`, `locale`, `timezone_id`, `color_scheme`, `device_scale_factor`, `is_mobile`, `has_touch`, `java_script_enabled`, `accept_downloads`, `extra_http_headers`, `geolocation`, and `permissions`
 - `crawl.start_url`: crawl entry point
 - `crawl.max_depth`: breadth-first crawl depth
 - `crawl.delay_seconds`: pause between page fetches; must be a finite number greater than or equal to 0
@@ -87,6 +90,7 @@ SITE1_PASSWORD=replace-me
 - `crawl.ignore_https_errors`: defaults to `false`.
 - `crawl.allow_patterns`: defaults to an empty list.
 - `crawl.deny_patterns`: defaults to an empty list.
+- `playwright.browser`: defaults to `chromium`; launch and context settings default to empty mappings.
 - `vectorizer.chunk_size`: defaults to `800`.
 - `vectorizer.chunk_overlap`: defaults to `120`.
 - `vectorizer.embedding_model`: defaults to `BAAI/bge-small-en-v1.5`.
@@ -145,6 +149,20 @@ sites:
     url: "https://docs.example.com"
     auth_required: true
     session_file: "storage/my_docs.json"
+    playwright:
+      browser: firefox
+      launch:
+        slow_mo: 50
+        proxy:
+          server: "http://proxy.example.test:8080"
+      context:
+        viewport: {width: 1440, height: 900}
+        user_agent: "My Docs Crawler"
+        locale: "en-US"
+        timezone_id: "America/Los_Angeles"
+        extra_http_headers: {"X-Documentation-Client": "doc-mcp"}
+        geolocation: {latitude: 47.6062, longitude: -122.3321}
+        permissions: ["geolocation"]
     crawl:
       start_url: "https://docs.example.com/docs"
       max_depth: 5
@@ -206,6 +224,7 @@ The sample config file also includes a few future-facing keys such as `auth_mode
 - An empty or missing `index_file` is invalid for vector search validation and is treated as a site configuration problem rather than a searchable vector state.
 - If sqlite-vec cannot be loaded, `docmcp-vectorize` fails clearly but crawl and keyword-only MCP search still work.
 - Informational keys should not be treated as enforced runtime behavior.
+- `headless`, saved `storage_state`, and `ignore_https_errors` are runtime-controlled and cannot be set in `playwright`; command behavior and `crawl.ignore_https_errors` remain authoritative.
 
 ## References
 - [src/docmcp/config/loader.py](../src/docmcp/config/loader.py)

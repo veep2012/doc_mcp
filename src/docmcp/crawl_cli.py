@@ -29,6 +29,7 @@ from dotenv import load_dotenv
 
 from . import __version__
 from .config.loader import ConfigError, get_sites
+from .config.playwright import resolve_playwright_settings
 from .index_store import init_db, upsert_page
 from .vector_index import (
     VectorBackendUnavailableError,
@@ -476,18 +477,22 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
 
     async with async_playwright() as p:
         # Launch browser — headful by default to avoid anti-bot detection
-        browser = await p.chromium.launch(headless=headless)
+        settings = resolve_playwright_settings(site)
+        browser = await getattr(p, settings.browser).launch(
+            headless=headless, **settings.launch_options
+        )
 
         # Load saved session if available
-        context_kwargs = {}
+        context_kwargs = {
+            "viewport": {"width": 1280, "height": 900},
+            **settings.context_options,
+        }
         if session_file and Path(session_file).exists():
             context_kwargs["storage_state"] = session_file
             print(f"[crawl] Loaded session: {session_file}")
 
         context = await browser.new_context(
-            viewport={"width": 1280, "height": 900},
-            ignore_https_errors=ignore_https_errors,
-            **context_kwargs,
+            **context_kwargs, ignore_https_errors=ignore_https_errors
         )
 
         # Block images, fonts, and media to speed up crawling

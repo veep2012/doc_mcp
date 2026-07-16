@@ -95,6 +95,10 @@ List the most common failure modes for `doc-mcp` and the first corrective step f
 - If verification fails with `No module named playwright`, reinstall dependencies with `python -m pip install -r requirements-dev.txt`.
 - Install Chromium with `python -m playwright install --with-deps chromium`.
 
+### The Configured Browser Will Not Launch
+- Install the engine selected by `playwright.browser`: `python -m playwright install --with-deps chromium`, `firefox`, or `webkit`.
+- Check `playwright.launch.executable_path`, `channel`, and proxy settings if the configured browser is intentionally non-default.
+
 ### Windows Console Output Looks Broken
 - `src/docmcp/main.py` reconfigures stdout and stderr to UTF-8.
 - If a terminal still renders poorly, use a modern terminal emulator and ensure the virtual environment is active.

@@ -2055,6 +2055,89 @@ def test_crawl_site_headful_runtime_config_matrix(monkeypatch, tmp_path, crawl_c
     assert [row[1] for row in indexed] == expected["indexed_urls"]
 
 
+def test_crawl_uses_site_playwright_engine_and_options(monkeypatch, tmp_path):
+    calls = {}
+
+    class FakePage:
+        url = "https://example.test/docs"
+
+        async def goto(self, *args, **kwargs):
+            return None
+
+        async def title(self):
+            return "Docs"
+
+        async def content(self):
+            return "<main><h1>Docs</h1></main>"
+
+        async def query_selector(self, selector):
+            return None
+
+        async def eval_on_selector_all(self, selector, script):
+            return []
+
+    class FakeContext:
+        async def new_page(self):
+            return FakePage()
+
+    class FakeBrowser:
+        async def new_context(self, **kwargs):
+            calls["context"] = kwargs
+            return FakeContext()
+
+        async def close(self):
+            return None
+
+    class FakeEngine:
+        def __init__(self, name):
+            self.name = name
+
+        async def launch(self, **kwargs):
+            calls["engine"] = self.name
+            calls["launch"] = kwargs
+            return FakeBrowser()
+
+    class FakePlaywrightManager:
+        async def __aenter__(self):
+            return types.SimpleNamespace(
+                chromium=FakeEngine("chromium"),
+                firefox=FakeEngine("firefox"),
+                webkit=FakeEngine("webkit"),
+            )
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setitem(
+        sys.modules,
+        "playwright.async_api",
+        types.SimpleNamespace(async_playwright=lambda: FakePlaywrightManager()),
+    )
+    monkeypatch.setattr(crawl_cli, "upsert_page", lambda *args: None)
+    site = {
+        "name": "Example Docs",
+        "url": "https://example.test/docs",
+        "index_file": str(tmp_path / "docs.db"),
+        "crawl": {"max_depth": 0, "delay_seconds": 0},
+        "playwright": {
+            "browser": "webkit",
+            "launch": {"slow_mo": 25},
+            "context": {"user_agent": "doc-mcp-test", "viewport": {"width": 800, "height": 600}},
+        },
+    }
+
+    import asyncio
+
+    assert asyncio.run(crawl_cli.crawl_site_headful(site, headless=True))
+    assert calls["engine"] == "webkit"
+    assert calls["launch"] == {"headless": True, "slow_mo": 25}
+    assert calls["context"] == {
+        "viewport": {"width": 800, "height": 600},
+        "user_agent": "doc-mcp-test",
+        "ignore_https_errors": False,
+    }
+
+
 def test_crawl_site_headful_start_delay_pauses_after_start_page_loads(
     monkeypatch, tmp_path, capsys
 ):

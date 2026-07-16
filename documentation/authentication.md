@@ -51,7 +51,7 @@ docmcp-auth --version
 1. The CLI loads the site definition from `config/sites.yaml`.
 2. If `auth_required` is false, authentication is skipped.
 3. If a session file exists, the code checks whether the cookie expiry still looks valid.
-4. The saved session is opened in a headless browser and the protected URL is visited.
+4. The saved session is opened in a headless browser using the site's configured Playwright engine and context settings, then the protected URL is visited.
 5. If the browser is redirected to a login-like URL, the session is treated as invalid.
 6. If the session is valid, authentication is skipped.
 7. If the session is missing or expired, Playwright opens a visible browser window and the user logs in manually.
@@ -64,6 +64,7 @@ docmcp-auth --version
 ### Practical Notes
 - Authentication is per site.
 - The login browser is headful so the user can complete whatever site-specific login flow is required manually.
+- Authentication and saved-session validation use the same `playwright` site settings. `headless`, storage state, and TLS handling remain runtime-controlled.
 - The sample `auth_type` and `auth_mode` keys in `config/sites.yaml` are informational only; the runtime does not branch on them.
 - The crawler reuses the saved session if it is still valid.
 - `--help`, `--list`, and `--version` complete without loading the browser authentication path until it is needed.

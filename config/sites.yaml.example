@@ -11,6 +11,13 @@ sites:
     username: "${SITE1_USERNAME}"   # set in .env
     password: "${SITE1_PASSWORD}"   # set in .env (if needed)
     session_file: "storage/my_private_docs.json"
+    playwright:
+      browser: "firefox"               # chromium (default) | firefox | webkit
+      launch:
+        slow_mo: 50                    # optional milliseconds between Playwright actions
+      context:
+        viewport: {width: 1440, height: 900}
+        locale: "en-US"
     crawl:
       start_url: "https://docs.example.com/documentation"
       max_depth: 5
