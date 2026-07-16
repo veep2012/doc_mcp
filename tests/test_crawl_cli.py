@@ -2126,8 +2126,6 @@ def test_crawl_uses_site_playwright_engine_and_options(monkeypatch, tmp_path):
         },
     }
 
-    import asyncio
-
     assert asyncio.run(crawl_cli.crawl_site_headful(site, headless=True))
     assert calls["engine"] == "webkit"
     assert calls["launch"] == {"headless": True, "slow_mo": 25}

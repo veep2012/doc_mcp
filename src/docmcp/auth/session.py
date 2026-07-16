@@ -14,6 +14,7 @@ from playwright.async_api import async_playwright, BrowserContext
 
 from ..config.playwright import resolve_playwright_settings
 
+
 async def _wait_for_user(prompt: str) -> str:
     """Async-friendly CLI prompt for user input."""
     print(f"\n{prompt}", flush=True)
