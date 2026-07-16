@@ -5,12 +5,13 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-05-20
-- Version: v1.3
+- Last Updated: 2026-07-16
+- Version: v1.4
 
 ## Change Log
+- 2026-07-16 | v1.4 | Documented configured browser installation and missing-browser recovery.
 - 2026-05-20 | v1.3 | Added current CLI version/help behavior and clarified lazy auth-path loading.
-- 2026-05-10 | v1.2 | Clarified that authentication is currently manual headful-only and that the sample auth metadata keys are informational.
+- 2026-05-10 | v1.2 | Clarified that authentication is currently manual headful-only.
 - 2026-04-25 | v1.1 | Updated commands and references for installed docmcp-auth package entry point.
 - 2026-04-24 | v1.0 | Reformatted the authentication guide and documented the current headful session flow.
 
@@ -51,7 +52,7 @@ docmcp-auth --version
 1. The CLI loads the site definition from `config/sites.yaml`.
 2. If `auth_required` is false, authentication is skipped.
 3. If a session file exists, the code checks whether the cookie expiry still looks valid.
-4. The saved session is opened in a headless browser and the protected URL is visited.
+4. The saved session is opened in a headless browser using the site's configured Playwright engine and context settings, then the protected URL is visited.
 5. If the browser is redirected to a login-like URL, the session is treated as invalid.
 6. If the session is valid, authentication is skipped.
 7. If the session is missing or expired, Playwright opens a visible browser window and the user logs in manually.
@@ -64,7 +65,8 @@ docmcp-auth --version
 ### Practical Notes
 - Authentication is per site.
 - The login browser is headful so the user can complete whatever site-specific login flow is required manually.
-- The sample `auth_type` and `auth_mode` keys in `config/sites.yaml` are informational only; the runtime does not branch on them.
+- Authentication and saved-session validation use the same `playwright` site settings. `headless`, storage state, and TLS handling remain runtime-controlled.
+- If the configured browser is not installed, authentication stops with an install command such as `python -m playwright install firefox`.
 - The crawler reuses the saved session if it is still valid.
 - `--help`, `--list`, and `--version` complete without loading the browser authentication path until it is needed.
 

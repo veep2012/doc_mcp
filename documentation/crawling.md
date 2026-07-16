@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-07-05
-- Version: v2.1
+- Last Updated: 2026-07-16
+- Version: v2.3
 
 ## Change Log
+- 2026-07-16 | v2.3 | Documented configured browser installation and missing-browser recovery.
 - 2026-07-05 | v2.2 | Added targeted batch-size guardrails for `docmcp-crawl --pages` and `--pages-file`, including large-batch warnings and a hard refusal above the supported limit.
 - 2026-07-04 | v2.1 | Documented targeted selected-page reindexing through `docmcp-crawl --pages` and `--pages-file`, including validation and summary behavior.
 - 2026-06-21 | v2.0 | Removed duplicated crawl guidance and aligned the section structure with the current crawl, index, and vectorize flow.
@@ -83,6 +84,8 @@ docmcp-crawl --version
 
 ### Crawl Behavior
 - The current crawler uses Playwright directly instead of Crawl4AI.
+- Crawls use the site's `playwright` browser, launch options, and context options; Chromium remains the default when the block is absent. `--headless`, saved storage state, and `crawl.ignore_https_errors` remain runtime-controlled.
+- The selected browser must be installed through Playwright before crawling. If it is missing, the CLI reports the browser and prints the matching install command.
 - If `auth_required` is true for the site, the crawl command authenticates before crawling and reuses any still-valid saved session.
 - It starts from `crawl.start_url` and preserves that URL exactly as configured, including any query string.
 - If `crawl.start_delay_seconds` is set and the crawl is running headful, it loads the start page first, then waits so you can finish any manual setup in the browser before crawling begins.

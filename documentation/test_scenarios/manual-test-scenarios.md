@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-26
-- Last Updated: 2026-07-05
-- Version: v1.4
+- Last Updated: 2026-07-16
+- Version: v1.5
 
 ## Change Log
+- 2026-07-16 | v1.5 | Added configured-browser installation and missing-browser recovery expectations.
 - 2026-07-05 | v1.4 | Updated the manual setup and wheel-install verification steps to use `python -m playwright install --with-deps chromium`.
 - 2026-07-04 | v1.3 | Added manual verification steps for targeted selected-page reindexing through the crawl CLI.
 - 2026-05-24 | v1.2 | Documented the standalone vectorizer CLI, the vectorizer `--debug` option, and the chained crawl-and-vectorize command path with inherited debug mode.
@@ -100,7 +101,7 @@ Run this block first when validating the repository checkout directly.
   8. Run `python -c "import src.docmcp.main"` to verify the server module imports.
 - Expected result:
   - The virtual environment is created.
-  - Chromium is installed by Playwright.
+  - Chromium is installed by Playwright. Install Firefox or WebKit with `python -m playwright install --with-deps firefox` or `webkit` before testing a site that selects that engine.
   - Source-tree wrapper commands run without installing the package itself.
   - `docmcp-auth`, `docmcp-crawl`, and `docmcp-server` are not required for this test block, but they should behave the same if installed.
 - Pass/Fail:
@@ -123,6 +124,14 @@ Run this block first when validating the repository checkout directly.
 - Pass/Fail:
   - Pass if the config can be read by the development CLI in the next scenario.
   - Fail if paths point outside the intended runtime workspace or required fields are missing.
+
+### MT-002B: Verify Non-Default Browser Settings
+- Steps:
+  1. Configure a test site with `playwright.browser: firefox` or `webkit` and a visible context option such as `viewport`.
+  2. Install that engine with `python -m playwright install --with-deps <engine>`.
+  3. Run `python auth_cli.py --site "My Docs" --force`, complete login, then run `python crawl_cli.py --site "My Docs" --headless`.
+- Expected result:
+  - Authentication, session validation, and crawling use the selected engine and preserve the configured context behavior; `--headless` remains controlled by the command.
 
 ### MT-003A: List Configured Sites In Development
 - Steps:
@@ -271,7 +280,7 @@ Run these scenarios after either `MT-003A` or `MT-003B`, using the command set f
   1. Run the selected crawl command with `--site "My Docs" --headless`.
   2. Confirm the run completes without opening a visible browser.
 - Expected result:
-  - The crawler runs with Chromium in headless mode.
+  - The crawler runs with the site's configured browser in headless mode; Chromium is used when no browser is configured.
   - Existing crawl and indexing behavior remains the same.
   - `crawl.start_delay_seconds` is ignored in headless mode.
 - Pass/Fail:

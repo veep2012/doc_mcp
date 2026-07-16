@@ -12,6 +12,8 @@ from pathlib import Path
 
 from playwright.async_api import async_playwright, BrowserContext
 
+from ..config.playwright import launch_browser, resolve_playwright_settings
+
 
 async def _wait_for_user(prompt: str) -> str:
     """Async-friendly CLI prompt for user input."""
@@ -37,7 +39,12 @@ def load_session(session_file: str) -> dict | None:
     return None
 
 
-async def is_session_valid(url: str, session_file: str, ignore_https_errors: bool = False) -> bool:
+async def is_session_valid(
+    url: str,
+    session_file: str,
+    ignore_https_errors: bool = False,
+    site: dict | None = None,
+) -> bool:
     """
     Check if the saved session is still valid.
     First does a fast cookie expiry check, then verifies by navigating to the site.
@@ -56,9 +63,12 @@ async def is_session_valid(url: str, session_file: str, ignore_https_errors: boo
             return False
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
+        settings = resolve_playwright_settings(site or {})
+        browser = await launch_browser(p, settings, headless=True)
         context = await browser.new_context(
-            storage_state=session_file, ignore_https_errors=ignore_https_errors
+            **settings.context_options,
+            storage_state=session_file,
+            ignore_https_errors=ignore_https_errors,
         )
         page = await context.new_page()
         try:
@@ -88,8 +98,11 @@ async def authenticate_headful(site: dict) -> None:
     print("[auth] Please log in manually in the browser window.")
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=False)
-        context = await browser.new_context(ignore_https_errors=ignore_https_errors)
+        settings = resolve_playwright_settings(site)
+        browser = await launch_browser(p, settings, headless=False)
+        context = await browser.new_context(
+            **settings.context_options, ignore_https_errors=ignore_https_errors
+        )
         page = await context.new_page()
         await page.goto(url)
 
@@ -115,7 +128,7 @@ async def authenticate(site: dict, force: bool = False) -> None:
         check_url = site.get("crawl", {}).get("start_url", site["url"])
         ignore_https_errors = site.get("crawl", {}).get("ignore_https_errors", False)
         print(f"[auth] Checking existing session for: {site['name']}...")
-        valid = await is_session_valid(check_url, session_file, ignore_https_errors)
+        valid = await is_session_valid(check_url, session_file, ignore_https_errors, site)
         if valid:
             print("[auth] Session is valid, skipping re-authentication.")
             return

@@ -285,3 +285,89 @@ def test_load_config_rejects_invalid_new_config_values(
 
     with pytest.raises(ConfigError, match=expected):
         load_config()
+
+
+@pytest.mark.parametrize("browser", ["chromium", "firefox", "webkit"])
+def test_load_config_accepts_playwright_browser_options(monkeypatch, tmp_path, browser):
+    runtime_root = tmp_path / "runtime"
+    (runtime_root / "config").mkdir(parents=True)
+    (runtime_root / "config" / "sites.yaml").write_text(
+        textwrap.dedent(
+            f"""
+            sites:
+              - name: "Browser Docs"
+                url: "https://example.test/docs"
+                auth_required: false
+                index_file: "index/docs.db"
+                playwright:
+                  browser: "{browser}"
+                  launch:
+                    slow_mo: 25
+                    args: ["--disable-gpu"]
+                  context:
+                    viewport: {{width: 1440, height: 900}}
+                    user_agent: "doc-mcp-test"
+                    extra_http_headers: {{X-Test: "true"}}
+                    geolocation: {{latitude: 47.6, longitude: -122.3}}
+                    permissions: ["geolocation"]
+            """
+        ).strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("DOC_MCP_HOME", str(runtime_root))
+
+    site = load_config()["sites"][0]
+
+    assert site["playwright"]["browser"] == browser
+    assert site["playwright"]["context"]["viewport"] == {"width": 1440, "height": 900}
+
+
+@pytest.mark.parametrize(
+    "playwright_config, expected",
+    [
+        ("browser: edge", r"Invalid playwright\.browser"),
+        ("launch:\n      headless: true", r"Invalid playwright\.launch"),
+        ("context:\n      storage_state: session.json", r"Invalid playwright\.context"),
+        (
+            "context:\n      viewport: {width: wide, height: 900}",
+            r"Invalid playwright\.context\.viewport\.width",
+        ),
+    ],
+)
+def test_load_config_rejects_invalid_playwright_options(
+    monkeypatch, tmp_path, playwright_config, expected
+):
+    runtime_root = tmp_path / "runtime"
+    (runtime_root / "config").mkdir(parents=True)
+    indented_playwright_config = playwright_config.replace("\n", "\n                  ")
+    (runtime_root / "config" / "sites.yaml").write_text(
+        textwrap.dedent(
+            f"""
+            sites:
+              - name: "Broken Browser Docs"
+                url: "https://example.test/docs"
+                auth_required: false
+                index_file: "index/docs.db"
+                playwright:
+                  {indented_playwright_config}
+            """
+        ).strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("DOC_MCP_HOME", str(runtime_root))
+
+    with pytest.raises(ConfigError, match=expected):
+        load_config()
+
+
+def test_example_config_with_playwright_settings_loads(monkeypatch):
+    from pathlib import Path
+
+    monkeypatch.delenv("DOC_MCP_HOME", raising=False)
+    config_path = Path(__file__).parents[1] / "config" / "sites.yaml.example"
+
+    sites = load_config(str(config_path))["sites"]
+
+    assert sites[0]["playwright"]["browser"] == "firefox"

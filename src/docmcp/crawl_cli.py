@@ -29,6 +29,7 @@ from dotenv import load_dotenv
 
 from . import __version__
 from .config.loader import ConfigError, get_sites
+from .config.playwright import BrowserUnavailableError, launch_browser, resolve_playwright_settings
 from .index_store import init_db, upsert_page
 from .vector_index import (
     VectorBackendUnavailableError,
@@ -37,6 +38,8 @@ from .vector_index import (
 )
 
 load_dotenv()
+
+_DEFAULT_VIEWPORT = {"width": 1280, "height": 900}
 
 
 # ---------------------------------------------------------------------------
@@ -476,18 +479,20 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
 
     async with async_playwright() as p:
         # Launch browser — headful by default to avoid anti-bot detection
-        browser = await p.chromium.launch(headless=headless)
+        settings = resolve_playwright_settings(site)
+        browser = await launch_browser(p, settings, headless=headless)
 
         # Load saved session if available
-        context_kwargs = {}
+        context_kwargs = {
+            "viewport": _DEFAULT_VIEWPORT,
+            **settings.context_options,
+        }
         if session_file and Path(session_file).exists():
             context_kwargs["storage_state"] = session_file
             print(f"[crawl] Loaded session: {session_file}")
 
         context = await browser.new_context(
-            viewport={"width": 1280, "height": 900},
-            ignore_https_errors=ignore_https_errors,
-            **context_kwargs,
+            **context_kwargs, ignore_https_errors=ignore_https_errors
         )
 
         # Block images, fonts, and media to speed up crawling
@@ -691,17 +696,19 @@ async def reindex_selected_pages(
     from playwright.async_api import async_playwright
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=headless)
+        settings = resolve_playwright_settings(site)
+        browser = await launch_browser(p, settings, headless=headless)
 
-        context_kwargs = {}
+        context_kwargs = {
+            "viewport": _DEFAULT_VIEWPORT,
+            **settings.context_options,
+        }
         if session_file and Path(session_file).exists():
             context_kwargs["storage_state"] = session_file
             print(f"[crawl] Loaded session: {session_file}")
 
         context = await browser.new_context(
-            viewport={"width": 1280, "height": 900},
-            ignore_https_errors=ignore_https_errors,
-            **context_kwargs,
+            **context_kwargs, ignore_https_errors=ignore_https_errors
         )
 
         if block_images:
@@ -953,8 +960,12 @@ def main():
         sys.exit(1)
 
     # Authenticate first if required
-    if site.get("auth_required"):
-        _authenticate_site(site, force=args.force_auth)
+    try:
+        if site.get("auth_required"):
+            _authenticate_site(site, force=args.force_auth)
+    except BrowserUnavailableError as exc:
+        print(f"[docmcp-crawl] Browser error:\n{exc}", file=sys.stderr)
+        sys.exit(1)
 
     try:
         selected_pages = _load_selected_pages(args.pages, args.pages_file)
@@ -995,6 +1006,9 @@ def main():
             )
     except ConfigError as exc:
         print(f"[docmcp-crawl] Configuration error:\n{exc}", file=sys.stderr)
+        sys.exit(1)
+    except BrowserUnavailableError as exc:
+        print(f"[docmcp-crawl] Browser error:\n{exc}", file=sys.stderr)
         sys.exit(1)
 
     if args.vectorize and crawl_completed:
