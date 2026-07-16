@@ -696,17 +696,21 @@ async def reindex_selected_pages(
     from playwright.async_api import async_playwright
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=headless)
+        settings = resolve_playwright_settings(site)
+        browser = await getattr(p, settings.browser).launch(
+            headless=headless, **settings.launch_options
+        )
 
-        context_kwargs = {}
+        context_kwargs = {
+            "viewport": {"width": 1280, "height": 900},
+            **settings.context_options,
+        }
         if session_file and Path(session_file).exists():
             context_kwargs["storage_state"] = session_file
             print(f"[crawl] Loaded session: {session_file}")
 
         context = await browser.new_context(
-            viewport={"width": 1280, "height": 900},
-            ignore_https_errors=ignore_https_errors,
-            **context_kwargs,
+            **context_kwargs, ignore_https_errors=ignore_https_errors
         )
 
         if block_images:

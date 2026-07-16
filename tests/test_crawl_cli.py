@@ -2137,6 +2137,17 @@ def test_crawl_uses_site_playwright_engine_and_options(monkeypatch, tmp_path):
         "ignore_https_errors": False,
     }
 
+    calls.clear()
+    results = asyncio.run(
+        crawl_cli.reindex_selected_pages(
+            site, ["https://example.test/docs/selected"], headless=True
+        )
+    )
+    assert results[0]["outcome"] == "indexed"
+    assert calls["engine"] == "webkit"
+    assert calls["launch"] == {"headless": True, "slow_mo": 25}
+    assert calls["context"]["viewport"] == {"width": 800, "height": 600}
+
 
 def test_crawl_site_headful_start_delay_pauses_after_start_page_loads(
     monkeypatch, tmp_path, capsys
