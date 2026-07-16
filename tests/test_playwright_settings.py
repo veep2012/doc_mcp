@@ -84,7 +84,7 @@ def test_authentication_and_session_validation_use_site_playwright_settings(monk
 
     calls.clear()
     monkeypatch.setattr(session, "load_session", lambda path: {"cookies": []})
-    assert asyncio.run(session.is_session_valid(site["url"], "session.json", site=site))
+    assert asyncio.run(session.is_session_valid(site["url"], "session.json", site=site)) is True
     assert calls["engine"] == "firefox"
     assert calls["launch"] == {"headless": True, "slow_mo": 10}
     assert calls["context"]["storage_state"] == "session.json"
