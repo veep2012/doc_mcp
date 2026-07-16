@@ -8,6 +8,7 @@ import pytest
 
 import docmcp.crawl_cli as crawl_cli
 from docmcp import __version__
+from docmcp.config.playwright import BrowserUnavailableError
 from docmcp.crawl_cli import (
     _disallowed_reason,
     _extract_links,
@@ -838,6 +839,38 @@ def test_main_reports_invalid_redirect_policy_as_configuration_error(monkeypatch
     err = capsys.readouterr().err
     assert "[docmcp-crawl] Configuration error:" in err
     assert "Invalid crawl.redirect_policy for site 'Example Docs'" in err
+
+
+def test_main_reports_missing_browser_during_crawl(monkeypatch, tmp_path, capsys):
+    site = {
+        "name": "Example Docs",
+        "url": "https://example.test/docs",
+        "auth_required": False,
+        "index_file": str(tmp_path / "docs.db"),
+    }
+
+    monkeypatch.setattr(crawl_cli, "get_sites", lambda: [site])
+    monkeypatch.setattr(sys, "argv", ["docmcp-crawl", "--site", "Example Docs"])
+
+    async def fail_crawl(*args, **kwargs):
+        raise BrowserUnavailableError(
+            "Playwright browser 'webkit' is not installed.\n"
+            "Install it with:\n"
+            "  python -m playwright install webkit"
+        )
+
+    monkeypatch.setattr(crawl_cli, "crawl_site_headful", fail_crawl)
+
+    with pytest.raises(SystemExit) as excinfo:
+        crawl_cli.main()
+
+    assert excinfo.value.code == 1
+    assert capsys.readouterr().err == (
+        "[docmcp-crawl] Browser error:\n"
+        "Playwright browser 'webkit' is not installed.\n"
+        "Install it with:\n"
+        "  python -m playwright install webkit\n"
+    )
 
 
 @pytest.mark.parametrize("start_delay_seconds", ["1", -0.1, float("inf"), float("nan"), True])

@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-26
-- Last Updated: 2026-07-05
-- Version: v1.4
+- Last Updated: 2026-07-16
+- Version: v1.5
 
 ## Change Log
+- 2026-07-16 | v1.5 | Added configured-browser installation and missing-browser recovery expectations.
 - 2026-07-05 | v1.4 | Updated the manual setup and wheel-install verification steps to use `python -m playwright install --with-deps chromium`.
 - 2026-07-04 | v1.3 | Added manual verification steps for targeted selected-page reindexing through the crawl CLI.
 - 2026-05-24 | v1.2 | Documented the standalone vectorizer CLI, the vectorizer `--debug` option, and the chained crawl-and-vectorize command path with inherited debug mode.
@@ -279,7 +280,7 @@ Run these scenarios after either `MT-003A` or `MT-003B`, using the command set f
   1. Run the selected crawl command with `--site "My Docs" --headless`.
   2. Confirm the run completes without opening a visible browser.
 - Expected result:
-  - The crawler runs with Chromium in headless mode.
+  - The crawler runs with the site's configured browser in headless mode; Chromium is used when no browser is configured.
   - Existing crawl and indexing behavior remains the same.
   - `crawl.start_delay_seconds` is ignored in headless mode.
 - Pass/Fail:
