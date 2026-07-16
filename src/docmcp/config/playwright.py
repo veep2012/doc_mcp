@@ -116,7 +116,7 @@ def validate_playwright_config(value: object, site_name: object) -> None:
         if not isinstance(viewport, dict) or set(viewport) != {"width", "height"}:
             raise _invalid("context.viewport", site_name, "expected width and height fields.")
         for key in viewport:
-            if type(viewport[key]) is not int or viewport[key] <= 0:
+            if not isinstance(viewport[key], int) or isinstance(viewport[key], bool) or viewport[key] <= 0:
                 raise _invalid(f"context.viewport.{key}", site_name, "expected an integer > 0.")
     if "extra_http_headers" in context:
         headers = context["extra_http_headers"]

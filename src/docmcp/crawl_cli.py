@@ -39,6 +39,8 @@ from .vector_index import (
 
 load_dotenv()
 
+_DEFAULT_VIEWPORT = {"width": 1280, "height": 900}
+
 
 # ---------------------------------------------------------------------------
 # Optional: markdownify for HTML → Markdown conversion
@@ -484,7 +486,7 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
 
         # Load saved session if available
         context_kwargs = {
-            "viewport": {"width": 1280, "height": 900},
+            "viewport": _DEFAULT_VIEWPORT,
             **settings.context_options,
         }
         if session_file and Path(session_file).exists():
@@ -702,7 +704,7 @@ async def reindex_selected_pages(
         )
 
         context_kwargs = {
-            "viewport": {"width": 1280, "height": 900},
+            "viewport": _DEFAULT_VIEWPORT,
             **settings.context_options,
         }
         if session_file and Path(session_file).exists():

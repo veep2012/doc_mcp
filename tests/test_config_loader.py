@@ -1,6 +1,5 @@
 import os
 import textwrap
-from pathlib import Path
 
 import pytest
 
@@ -360,6 +359,8 @@ def test_load_config_rejects_invalid_playwright_options(
 
 
 def test_example_config_with_playwright_settings_loads(monkeypatch):
+    from pathlib import Path
+
     monkeypatch.delenv("DOC_MCP_HOME", raising=False)
     config_path = Path(__file__).parents[1] / "config" / "sites.yaml.example"
 
