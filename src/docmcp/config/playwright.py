@@ -58,9 +58,23 @@ def _require_bool(value: object, field: str, site_name: object) -> None:
         raise _invalid(field, site_name, "expected a boolean value.")
 
 
-def _require_number(value: object, field: str, site_name: object, minimum: float = 0) -> None:
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or value < minimum:
-        raise _invalid(field, site_name, f"expected a number >= {minimum}.")
+def _require_number(
+    value: object,
+    field: str,
+    site_name: object,
+    minimum: float = 0,
+    maximum: float | None = None,
+) -> None:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or value < minimum
+        or (maximum is not None and value > maximum)
+    ):
+        expected_range = (
+            f"between {minimum} and {maximum}" if maximum is not None else f">= {minimum}"
+        )
+        raise _invalid(field, site_name, f"expected a number {expected_range}.")
 
 
 def validate_playwright_config(value: object, site_name: object) -> None:
@@ -140,11 +154,11 @@ def validate_playwright_config(value: object, site_name: object) -> None:
                 site_name,
                 "expected latitude, longitude, and optional accuracy fields.",
             )
-        _require_number(geolocation["latitude"], "context.geolocation.latitude", site_name, -90)
-        if geolocation["latitude"] > 90:
-            raise _invalid("context.geolocation.latitude", site_name, "expected a number between -90 and 90.")
-        _require_number(geolocation["longitude"], "context.geolocation.longitude", site_name, -180)
-        if geolocation["longitude"] > 180:
-            raise _invalid("context.geolocation.longitude", site_name, "expected a number between -180 and 180.")
+        _require_number(
+            geolocation["latitude"], "context.geolocation.latitude", site_name, -90, 90
+        )
+        _require_number(
+            geolocation["longitude"], "context.geolocation.longitude", site_name, -180, 180
+        )
         if "accuracy" in geolocation:
             _require_number(geolocation["accuracy"], "context.geolocation.accuracy", site_name)
