@@ -64,7 +64,9 @@ async def is_session_valid(
 
     async with async_playwright() as p:
         settings = resolve_playwright_settings(site or {})
-        browser = await getattr(p, settings.browser).launch(headless=True, **settings.launch_options)
+        browser = await getattr(p, settings.browser).launch(
+            headless=True, **settings.launch_options
+        )
         context = await browser.new_context(
             **settings.context_options,
             storage_state=session_file,
@@ -99,7 +101,9 @@ async def authenticate_headful(site: dict) -> None:
 
     async with async_playwright() as p:
         settings = resolve_playwright_settings(site)
-        browser = await getattr(p, settings.browser).launch(headless=False, **settings.launch_options)
+        browser = await getattr(p, settings.browser).launch(
+            headless=False, **settings.launch_options
+        )
         context = await browser.new_context(
             **settings.context_options, ignore_https_errors=ignore_https_errors
         )

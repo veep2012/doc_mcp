@@ -5,9 +5,7 @@ from typing import Any
 
 
 _BROWSERS = frozenset({"chromium", "firefox", "webkit"})
-_LAUNCH_OPTIONS = frozenset(
-    {"channel", "executable_path", "proxy", "timeout", "slow_mo", "args"}
-)
+_LAUNCH_OPTIONS = frozenset({"channel", "executable_path", "proxy", "timeout", "slow_mo", "args"})
 _CONTEXT_OPTIONS = frozenset(
     {
         "viewport",
@@ -101,12 +99,18 @@ def validate_playwright_config(value: object, site_name: object) -> None:
     for key in {"timeout", "slow_mo"} & set(launch):
         _require_number(launch[key], f"launch.{key}", site_name)
     if "args" in launch:
-        if not isinstance(launch["args"], list) or not all(isinstance(arg, str) for arg in launch["args"]):
+        if not isinstance(launch["args"], list) or not all(
+            isinstance(arg, str) for arg in launch["args"]
+        ):
             raise _invalid("launch.args", site_name, "expected a list of strings.")
     if "proxy" in launch:
         proxy = launch["proxy"]
         if not isinstance(proxy, dict) or set(proxy) - {"server", "bypass", "username", "password"}:
-            raise _invalid("launch.proxy", site_name, "expected server, bypass, username, and password fields only.")
+            raise _invalid(
+                "launch.proxy",
+                site_name,
+                "expected server, bypass, username, and password fields only.",
+            )
         _require_string(proxy.get("server"), "launch.proxy.server", site_name)
         for key in {"bypass", "username", "password"} & set(proxy):
             _require_string(proxy[key], f"launch.proxy.{key}", site_name)
@@ -121,21 +125,35 @@ def validate_playwright_config(value: object, site_name: object) -> None:
         _require_string(context[key], f"context.{key}", site_name)
     for key in {"is_mobile", "has_touch", "java_script_enabled", "accept_downloads"} & set(context):
         _require_bool(context[key], f"context.{key}", site_name)
-    if "color_scheme" in context and context["color_scheme"] not in {"light", "dark", "no-preference"}:
+    if "color_scheme" in context and context["color_scheme"] not in {
+        "light",
+        "dark",
+        "no-preference",
+    }:
         raise _invalid("context.color_scheme", site_name, "expected light, dark, or no-preference.")
     if "device_scale_factor" in context:
-        _require_number(context["device_scale_factor"], "context.device_scale_factor", site_name, 0.000001)
+        _require_number(
+            context["device_scale_factor"], "context.device_scale_factor", site_name, 0.000001
+        )
     if "viewport" in context:
         viewport = context["viewport"]
         if not isinstance(viewport, dict) or set(viewport) != {"width", "height"}:
             raise _invalid("context.viewport", site_name, "expected width and height fields.")
         for key in viewport:
-            if not isinstance(viewport[key], int) or isinstance(viewport[key], bool) or viewport[key] <= 0:
+            if (
+                not isinstance(viewport[key], int)
+                or isinstance(viewport[key], bool)
+                or viewport[key] <= 0
+            ):
                 raise _invalid(f"context.viewport.{key}", site_name, "expected an integer > 0.")
     if "extra_http_headers" in context:
         headers = context["extra_http_headers"]
-        if not isinstance(headers, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in headers.items()):
-            raise _invalid("context.extra_http_headers", site_name, "expected a mapping of strings.")
+        if not isinstance(headers, dict) or not all(
+            isinstance(k, str) and isinstance(v, str) for k, v in headers.items()
+        ):
+            raise _invalid(
+                "context.extra_http_headers", site_name, "expected a mapping of strings."
+            )
     if "permissions" in context and (
         not isinstance(context["permissions"], list)
         or not all(isinstance(permission, str) for permission in context["permissions"])
@@ -144,7 +162,11 @@ def validate_playwright_config(value: object, site_name: object) -> None:
     if "geolocation" in context:
         geolocation = context["geolocation"]
         if not isinstance(geolocation, dict):
-            raise _invalid("context.geolocation", site_name, "expected latitude, longitude, and optional accuracy fields.")
+            raise _invalid(
+                "context.geolocation",
+                site_name,
+                "expected latitude, longitude, and optional accuracy fields.",
+            )
         geolocation_keys = set(geolocation)
         unsupported_keys = geolocation_keys - {"latitude", "longitude", "accuracy"}
         missing_required_keys = {"latitude", "longitude"} - geolocation_keys
@@ -154,9 +176,7 @@ def validate_playwright_config(value: object, site_name: object) -> None:
                 site_name,
                 "expected latitude, longitude, and optional accuracy fields.",
             )
-        _require_number(
-            geolocation["latitude"], "context.geolocation.latitude", site_name, -90, 90
-        )
+        _require_number(geolocation["latitude"], "context.geolocation.latitude", site_name, -90, 90)
         _require_number(
             geolocation["longitude"], "context.geolocation.longitude", site_name, -180, 180
         )

@@ -329,7 +329,10 @@ def test_load_config_accepts_playwright_browser_options(monkeypatch, tmp_path, b
         ("browser: edge", r"Invalid playwright\.browser"),
         ("launch:\n      headless: true", r"Invalid playwright\.launch"),
         ("context:\n      storage_state: session.json", r"Invalid playwright\.context"),
-        ("context:\n      viewport: {width: wide, height: 900}", r"Invalid playwright\.context\.viewport\.width"),
+        (
+            "context:\n      viewport: {width: wide, height: 900}",
+            r"Invalid playwright\.context\.viewport\.width",
+        ),
     ],
 )
 def test_load_config_rejects_invalid_playwright_options(
@@ -337,6 +340,7 @@ def test_load_config_rejects_invalid_playwright_options(
 ):
     runtime_root = tmp_path / "runtime"
     (runtime_root / "config").mkdir(parents=True)
+    indented_playwright_config = playwright_config.replace("\n", "\n                  ")
     (runtime_root / "config" / "sites.yaml").write_text(
         textwrap.dedent(
             f"""
@@ -346,7 +350,7 @@ def test_load_config_rejects_invalid_playwright_options(
                 auth_required: false
                 index_file: "index/docs.db"
                 playwright:
-                  {playwright_config.replace("\n", "\n                  ")}
+                  {indented_playwright_config}
             """
         ).strip()
         + "\n",
