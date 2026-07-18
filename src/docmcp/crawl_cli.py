@@ -140,19 +140,23 @@ def _extract_pdf_document(pdf_bytes: bytes) -> tuple[str | None, str]:
         )
     try:
         reader = PdfReader(BytesIO(pdf_bytes))
+        if getattr(reader, "is_encrypted", False):
+            raise PdfExtractionError("PDF is encrypted and requires a password")
         text_parts = []
         for page in reader.pages:
             page_text = page.extract_text()
             if page_text and (page_text := page_text.strip()):
                 text_parts.append(page_text)
         text = "\n\n".join(text_parts)
+    except PdfExtractionError:
+        raise
     except Exception as exc:
         # Convert all parser failures into the crawler's stable PDF error contract.
         raise PdfExtractionError(f"unable to read PDF: {exc}") from exc
     if not text:
         raise PdfExtractionError("PDF contains no extractable text")
     metadata = reader.metadata
-    title = metadata.title.strip() if metadata and metadata.title else None
+    title = metadata.title.strip() if metadata and metadata.title and metadata.title.strip() else None
     return title, text
 
 
