@@ -94,6 +94,39 @@ def test_extract_pdf_document_uses_no_title_for_whitespace_metadata(monkeypatch)
     assert crawl_cli._extract_pdf_document(b"%PDF") == (None, "Text")
 
 
+def test_extract_pdf_document_uses_no_title_without_metadata(monkeypatch):
+    class FakePage:
+        def extract_text(self):
+            return "Text"
+
+    class FakeReader:
+        metadata = None
+        pages = [FakePage()]
+        is_encrypted = False
+
+        def __init__(self, stream):
+            pass
+
+    monkeypatch.setattr(crawl_cli, "HAS_PYPDF", True)
+    monkeypatch.setattr(crawl_cli, "PdfReader", FakeReader)
+
+    assert crawl_cli._extract_pdf_document(b"%PDF") == (None, "Text")
+
+
+def test_extract_pdf_document_reports_encrypted_pdf(monkeypatch):
+    class FakeReader:
+        is_encrypted = True
+
+        def __init__(self, stream):
+            pass
+
+    monkeypatch.setattr(crawl_cli, "HAS_PYPDF", True)
+    monkeypatch.setattr(crawl_cli, "PdfReader", FakeReader)
+
+    with pytest.raises(crawl_cli.PdfExtractionError, match="requires a password"):
+        crawl_cli._extract_pdf_document(b"%PDF")
+
+
 @pytest.mark.parametrize(
     "parser_state, expected_message",
     [

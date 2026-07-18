@@ -100,7 +100,8 @@ docmcp-crawl --version
 - It skips discovered links that contain a query string when `crawl.ignore_query_links` is `true`.
 - It crawls and indexes discovered query links as distinct URLs when `crawl.ignore_query_links` is `false`.
 - It restricts crawling to the same host and the same starting path prefix.
-- It indexes linked PDFs as documentation documents and skips other static assets such as images, fonts, CSS, JavaScript, and archives.
+- It indexes linked PDFs as documentation documents.
+- It skips static assets such as images, fonts, CSS, JavaScript, and archives.
 - It optionally skips discovered query links and anchor-only links independently.
 - It applies `allow_patterns` and `deny_patterns`.
 - Targeted reindex mode validates each selected URL against the same host/path, allow-list, deny-list, and static-asset rules before navigation; PDF URLs are supported through both `--pages` and `--pages-file`.
