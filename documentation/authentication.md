@@ -5,16 +5,13 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-07-12
-- Version: v1.4
+- Last Updated: 2026-07-18
+- Version: v1.6
 
 ## Change Log
+- 2026-07-18 | v1.6 | Merged the post-conflict authentication metadata and change-log entries into the standard single-block format.
+- 2026-07-16 | v1.5 | Documented configured browser installation and missing-browser recovery.
 - 2026-07-12 | v1.4 | Aligned the guide with the supported manual headful authentication flow and saved-session reuse.
-- Last Updated: 2026-07-16
-- Version: v1.4
-
-## Change Log
-- 2026-07-16 | v1.4 | Documented configured browser installation and missing-browser recovery.
 - 2026-05-20 | v1.3 | Added current CLI version/help behavior and clarified lazy auth-path loading.
 - 2026-05-10 | v1.2 | Clarified that authentication is currently manual headful-only.
 - 2026-04-25 | v1.1 | Updated commands and references for installed docmcp-auth package entry point.

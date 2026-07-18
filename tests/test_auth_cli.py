@@ -57,6 +57,8 @@ def test_auth_cli_list_reports_supported_authentication_status(monkeypatch, caps
     assert "Public Docs (public) — https://public.example.test" in output
     assert "auth_mode" not in output
     assert "unsupported metadata" not in output
+
+
 def test_auth_cli_reports_missing_browser(monkeypatch, capsys):
     site = {
         "name": "Private Docs",
