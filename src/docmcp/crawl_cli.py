@@ -933,7 +933,9 @@ async def reindex_selected_pages(
                     continue
                 _debug(f"Navigating to {normalized_url}")
                 try:
-                    response = await page.goto(normalized_url, wait_until="networkidle", timeout=60000)
+                    response = await page.goto(
+                        normalized_url, wait_until="networkidle", timeout=60000
+                    )
                 except Exception as exc:
                     print(f"[crawl]   ✗ Navigation error: {exc}")
                     results.append(

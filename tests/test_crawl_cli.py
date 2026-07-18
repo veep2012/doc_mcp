@@ -139,6 +139,7 @@ def test_extract_pdf_document_reports_missing_or_unreadable_parser(
 ):
     monkeypatch.setattr(crawl_cli, "HAS_PYPDF", parser_state is not None)
     if parser_state is not None:
+
         def fail_to_read(stream):
             raise parser_state
 
