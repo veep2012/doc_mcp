@@ -6,8 +6,6 @@ sites:
   - name: "My Private Docs"
     url: "https://docs.example.com"
     auth_required: true
-    username: "${SITE1_USERNAME}"   # set in .env
-    password: "${SITE1_PASSWORD}"   # set in .env (if needed)
     session_file: "storage/my_private_docs.json"
     playwright:
       browser: "firefox"               # chromium (default) | firefox | webkit

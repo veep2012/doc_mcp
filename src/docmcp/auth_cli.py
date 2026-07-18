@@ -56,7 +56,7 @@ def main():
         print("\nConfigured sites:")
         for site in sites:
             auth = "auth required" if site.get("auth_required") else "public"
-            print(f"  - {site['name']} ({auth}) [{site.get('auth_mode', 'n/a')}] — {site['url']}")
+            print(f"  - {site['name']} ({auth}) — {site['url']}")
         return
 
     site = next((s for s in sites if s["name"].lower() == args.site.lower()), None)
