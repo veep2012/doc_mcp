@@ -105,7 +105,7 @@ docmcp-crawl --version
 - It applies `allow_patterns` and `deny_patterns`.
 - Targeted reindex mode validates each selected URL against the same host/path, allow-list, deny-list, and static-asset rules before navigation; PDF URLs are supported through both `--pages` and `--pages-file`.
 - After navigation, targeted reindex checks the landed URL again and skips it as `out_of_scope` if the redirect escaped the allowed host/path policy.
-- Targeted reindex results include a stable `reason_code` for skipped and failed pages. Current codes include `out_of_scope`, `asset_url`, `navigation_error`, `parse_error`, `db_error`, `login_redirect`, and `redirect_policy_skip`.
+- Targeted reindex results include a stable `reason_code` for skipped and failed pages. Current codes include `out_of_scope`, `asset_url`, `navigation_error`, `parse_error`, `pdf_error`, `db_error`, `login_redirect`, and `redirect_policy_skip`.
 - Targeted reindex prints a machine-readable reason breakdown line at the end of the run so tests and automation can assert failure classes without parsing free-form error text.
 - Targeted reindex writes each page independently through SQLite, so a later page failure does not roll back pages that were already indexed successfully.
 - It waits `delay_seconds` between pages; the value must be a finite number greater than or equal to 0.

@@ -64,7 +64,6 @@ try:
 
     HAS_PYPDF = True
 except ImportError:
-    PdfReader = None
     HAS_PYPDF = False
 
 
@@ -142,9 +141,9 @@ def _extract_pdf_document(pdf_bytes: bytes) -> tuple[str | None, str]:
     try:
         reader = PdfReader(BytesIO(pdf_bytes))
         text = "\n\n".join(
-            page_text.strip()
+            page_text
             for page in reader.pages
-            if (page_text := page.extract_text()) and page_text.strip()
+            if (page_text := page.extract_text()) and (page_text := page_text.strip())
         )
     except Exception as exc:
         raise PdfExtractionError(f"unable to read PDF: {exc}") from exc

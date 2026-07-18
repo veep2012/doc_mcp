@@ -84,7 +84,10 @@ def test_extract_pdf_document_normalizes_text_and_uses_metadata_title(monkeypatc
 def test_extract_pdf_document_reports_missing_or_unreadable_parser(monkeypatch, reader, expected):
     monkeypatch.setattr(crawl_cli, "HAS_PYPDF", reader is not None)
     if reader is not None:
-        monkeypatch.setattr(crawl_cli, "PdfReader", lambda stream: (_ for _ in ()).throw(reader))
+        def fail_to_read(stream):
+            raise reader
+
+        monkeypatch.setattr(crawl_cli, "PdfReader", fail_to_read)
 
     with pytest.raises(crawl_cli.PdfExtractionError, match=expected):
         crawl_cli._extract_pdf_document(b"not a PDF")
