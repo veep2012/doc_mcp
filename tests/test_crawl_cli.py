@@ -64,6 +64,7 @@ def test_extract_pdf_document_normalizes_text_and_uses_metadata_title(monkeypatc
     class FakeReader:
         metadata = types.SimpleNamespace(title=" Reference Guide ")
         pages = [FakePage()]
+        is_encrypted = False
 
         def __init__(self, stream):
             assert stream.read() == b"%PDF"
@@ -72,6 +73,25 @@ def test_extract_pdf_document_normalizes_text_and_uses_metadata_title(monkeypatc
     monkeypatch.setattr(crawl_cli, "PdfReader", FakeReader)
 
     assert crawl_cli._extract_pdf_document(b"%PDF") == ("Reference Guide", "First page")
+
+
+def test_extract_pdf_document_uses_no_title_for_whitespace_metadata(monkeypatch):
+    class FakePage:
+        def extract_text(self):
+            return "Text"
+
+    class FakeReader:
+        metadata = types.SimpleNamespace(title="   ")
+        pages = [FakePage()]
+        is_encrypted = False
+
+        def __init__(self, stream):
+            pass
+
+    monkeypatch.setattr(crawl_cli, "HAS_PYPDF", True)
+    monkeypatch.setattr(crawl_cli, "PdfReader", FakeReader)
+
+    assert crawl_cli._extract_pdf_document(b"%PDF") == (None, "Text")
 
 
 @pytest.mark.parametrize(
@@ -103,6 +123,7 @@ def test_extract_pdf_document_rejects_empty_text(monkeypatch):
     class FakeReader:
         metadata = None
         pages = [FakePage()]
+        is_encrypted = False
 
         def __init__(self, stream):
             pass

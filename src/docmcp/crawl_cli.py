@@ -140,7 +140,7 @@ def _extract_pdf_document(pdf_bytes: bytes) -> tuple[str | None, str]:
         )
     try:
         reader = PdfReader(BytesIO(pdf_bytes))
-        if getattr(reader, "is_encrypted", False):
+        if reader.is_encrypted:
             raise PdfExtractionError("PDF is encrypted and requires a password")
         text_parts = []
         for page in reader.pages:
@@ -156,7 +156,8 @@ def _extract_pdf_document(pdf_bytes: bytes) -> tuple[str | None, str]:
     if not text:
         raise PdfExtractionError("PDF contains no extractable text")
     metadata = reader.metadata
-    title = metadata.title.strip() if metadata and metadata.title and metadata.title.strip() else None
+    title = metadata.title.strip() if metadata and metadata.title else None
+    title = title or None
     return title, text
 
 
