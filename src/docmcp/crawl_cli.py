@@ -156,8 +156,9 @@ def _extract_pdf_document(pdf_bytes: bytes) -> tuple[str | None, str]:
     if not text:
         raise PdfExtractionError("PDF contains no extractable text")
     metadata = reader.metadata
-    title = metadata.title.strip() if metadata and metadata.title else None
-    title = title or None
+    title = None
+    if metadata and metadata.title:
+        title = metadata.title.strip() or None
     return title, text
 
 
