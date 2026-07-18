@@ -75,21 +75,23 @@ def test_extract_pdf_document_normalizes_text_and_uses_metadata_title(monkeypatc
 
 
 @pytest.mark.parametrize(
-    "reader, expected",
+    "parser_state, expected_message",
     [
         (None, "PDF support requires pypdf. Install it with: pip install pypdf"),
         (RuntimeError("broken PDF"), "unable to read PDF: broken PDF"),
     ],
 )
-def test_extract_pdf_document_reports_missing_or_unreadable_parser(monkeypatch, reader, expected):
-    monkeypatch.setattr(crawl_cli, "HAS_PYPDF", reader is not None)
-    if reader is not None:
+def test_extract_pdf_document_reports_missing_or_unreadable_parser(
+    monkeypatch, parser_state, expected_message
+):
+    monkeypatch.setattr(crawl_cli, "HAS_PYPDF", parser_state is not None)
+    if parser_state is not None:
         def fail_to_read(stream):
-            raise reader
+            raise parser_state
 
         monkeypatch.setattr(crawl_cli, "PdfReader", fail_to_read)
 
-    with pytest.raises(crawl_cli.PdfExtractionError, match=expected):
+    with pytest.raises(crawl_cli.PdfExtractionError, match=expected_message):
         crawl_cli._extract_pdf_document(b"not a PDF")
 
 

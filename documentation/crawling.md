@@ -124,7 +124,7 @@ docmcp-crawl --version
 - It then checks `main`, `article`, `[role="main"]`, `#content`, `.content`, and `body`.
 - The largest candidate is converted to Markdown with `markdownify` when available.
 - If `markdownify` is missing, the crawler falls back to plain text extraction.
-- PDF URLs, and responses served as `application/pdf`, are fetched through the authenticated browser request client and extracted with `pypdf`.
+- PDFs identified by URL extension or `application/pdf` content type are fetched through the authenticated browser request client and extracted with `pypdf`.
 - Extracted PDF text is stored in the same searchable Markdown field as HTML content. The PDF metadata title is used when present; otherwise its source URL is used.
 - Image-only, empty, malformed, or unreadable PDFs are reported as PDF extraction errors and do not stop unrelated pages from being crawled.
 
