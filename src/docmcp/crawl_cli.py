@@ -16,6 +16,7 @@ Usage:
 
 import argparse
 import asyncio
+from io import BytesIO
 import math
 import re
 import sqlite3
@@ -58,6 +59,15 @@ except ImportError:
     print("[crawl] Install with: pip install markdownify", file=sys.stderr)
 
 
+try:
+    from pypdf import PdfReader
+
+    HAS_PYPDF = True
+except ImportError:
+    PdfReader = None
+    HAS_PYPDF = False
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -82,7 +92,6 @@ _STATIC_EXTENSIONS = {
     ".svg",
     ".ico",
     ".bmp",
-    ".pdf",
     ".zip",
     ".tar",
     ".gz",
@@ -99,6 +108,62 @@ _STATIC_EXTENSIONS = {
     ".js",
     ".map",
 }
+
+
+class PdfExtractionError(RuntimeError):
+    """Raised when a PDF cannot be extracted into searchable text."""
+
+
+class PdfParserUnavailableError(PdfExtractionError):
+    """Raised when PDF support is requested without its optional parser."""
+
+
+def _is_pdf_url(url: str) -> bool:
+    """Return True when a URL path identifies a PDF document."""
+    return Path(urlparse(url).path).suffix.lower() == ".pdf"
+
+
+def _is_pdf_content_type(content_type: str | None) -> bool:
+    """Return True when a response content type identifies a PDF document."""
+    return bool(content_type and content_type.split(";", 1)[0].strip().lower() == "application/pdf")
+
+
+def _response_is_pdf(response) -> bool:
+    """Return True when a Playwright response is a PDF."""
+    return response is not None and _is_pdf_content_type(response.headers.get("content-type"))
+
+
+def _extract_pdf_document(pdf_bytes: bytes) -> tuple[str | None, str]:
+    """Extract a PDF's metadata title and searchable text."""
+    if not HAS_PYPDF:
+        raise PdfParserUnavailableError(
+            "PDF support requires pypdf. Install it with: pip install pypdf"
+        )
+    try:
+        reader = PdfReader(BytesIO(pdf_bytes))
+        text = "\n\n".join(
+            page_text.strip()
+            for page in reader.pages
+            if (page_text := page.extract_text()) and page_text.strip()
+        )
+    except Exception as exc:
+        raise PdfExtractionError(f"unable to read PDF: {exc}") from exc
+    if not text:
+        raise PdfExtractionError("PDF contains no extractable text")
+    metadata = reader.metadata
+    title = metadata.title.strip() if metadata and metadata.title else None
+    return title, text
+
+
+async def _fetch_pdf_document(context, url: str) -> tuple[str, str | None, str]:
+    """Fetch a PDF with the browser context's authenticated request client."""
+    response = await context.request.get(url, timeout=60000)
+    if not response.ok:
+        raise PdfExtractionError(f"PDF request failed with HTTP {response.status}")
+    if not (_is_pdf_url(response.url) or _response_is_pdf(response)):
+        raise PdfExtractionError("response is not a PDF document")
+    title, content = _extract_pdf_document(await response.body())
+    return _normalize_url(response.url, strip_query=False), title, content
 
 
 _REDIRECT_POLICIES = frozenset({"final", "requested", "skip"})
@@ -429,6 +494,35 @@ async def _index_loaded_page(
     return index_url, title
 
 
+async def _index_pdf_document(
+    context,
+    *,
+    requested_url: str,
+    index_file: str,
+    redirect_policy: str,
+    debug,
+) -> tuple[str | None, str]:
+    """Fetch, extract, and upsert a PDF into the SQLite page index."""
+    current_url, pdf_title, content_md = await _fetch_pdf_document(context, requested_url)
+    if current_url != requested_url:
+        if redirect_policy == "requested":
+            index_url = requested_url
+            debug(f"Redirect policy=requested -> indexing requested URL {index_url}")
+        elif redirect_policy == "skip":
+            index_url = None
+            debug("Redirect policy=skip -> skipping redirected PDF")
+        else:
+            index_url = current_url
+            debug(f"Redirect policy=final -> indexing final URL {index_url}")
+    else:
+        index_url = current_url
+    title = pdf_title or current_url
+    debug(f"PDF title={title!r}; extracted {len(content_md)} text chars")
+    if index_url is not None:
+        upsert_page(index_file, index_url, title, content_md)
+    return index_url, title
+
+
 # ---------------------------------------------------------------------------
 # Core headful crawler
 # ---------------------------------------------------------------------------
@@ -558,17 +652,37 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
                         continue
                     visited.add(url)
                     used_preloaded_page = loaded_page_active and url == seed_url
+                    response = None
 
                     print(
                         f"[crawl] [{index_in_level} of {level_total} level {level_number}/{total_levels}] {url}"
                     )
+                    if _is_pdf_url(url):
+                        try:
+                            index_url, title = await _index_pdf_document(
+                                context,
+                                requested_url=url,
+                                index_file=index_file,
+                                redirect_policy=redirect_policy,
+                                debug=_debug,
+                            )
+                        except PdfExtractionError as exc:
+                            print(f"[crawl]   ✗ PDF extraction error: {exc}")
+                            continue
+                        if index_url is None:
+                            print("[crawl]   ↷ Skipped: redirect_policy=skip")
+                        else:
+                            page_count += 1
+                            print(f"[crawl]   ✓ Indexed: {title[:70]}")
+                        await asyncio.sleep(delay_seconds)
+                        continue
                     if used_preloaded_page:
                         _debug(f"Using already loaded start page: {url}")
                         use_loaded_start_page = False
                     else:
                         _debug(f"Navigating to {url}")
                         try:
-                            await page.goto(url, wait_until="networkidle", timeout=60000)
+                            response = await page.goto(url, wait_until="networkidle", timeout=60000)
                         except Exception as e:
                             print(f"[crawl]   ✗ Navigation error: {e}")
                             continue
@@ -589,6 +703,26 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
                         _debug(f"Navigation redirected to {current_url}")
                     else:
                         _debug(f"Navigation stayed on {current_url}")
+
+                    if _response_is_pdf(response):
+                        try:
+                            index_url, title = await _index_pdf_document(
+                                context,
+                                requested_url=url,
+                                index_file=index_file,
+                                redirect_policy=redirect_policy,
+                                debug=_debug,
+                            )
+                        except PdfExtractionError as exc:
+                            print(f"[crawl]   ✗ PDF extraction error: {exc}")
+                            continue
+                        if index_url is None:
+                            print("[crawl]   ↷ Skipped: redirect_policy=skip")
+                        else:
+                            page_count += 1
+                            print(f"[crawl]   ✓ Indexed: {title[:70]}")
+                        await asyncio.sleep(delay_seconds)
+                        continue
 
                     # Detect redirect to login page
                     if any(ind in current_url for ind in login_indicators):
@@ -747,9 +881,52 @@ async def reindex_selected_pages(
                     continue
 
                 print(f"[crawl] [{index} of {len(page_urls)}] {normalized_url}")
+                if _is_pdf_url(normalized_url):
+                    try:
+                        index_url, title = await _index_pdf_document(
+                            context,
+                            requested_url=normalized_url,
+                            index_file=index_file,
+                            redirect_policy=redirect_policy,
+                            debug=_debug,
+                        )
+                    except PdfExtractionError as exc:
+                        message = f"PDF extraction error: {exc}"
+                        print(f"[crawl]   ✗ {message}")
+                        results.append(
+                            _selected_page_result(
+                                url=normalized_url,
+                                outcome="failed",
+                                reason_code="pdf_error",
+                                reason=message,
+                            )
+                        )
+                    else:
+                        if index_url is None:
+                            print("[crawl]   ↷ Skipped: redirect_policy=skip")
+                            results.append(
+                                _selected_page_result(
+                                    url=normalized_url,
+                                    outcome="skipped",
+                                    reason_code="redirect_policy_skip",
+                                    reason="redirect_policy=skip",
+                                )
+                            )
+                        else:
+                            print(f"[crawl]   ✓ Indexed: {title[:70]}")
+                            results.append(
+                                _selected_page_result(
+                                    url=index_url,
+                                    requested_url=normalized_url,
+                                    outcome="indexed",
+                                    title=title,
+                                )
+                            )
+                    await asyncio.sleep(delay_seconds)
+                    continue
                 _debug(f"Navigating to {normalized_url}")
                 try:
-                    await page.goto(normalized_url, wait_until="networkidle", timeout=60000)
+                    response = await page.goto(normalized_url, wait_until="networkidle", timeout=60000)
                 except Exception as exc:
                     print(f"[crawl]   ✗ Navigation error: {exc}")
                     results.append(
@@ -802,14 +979,23 @@ async def reindex_selected_pages(
                     continue
 
                 try:
-                    index_url, title = await _index_loaded_page(
-                        page,
-                        requested_url=normalized_url,
-                        current_url=current_url,
-                        index_file=index_file,
-                        redirect_policy=redirect_policy,
-                        debug=_debug,
-                    )
+                    if _response_is_pdf(response):
+                        index_url, title = await _index_pdf_document(
+                            context,
+                            requested_url=normalized_url,
+                            index_file=index_file,
+                            redirect_policy=redirect_policy,
+                            debug=_debug,
+                        )
+                    else:
+                        index_url, title = await _index_loaded_page(
+                            page,
+                            requested_url=normalized_url,
+                            current_url=current_url,
+                            index_file=index_file,
+                            redirect_policy=redirect_policy,
+                            debug=_debug,
+                        )
                 except sqlite3.Error as exc:
                     print(f"[crawl]   ✗ Database error: {exc}")
                     results.append(

@@ -18,3 +18,6 @@ fastembed>=0.7.2
 
 # Local vector index
 sqlite-vec>=0.1.9
+
+# PDF text extraction
+pypdf>=5.0.0

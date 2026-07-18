@@ -89,6 +89,11 @@ List the most common failure modes for `doc-mcp` and the first corrective step f
 - If `markdownify` is not installed, the crawler falls back to plain text extraction.
 - Install development dependencies through `make local-venv` or `python -m pip install -r requirements-dev.txt`.
 
+### PDF Extraction Fails
+- PDF indexing requires `pypdf`; install dependencies with `python -m pip install -r requirements.txt` if the crawler reports that it is unavailable.
+- A malformed, unreadable, or image-only PDF is reported as a PDF extraction error and is skipped while the crawl continues with other pages.
+- OCR is not performed for image-only PDFs. Use a text-bearing PDF if its content must be searchable.
+
 ### Windows Playwright Module Is Missing
 - A standalone `playwright` script may not be visible in the active environment; use `python -m ...` instead.
 - Verify the package with `python -m pip show playwright`.

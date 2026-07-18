@@ -100,10 +100,10 @@ docmcp-crawl --version
 - It skips discovered links that contain a query string when `crawl.ignore_query_links` is `true`.
 - It crawls and indexes discovered query links as distinct URLs when `crawl.ignore_query_links` is `false`.
 - It restricts crawling to the same host and the same starting path prefix.
-- It skips static assets such as images, fonts, CSS, JavaScript, and archives.
+- It indexes linked PDFs as documentation documents and skips other static assets such as images, fonts, CSS, JavaScript, and archives.
 - It optionally skips discovered query links and anchor-only links independently.
 - It applies `allow_patterns` and `deny_patterns`.
-- Targeted reindex mode validates each selected URL against the same host/path, allow-list, deny-list, and static-asset rules before navigation.
+- Targeted reindex mode validates each selected URL against the same host/path, allow-list, deny-list, and static-asset rules before navigation; PDF URLs are supported through both `--pages` and `--pages-file`.
 - After navigation, targeted reindex checks the landed URL again and skips it as `out_of_scope` if the redirect escaped the allowed host/path policy.
 - Targeted reindex results include a stable `reason_code` for skipped and failed pages. Current codes include `out_of_scope`, `asset_url`, `navigation_error`, `parse_error`, `db_error`, `login_redirect`, and `redirect_policy_skip`.
 - Targeted reindex prints a machine-readable reason breakdown line at the end of the run so tests and automation can assert failure classes without parsing free-form error text.
@@ -124,6 +124,9 @@ docmcp-crawl --version
 - It then checks `main`, `article`, `[role="main"]`, `#content`, `.content`, and `body`.
 - The largest candidate is converted to Markdown with `markdownify` when available.
 - If `markdownify` is missing, the crawler falls back to plain text extraction.
+- PDF URLs, and responses served as `application/pdf`, are fetched through the authenticated browser request client and extracted with `pypdf`.
+- Extracted PDF text is stored in the same searchable Markdown field as HTML content. The PDF metadata title is used when present; otherwise its source URL is used.
+- Image-only, empty, malformed, or unreadable PDFs are reported as PDF extraction errors and do not stop unrelated pages from being crawled.
 
 ### Indexing
 - The SQLite index stores page URL, page title, Markdown content, and last crawled timestamp.
@@ -158,7 +161,7 @@ docmcp-crawl --version
 - If you need time to click around in the browser before crawling starts, use `crawl.start_delay_seconds` in headful mode instead of increasing `delay_seconds`.
 
 ## Edge Cases
-- Static resources are filtered out before indexing so they do not pollute search results.
+- PDFs are documentation content rather than static assets; other static resources remain filtered out before indexing so they do not pollute search results.
 - Targeted reindex skips selected URLs that resolve outside the configured host/path, fail the allow/deny rules, or point to static assets.
 - If the saved session becomes invalid while crawling, the run should stop rather than continue with partial content.
 - If a site uses fragment-heavy URLs, canonicalization strips the fragment before storage.

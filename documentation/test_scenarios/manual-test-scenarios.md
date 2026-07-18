@@ -315,6 +315,16 @@ Run these scenarios after either `MT-003A` or `MT-003B`, using the command set f
   - Pass if invalid targets are reported clearly and valid pages still refresh.
   - Fail if the run aborts on the first bad selected URL or indexes non-page assets.
 
+  ### MT-010a: Crawl And Reindex PDFs
+  - Steps:
+    1. Crawl a documentation page that links to a text-bearing PDF.
+    2. Search for text that appears only in the PDF.
+    3. Re-run the PDF URL with `--pages` and then from a `--pages-file`.
+  - Expected result:
+    - The PDF source URL and extracted text are present in the SQLite index and search results.
+    - Both targeted reindex forms refresh the existing PDF record.
+    - Images, JavaScript, and archive links remain excluded.
+
 ### MT-011: Expired Session Stops Crawl
 - Steps:
   1. Move the session file to a temporary backup path or use an expired session.
