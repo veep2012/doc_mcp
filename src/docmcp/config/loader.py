@@ -12,6 +12,7 @@ import yaml
 from dotenv import dotenv_values
 
 from ..vector_index import _normalize_chunk_settings
+from .playwright import validate_playwright_config
 
 
 class ConfigError(RuntimeError):
@@ -143,6 +144,10 @@ def _validate_site_config(site: dict) -> dict:
     if "session_file" in site and site["session_file"] is not None:
         _validate_non_empty_string(site["session_file"], "session_file", site_name)
     _normalize_search_engine(site.get("search_engine"), site_name)
+    try:
+        validate_playwright_config(site.get("playwright"), site_name)
+    except ValueError as exc:
+        raise ConfigError(str(exc)) from exc
 
     crawl_cfg = site.get("crawl", {})
     if not isinstance(crawl_cfg, dict):

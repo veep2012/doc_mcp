@@ -4,6 +4,7 @@ import pytest
 
 import docmcp.auth_cli as auth_cli
 from docmcp import __version__
+from docmcp.config.playwright import BrowserUnavailableError
 
 
 def test_auth_cli_version_and_help_include_current_version(monkeypatch, capsys):
@@ -56,3 +57,32 @@ def test_auth_cli_list_reports_supported_authentication_status(monkeypatch, caps
     assert "Public Docs (public) — https://public.example.test" in output
     assert "auth_mode" not in output
     assert "unsupported metadata" not in output
+def test_auth_cli_reports_missing_browser(monkeypatch, capsys):
+    site = {
+        "name": "Private Docs",
+        "url": "https://example.test/docs",
+        "auth_required": True,
+    }
+
+    monkeypatch.setattr(auth_cli, "get_sites", lambda: [site])
+    monkeypatch.setattr(sys, "argv", ["docmcp-auth", "--site", "Private Docs"])
+
+    def fail_authentication(_coroutine):
+        raise BrowserUnavailableError(
+            "Playwright browser 'firefox' is not installed.\n"
+            "Install it with:\n"
+            "  python -m playwright install firefox"
+        )
+
+    monkeypatch.setattr(auth_cli.asyncio, "run", fail_authentication)
+
+    with pytest.raises(SystemExit) as excinfo:
+        auth_cli.main()
+
+    assert excinfo.value.code == 1
+    assert capsys.readouterr().err == (
+        "[docmcp-auth] Browser error:\n"
+        "Playwright browser 'firefox' is not installed.\n"
+        "Install it with:\n"
+        "  python -m playwright install firefox\n"
+    )

@@ -10,6 +10,11 @@
 
 ## Change Log
 - 2026-07-12 | v1.4 | Aligned the guide with the supported manual headful authentication flow and saved-session reuse.
+- Last Updated: 2026-07-16
+- Version: v1.4
+
+## Change Log
+- 2026-07-16 | v1.4 | Documented configured browser installation and missing-browser recovery.
 - 2026-05-20 | v1.3 | Added current CLI version/help behavior and clarified lazy auth-path loading.
 - 2026-05-10 | v1.2 | Clarified that authentication is currently manual headful-only.
 - 2026-04-25 | v1.1 | Updated commands and references for installed docmcp-auth package entry point.
@@ -52,7 +57,7 @@ docmcp-auth --version
 1. The CLI loads the site definition from `config/sites.yaml`.
 2. If `auth_required` is false, authentication is skipped.
 3. If a session file exists, the code checks whether the cookie expiry still looks valid.
-4. The saved session is opened in a headless browser and the protected URL is visited.
+4. The saved session is opened in a headless browser using the site's configured Playwright engine and context settings, then the protected URL is visited.
 5. If the browser is redirected to a login-like URL, the session is treated as invalid.
 6. If the session is valid, authentication is skipped.
 7. If the session is missing or expired, Playwright opens a visible browser window and the user logs in manually.
@@ -66,6 +71,10 @@ docmcp-auth --version
 - Authentication is per site.
 - The only supported login flow is manual and headful. Complete any CAPTCHA, MFA, magic-link, or anti-bot steps in the visible browser window.
 - The crawler reuses a valid saved session. Headless crawling is available only after that session has been created.
+- The login browser is headful so the user can complete whatever site-specific login flow is required manually.
+- Authentication and saved-session validation use the same `playwright` site settings. `headless`, storage state, and TLS handling remain runtime-controlled.
+- If the configured browser is not installed, authentication stops with an install command such as `python -m playwright install firefox`.
+- The crawler reuses the saved session if it is still valid.
 - `--help`, `--list`, and `--version` complete without loading the browser authentication path until it is needed.
 
 ## Edge Cases

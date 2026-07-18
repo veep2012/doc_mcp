@@ -61,6 +61,9 @@ MCP_SERVER_NAME=docs-mcp
 - `url`: the site root or base URL
 - `auth_required`: `true` or `false`
 - `session_file`: where to save Playwright storage state
+- `playwright.browser`: browser engine: `chromium` (default), `firefox`, or `webkit`
+- `playwright.launch`: optional safe launch settings: `channel`, `executable_path`, `proxy`, `timeout`, `slow_mo`, and `args`
+- `playwright.context`: optional context settings: `viewport`, `user_agent`, `locale`, `timezone_id`, `color_scheme`, `device_scale_factor`, `is_mobile`, `has_touch`, `java_script_enabled`, `accept_downloads`, `extra_http_headers`, `geolocation`, and `permissions`
 - `crawl.start_url`: crawl entry point
 - `crawl.max_depth`: breadth-first crawl depth
 - `crawl.delay_seconds`: pause between page fetches; must be a finite number greater than or equal to 0
@@ -85,6 +88,7 @@ MCP_SERVER_NAME=docs-mcp
 - `crawl.ignore_https_errors`: defaults to `false`.
 - `crawl.allow_patterns`: defaults to an empty list.
 - `crawl.deny_patterns`: defaults to an empty list.
+- `playwright.browser`: defaults to `chromium`; launch and context settings default to empty mappings.
 - `vectorizer.chunk_size`: defaults to `800`.
 - `vectorizer.chunk_overlap`: defaults to `120`.
 - `vectorizer.embedding_model`: defaults to `BAAI/bge-small-en-v1.5`.
@@ -144,6 +148,20 @@ sites:
     url: "https://docs.example.com"
     auth_required: true
     session_file: "storage/my_docs.json"
+    playwright:
+      browser: firefox
+      launch:
+        slow_mo: 50
+        proxy:
+          server: "http://proxy.example.test:8080"
+      context:
+        viewport: {width: 1440, height: 900}
+        user_agent: "My Docs Crawler"
+        locale: "en-US"
+        timezone_id: "America/Los_Angeles"
+        extra_http_headers: {"X-Documentation-Client": "doc-mcp"}
+        geolocation: {latitude: 47.6062, longitude: -122.3321}
+        permissions: ["geolocation"]
     crawl:
       start_url: "https://docs.example.com/docs"
       max_depth: 5

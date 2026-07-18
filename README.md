@@ -99,7 +99,7 @@ Since `0.99.0`, `search_docs(site_name, query, limit=10)` returns JSON text, not
 The repository includes smoke tests that exercise crawl and MCP behavior end to end. They have a few explicit prerequisites:
 
 - Podman or Docker must be installed and reachable as a container runtime.
-- Playwright Chromium must be installed in the active Python environment.
+- The Playwright browser selected by each site's `playwright.browser` setting must be installed in the active Python environment. Chromium is the default.
 - The environment must allow container networking and bind/mapped ports.
 
 Common limitations:
@@ -108,7 +108,7 @@ Common limitations:
 - If Podman reports that the machine is running but the socket refuses connections, reinitialize it or switch the default connection to `podman-machine-default-root`.
 - Docker may work where Podman does not, and vice versa.
 - If no container runtime is available, smoke tests should be skipped rather than expected to pass.
-- If Chromium is missing, Playwright-based auth, crawl, and smoke paths will fail before the first site run.
+- If the configured Playwright browser is missing, auth and crawl commands stop before the first site run and print the matching `python -m playwright install <browser>` command.
 
 When a container runtime is available, smoke failures should include a helpful message that points to `CONTAINER_BIN=docker` as an alternative when Podman is the default and rootless networking is the problem.
 

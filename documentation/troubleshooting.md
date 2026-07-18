@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-07-05
-- Version: v1.11
+- Last Updated: 2026-07-16
+- Version: v1.12
 
 ## Change Log
+- 2026-07-16 | v1.12 | Documented per-site browser installation and actionable missing-browser errors.
 - 2026-07-05 | v1.11 | Updated the Playwright Chromium recovery command to use `--with-deps chromium` so setup and troubleshooting guidance match the current install flow.
 - 2026-06-21 | v1.10 | Added versioned sidecar contract guidance, schema-mismatch fallback, rebuild-based migration notes, and crawl-fingerprint stale detection guidance that does not rely on filesystem mtimes.
 - 2026-06-14 | v1.8 | Added vector-sidecar fallback and rebuild guidance for degraded search results.
@@ -94,6 +95,14 @@ List the most common failure modes for `doc-mcp` and the first corrective step f
 - Verify the CLI module with `python -m playwright --version`.
 - If verification fails with `No module named playwright`, reinstall dependencies with `python -m pip install -r requirements-dev.txt`.
 - Install Chromium with `python -m playwright install --with-deps chromium`.
+
+### The Configured Browser Will Not Launch
+- Install the engine selected by `playwright.browser`:
+  - Chromium: `python -m playwright install --with-deps chromium`
+  - Firefox: `python -m playwright install --with-deps firefox`
+  - WebKit: `python -m playwright install --with-deps webkit`
+- If the browser executable is missing, `docmcp-auth` and `docmcp-crawl` report the selected engine and print the matching `python -m playwright install <browser>` command.
+- Check `playwright.launch.executable_path`, `channel`, and proxy settings if the configured browser is intentionally non-default.
 
 ### Windows Console Output Looks Broken
 - `src/docmcp/main.py` reconfigures stdout and stderr to UTF-8.

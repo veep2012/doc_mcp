@@ -66,8 +66,13 @@ def main():
         return
 
     from .auth.session import authenticate
+    from .config.playwright import BrowserUnavailableError
 
-    asyncio.run(authenticate(site, force=args.force))
+    try:
+        asyncio.run(authenticate(site, force=args.force))
+    except BrowserUnavailableError as exc:
+        print(f"[docmcp-auth] Browser error:\n{exc}", file=sys.stderr)
+        sys.exit(1)
     print("\n[auth] Done. You can now start the MCP server.")
 
 
