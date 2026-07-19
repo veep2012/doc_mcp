@@ -112,6 +112,8 @@ Common limitations:
 
 When a container runtime is available, smoke failures should include a helpful message that points to `CONTAINER_BIN=docker` as an alternative when Podman is the default and rootless networking is the problem.
 
+Default `pytest` collection does not require Playwright or MCP. Tests that need an unavailable optional runtime dependency are skipped with an installation command; install the project dependencies to run them.
+
 ## Install On Another Environment
 
 If you want to build a distributable wheel in one environment and install it in another:

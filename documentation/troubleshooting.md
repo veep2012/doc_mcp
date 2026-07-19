@@ -6,10 +6,11 @@
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
 - Last Updated: 2026-07-19
-- Version: v1.13
+- Version: v1.14
 
 ## Change Log
 - 2026-07-19 | v1.13 | Added PDF download-endpoint, HTTP-response, redirect-policy, and targeted-reindex failure guidance.
+- 2026-07-19 | v1.14 | Documented optional runtime dependency skips during default test collection.
 - 2026-07-16 | v1.12 | Documented per-site browser installation and actionable missing-browser errors.
 - 2026-07-05 | v1.11 | Updated the Playwright Chromium recovery command to use `--with-deps chromium` so setup and troubleshooting guidance match the current install flow.
 - 2026-06-21 | v1.10 | Added versioned sidecar contract guidance, schema-mismatch fallback, rebuild-based migration notes, and crawl-fingerprint stale detection guidance that does not rely on filesystem mtimes.
@@ -105,6 +106,10 @@ List the most common failure modes for `doc-mcp` and the first corrective step f
 - Verify the CLI module with `python -m playwright --version`.
 - If verification fails with `No module named playwright`, reinstall dependencies with `python -m pip install -r requirements-dev.txt`.
 - Install Chromium with `python -m playwright install --with-deps chromium`.
+
+### Tests Skip Because Playwright Or MCP Is Missing
+- Default `pytest` collection skips only tests that require unavailable Playwright or MCP dependencies.
+- Install the missing dependency with `python -m pip install playwright` or `python -m pip install mcp`, then rerun the affected test.
 
 ### The Configured Browser Will Not Launch
 - Install the engine selected by `playwright.browser`:

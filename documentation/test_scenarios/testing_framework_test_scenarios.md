@@ -36,6 +36,7 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - FR-3: Automated tests must cover index store, config loader, crawler helpers, and MCP tool behavior.
 - FR-4: Smoke tests must cover a crawl against a temporary static site and MCP stdio search against a prepared index.
 - FR-5: Missing smoke prerequisites must fail with actionable messages instead of tracebacks.
+- FR-6: Default test collection must skip tests requiring unavailable Playwright or MCP dependencies with installation guidance.
 
 ### Non-Functional Requirements
 - NFR-1: Test commands should use the active virtual-environment Python.
@@ -53,6 +54,7 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - `TS-TF-007` - Crawl smoke indexes a temporary static site through Podman or Docker.
 - `TS-TF-008` - MCP smoke starts an isolated stdio server and verifies `search_docs` against a prepared index.
 - `TS-TF-009` - Missing smoke prerequisites fail with actionable messages.
+- `TS-TF-010` - Default collection skips tests requiring unavailable optional runtime dependencies.
 
 ### Scenario Details
 #### TS-TF-001
@@ -95,6 +97,10 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - Purpose: Make missing smoke prerequisites actionable.
 - Expected Result: Missing container runtimes or missing prepared indexes fail with direct remediation guidance instead of Python tracebacks.
 
+#### TS-TF-010
+- Purpose: Keep collection usable in dependency-light environments.
+- Expected Result: Missing Playwright or MCP skips only the affected tests and prints an installation command.
+
 ### Automated Test Mapping
 - `TS-TF-001` -> `tests/test_smoke_support.py::test_make_test_dry_run_lists_unit_before_smoke`
 - `TS-TF-002` -> `tests/test_smoke_support.py::test_direct_pytest_excludes_smoke_by_default`
@@ -105,6 +111,7 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - `TS-TF-007` -> `tests/smoke/test_crawl_smoke.py`
 - `TS-TF-008` -> `tests/smoke/test_mcp_smoke.py`
 - `TS-TF-009` -> `tests/test_smoke_support.py::{test_missing_container_runtime_fails_with_actionable_message,test_missing_prepared_index_fails_with_actionable_message}`
+- `TS-TF-010` -> `tests/test_playwright_settings.py::test_authentication_and_session_validation_use_site_playwright_settings`, `tests/smoke/support.py`
 
 ## Edge Cases
 - If Podman is installed but not usable in the current environment, rerun smoke tests with `CONTAINER_BIN=docker`.

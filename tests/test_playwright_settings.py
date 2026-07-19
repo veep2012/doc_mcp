@@ -1,6 +1,7 @@
 import asyncio
 
-import docmcp.auth.session as session
+import pytest
+
 from docmcp.config.playwright import (
     BrowserUnavailableError,
     launch_browser,
@@ -60,6 +61,13 @@ class _Playwright:
 
 
 def test_authentication_and_session_validation_use_site_playwright_settings(monkeypatch):
+    session = pytest.importorskip(
+        "docmcp.auth.session",
+        reason=(
+            "Playwright is required for authentication settings tests. "
+            "Install it with: python -m pip install playwright"
+        ),
+    )
     calls = {}
     site = {
         "name": "Docs",

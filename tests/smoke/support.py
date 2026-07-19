@@ -19,7 +19,10 @@ try:
     from mcp import ClientSession
     from mcp.client.stdio import StdioServerParameters, stdio_client
 except ModuleNotFoundError:  # pragma: no cover - optional smoke dependency
-    pytest.skip("mcp is required for smoke tests", allow_module_level=True)
+    pytest.skip(
+        "mcp is required for smoke tests. Install it with: python -m pip install mcp",
+        allow_module_level=True,
+    )
 
 from tests.conftest import REPO_ROOT
 
