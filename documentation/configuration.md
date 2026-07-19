@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-07-12
-- Version: v2.1
+- Last Updated: 2026-07-19
+- Version: v2.2
 
 ## Change Log
+- 2026-07-19 | v2.2 | Clarified that PDF handling is automatic and applies to both `.pdf` URLs and `application/pdf` responses, including targeted reindexing.
 - 2026-07-12 | v2.1 | Removed unsupported credential and authentication-mode configuration guidance.
 - 2026-07-04 | v2.0 | Documented the targeted crawl CLI page-selection flags that override normal breadth-first crawling without adding new site configuration keys.
 - 2026-06-21 | v1.9 | Reorganized the site configuration section so the search and vector settings read as a single release-facing block.
@@ -88,6 +89,7 @@ MCP_SERVER_NAME=docs-mcp
 - `crawl.ignore_https_errors`: defaults to `false`.
 - `crawl.allow_patterns`: defaults to an empty list.
 - `crawl.deny_patterns`: defaults to an empty list.
+- PDF handling has no site-specific configuration key. The crawler automatically recognizes `.pdf` URLs and responses with `Content-Type: application/pdf`; PDFs selected through `--pages` or `--pages-file` follow the same behavior.
 - `playwright.browser`: defaults to `chromium`; launch and context settings default to empty mappings.
 - `vectorizer.chunk_size`: defaults to `800`.
 - `vectorizer.chunk_overlap`: defaults to `120`.
