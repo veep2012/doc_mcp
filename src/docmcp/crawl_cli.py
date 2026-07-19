@@ -524,7 +524,8 @@ async def _index_pdf_document(
             debug(f"Redirect policy=final -> indexing final URL {index_url}")
     else:
         index_url = current_url
-    title = pdf_title or current_url
+    title_fallback_url = index_url or current_url
+    title = pdf_title or title_fallback_url
     debug(f"PDF title={title!r}; extracted {len(content_md)} text chars")
     if index_url is not None:
         upsert_page(index_file, index_url, title, content_md)
