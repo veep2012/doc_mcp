@@ -164,7 +164,11 @@ def _extract_pdf_document(pdf_bytes: bytes) -> tuple[str | None, str]:
 
 async def _fetch_pdf_document(context, url: str) -> tuple[str, str | None, str]:
     """Fetch a PDF with the browser context's authenticated request client."""
-    response = await context.request.get(url, timeout=60000)
+    response = await context.request.get(
+        url,
+        timeout=60000,
+        headers={"Accept": "application/pdf"},
+    )
     if not response.ok:
         raise PdfExtractionError(f"PDF request failed with HTTP {response.status}")
     if not (_is_pdf_url(response.url) or _response_is_pdf(response)):

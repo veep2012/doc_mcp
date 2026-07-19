@@ -82,9 +82,10 @@ def test_fetch_pdf_document_rejects_failed_or_non_pdf_responses(
     FakeResponse.status = status
 
     class FakeRequest:
-        async def get(self, url, timeout):
+        async def get(self, url, timeout, **kwargs):
             assert url == "https://example.test/docs/reference.pdf"
             assert timeout == 60000
+            assert kwargs == {"headers": {"Accept": "application/pdf"}}
             return FakeResponse()
 
     context = types.SimpleNamespace(request=FakeRequest())
@@ -106,7 +107,7 @@ def test_fetch_pdf_document_accepts_content_type_only_and_preserves_query(monkey
             return b"%PDF"
 
     class FakeRequest:
-        async def get(self, url, timeout):
+        async def get(self, url, timeout, **kwargs):
             return FakeResponse()
 
     monkeypatch.setattr(
@@ -1279,7 +1280,7 @@ def test_crawl_site_headful_indexes_linked_pdf(monkeypatch, tmp_path):
             return b"%PDF"
 
     class FakeRequest:
-        async def get(self, url, timeout):
+        async def get(self, url, timeout, **kwargs):
             assert url == "https://example.test/docs/reference.pdf"
             assert timeout == 60000
             return FakeResponse()
@@ -1363,7 +1364,7 @@ def test_crawl_site_headful_indexes_pdf_detected_by_content_type(monkeypatch, tm
             return b"%PDF"
 
     class FakeRequest:
-        async def get(self, url, timeout):
+        async def get(self, url, timeout, **kwargs):
             assert url == "https://example.test/docs/download"
             return FakeResponse()
 
@@ -1537,7 +1538,7 @@ def test_reindex_selected_pages_indexes_targeted_pdf(monkeypatch, tmp_path):
             return b"%PDF"
 
     class FakeRequest:
-        async def get(self, url, timeout):
+        async def get(self, url, timeout, **kwargs):
             return FakeResponse()
 
     class FakeContext:
@@ -1616,7 +1617,7 @@ def test_reindex_selected_pages_reports_pdf_extraction_failure_and_continues(
             return b"%PDF"
 
     class FakeRequest:
-        async def get(self, url, timeout):
+        async def get(self, url, timeout, **kwargs):
             return FakeResponse()
 
     class FakeContext:
@@ -1693,7 +1694,7 @@ def test_reindex_selected_pages_indexes_pdf_detected_by_content_type(monkeypatch
             return b"%PDF"
 
     class FakeRequest:
-        async def get(self, url, timeout):
+        async def get(self, url, timeout, **kwargs):
             assert url == "https://example.test/docs/download"
             return FakeResponse()
 
