@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-07-16
-- Version: v1.12
+- Last Updated: 2026-07-19
+- Version: v1.13
 
 ## Change Log
+- 2026-07-19 | v1.13 | Added PDF download-endpoint, HTTP-response, redirect-policy, and targeted-reindex failure guidance.
 - 2026-07-16 | v1.12 | Documented per-site browser installation and actionable missing-browser errors.
 - 2026-07-05 | v1.11 | Updated the Playwright Chromium recovery command to use `--with-deps chromium` so setup and troubleshooting guidance match the current install flow.
 - 2026-06-21 | v1.10 | Added versioned sidecar contract guidance, schema-mismatch fallback, rebuild-based migration notes, and crawl-fingerprint stale detection guidance that does not rely on filesystem mtimes.
@@ -93,6 +94,10 @@ List the most common failure modes for `doc-mcp` and the first corrective step f
 - PDF indexing requires `pypdf`; install dependencies with `python -m pip install -r requirements.txt` if the crawler reports that it is unavailable.
 - A malformed, unreadable, or image-only PDF is reported as a PDF extraction error and is skipped while the crawl continues with other pages.
 - OCR is not performed for image-only PDFs. Use a text-bearing PDF if its content must be searchable.
+- PDF detection does not require the URL to end in `.pdf`; download endpoints are also recognized when the response has `Content-Type: application/pdf`.
+- If a `.pdf` URL returns a non-2xx response or a non-PDF response, it is rejected and not indexed. Check the HTTP status and response headers in the server or site logs.
+- PDF redirects obey `crawl.redirect_policy`: use `final` to index the landing URL, `requested` to retain the original URL, or `skip` to load but not index redirected PDFs.
+- In targeted reindex mode, extraction failures appear as `reason_code=pdf_error`; the command continues with other selected URLs. Use the final reason breakdown to distinguish PDF failures from navigation or database failures.
 
 ### Windows Playwright Module Is Missing
 - A standalone `playwright` script may not be visible in the active environment; use `python -m ...` instead.

@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-26
-- Last Updated: 2026-07-16
-- Version: v1.5
+- Last Updated: 2026-07-19
+- Version: v1.6
 
 ## Change Log
+- 2026-07-19 | v1.6 | Expanded PDF crawl and targeted-reindex checks to cover content-type detection, failures, redirects, and continued processing.
 - 2026-07-16 | v1.5 | Added configured-browser installation and missing-browser recovery expectations.
 - 2026-07-05 | v1.4 | Updated the manual setup and wheel-install verification steps to use `python -m playwright install --with-deps chromium`.
 - 2026-07-04 | v1.3 | Added manual verification steps for targeted selected-page reindexing through the crawl CLI.
@@ -315,15 +316,21 @@ Run these scenarios after either `MT-003A` or `MT-003B`, using the command set f
   - Pass if invalid targets are reported clearly and valid pages still refresh.
   - Fail if the run aborts on the first bad selected URL or indexes non-page assets.
 
-  ### MT-010a: Crawl And Reindex PDFs
-  - Steps:
-    1. Crawl a documentation page that links to a text-bearing PDF.
-    2. Search for text that appears only in the PDF.
-    3. Re-run the PDF URL with `--pages` and then from a `--pages-file`.
-  - Expected result:
-    - The PDF source URL and extracted text are present in the SQLite index and search results.
-    - Both targeted reindex forms refresh the existing PDF record.
-    - Images, JavaScript, and archive links remain excluded.
+### MT-010a: Crawl And Reindex PDFs
+- Steps:
+  1. Crawl a documentation page that links to a text-bearing `.pdf` URL.
+  2. Search for text that appears only in the PDF.
+  3. Repeat with a PDF download endpoint whose URL has no `.pdf` suffix but returns `Content-Type: application/pdf`.
+  4. Re-run the PDF URL with `--pages` and then from a `--pages-file`.
+  5. Repeat a selected PDF with `crawl.redirect_policy: final`, `requested`, and `skip` using a test endpoint that redirects to another PDF URL.
+  6. Include a malformed, image-only, or unavailable PDF alongside a valid page or selected URL.
+- Expected result:
+  - The PDF source URL and extracted text are present in the SQLite index and search results.
+  - URL-based and content-type-based PDFs are both fetched through the authenticated browser session and indexed.
+  - Both targeted reindex forms refresh the existing PDF record.
+  - `final` stores the redirected landing URL, `requested` stores the original URL, and `skip` omits the redirected PDF from the index.
+  - A PDF failure is reported without stopping later crawl pages or selected reindex URLs; targeted reindex reports `reason_code=pdf_error`.
+  - Images, JavaScript, and archive links remain excluded.
 
 ### MT-011: Expired Session Stops Crawl
 - Steps:

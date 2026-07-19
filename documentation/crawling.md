@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-07-16
-- Version: v2.3
+- Last Updated: 2026-07-19
+- Version: v2.4
 
 ## Change Log
+- 2026-07-19 | v2.4 | Documented PDF detection by URL or response content type, authenticated fetching, PDF redirect policies, and failure handling in crawl and targeted reindex flows.
 - 2026-07-16 | v2.3 | Documented configured browser installation and missing-browser recovery.
 - 2026-07-05 | v2.2 | Added targeted batch-size guardrails for `docmcp-crawl --pages` and `--pages-file`, including large-batch warnings and a hard refusal above the supported limit.
 - 2026-07-04 | v2.1 | Documented targeted selected-page reindexing through `docmcp-crawl --pages` and `--pages-file`, including validation and summary behavior.
@@ -125,9 +126,11 @@ docmcp-crawl --version
 - It then checks `main`, `article`, `[role="main"]`, `#content`, `.content`, and `body`.
 - The largest candidate is converted to Markdown with `markdownify` when available.
 - If `markdownify` is missing, the crawler falls back to plain text extraction.
-- PDFs identified by URL extension or `application/pdf` content type are fetched through the authenticated browser request client and extracted with `pypdf`.
+- PDFs identified by a `.pdf` URL path or an `application/pdf` response content type are fetched through the authenticated browser request client and extracted with `pypdf`. This also supports download endpoints whose URLs do not end in `.pdf`.
 - Extracted PDF text is stored in the same searchable Markdown field as HTML content. The PDF metadata title is used when present; otherwise its source URL is used.
 - Image-only, empty, malformed, or unreadable PDFs are reported as PDF extraction errors and do not stop unrelated pages from being crawled.
+- PDF requests use the browser context's authenticated request client, so protected PDF links reuse the active saved session. Failed HTTP requests and successful responses that are not PDFs are rejected and are not indexed.
+- PDF redirects use the configured `crawl.redirect_policy`: `final` stores the normalized landing URL, `requested` stores the original requested URL, and `skip` leaves the redirected PDF out of the index.
 
 ### Indexing
 - The SQLite index stores page URL, page title, Markdown content, and last crawled timestamp.
@@ -169,6 +172,7 @@ docmcp-crawl --version
 - If a site needs query-based pages, `crawl.ignore_query_links` must be set to `false`; otherwise discovered query links are skipped while the configured `crawl.start_url` keeps its query string exactly as configured.
 - `crawl.start_delay_seconds` is ignored in headless mode.
 - If redirect behavior is surprising, check the debug trace for both the requested URL, the normalized landing URL, and the redirect policy line that was applied.
+- For a PDF download endpoint, use `--debug` to confirm the requested URL, response classification, extraction result, and any redirect-policy decision. A PDF extraction failure is reported for that page while normal crawling continues with later pages; targeted reindex reports the page with reason code `pdf_error` and continues with the remaining selections.
 - Incremental page-only vector updates are deferred technical debt and should not be assumed by operators or test scenarios.
 
 ## References
