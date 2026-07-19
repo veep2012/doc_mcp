@@ -170,7 +170,8 @@ async def _fetch_pdf_document(context, url: str) -> tuple[str, str | None, str]:
     if not (_is_pdf_url(response.url) or _response_is_pdf(response)):
         raise PdfExtractionError("response is not a PDF document")
     title, content = _extract_pdf_document(await response.body())
-    return _normalize_url(response.url, strip_query=False), title, content
+    preserve_query = "?" in url
+    return _normalize_url(response.url, strip_query=not preserve_query), title, content
 
 
 _REDIRECT_POLICIES = frozenset({"final", "requested", "skip"})
