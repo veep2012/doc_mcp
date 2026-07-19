@@ -56,6 +56,121 @@ def test_pdf_detection_recognizes_url_and_content_type():
     assert not crawl_cli._is_pdf_content_type("text/html")
 
 
+@pytest.mark.parametrize(
+    ("ok", "status", "response_url", "content_type", "expected_message"),
+    [
+        (False, 503, "https://example.test/docs/reference.pdf", "application/pdf", "HTTP 503"),
+        (True, 200, "https://example.test/docs/reference", "text/html", "not a PDF"),
+    ],
+)
+def test_fetch_pdf_document_rejects_failed_or_non_pdf_responses(
+    monkeypatch,
+    ok,
+    status,
+    response_url,
+    content_type,
+    expected_message,
+):
+    class FakeResponse:
+        url = response_url
+        headers = {"content-type": content_type}
+
+        async def body(self):
+            return b"not used"
+
+    FakeResponse.ok = ok
+    FakeResponse.status = status
+
+    class FakeRequest:
+        async def get(self, url, timeout):
+            assert url == "https://example.test/docs/reference.pdf"
+            assert timeout == 60000
+            return FakeResponse()
+
+    context = types.SimpleNamespace(request=FakeRequest())
+
+    with pytest.raises(crawl_cli.PdfExtractionError, match=expected_message):
+        asyncio.run(
+            crawl_cli._fetch_pdf_document(context, "https://example.test/docs/reference.pdf")
+        )
+
+
+def test_fetch_pdf_document_accepts_content_type_only_and_preserves_query(monkeypatch):
+    class FakeResponse:
+        ok = True
+        status = 200
+        url = "https://example.test/docs/download?file=reference"
+        headers = {"content-type": "application/pdf; charset=binary"}
+
+        async def body(self):
+            return b"%PDF"
+
+    class FakeRequest:
+        async def get(self, url, timeout):
+            return FakeResponse()
+
+    monkeypatch.setattr(
+        crawl_cli,
+        "_extract_pdf_document",
+        lambda data: ("Reference PDF", "PDF-only content"),
+    )
+    context = types.SimpleNamespace(request=FakeRequest())
+
+    assert asyncio.run(
+        crawl_cli._fetch_pdf_document(context, "https://example.test/docs/download?file=reference")
+    ) == (
+        "https://example.test/docs/download?file=reference",
+        "Reference PDF",
+        "PDF-only content",
+    )
+
+
+@pytest.mark.parametrize(
+    ("redirect_policy", "expected_url", "expected_debug"),
+    [
+        ("final", "https://example.test/docs/reference.pdf", "final"),
+        ("requested", "https://example.test/docs/download", "requested"),
+        ("skip", None, "skip"),
+    ],
+)
+def test_index_pdf_document_applies_redirect_policy(
+    monkeypatch, tmp_path, redirect_policy, expected_url, expected_debug
+):
+    indexed = []
+    debug_lines = []
+
+    async def fake_fetch(context, requested_url):
+        assert requested_url == "https://example.test/docs/download"
+        return "https://example.test/docs/reference.pdf", "Reference PDF", "PDF-only content"
+
+    monkeypatch.setattr(crawl_cli, "_fetch_pdf_document", fake_fetch)
+    monkeypatch.setattr(
+        crawl_cli,
+        "upsert_page",
+        lambda index_file, url, title, content: indexed.append((index_file, url, title, content)),
+    )
+
+    result = asyncio.run(
+        crawl_cli._index_pdf_document(
+            types.SimpleNamespace(),
+            requested_url="https://example.test/docs/download",
+            index_file=str(tmp_path / "docs.db"),
+            redirect_policy=redirect_policy,
+            debug=debug_lines.append,
+        )
+    )
+
+    assert result == (expected_url, "Reference PDF")
+    if expected_url is None:
+        assert indexed == []
+        assert "skipping redirected PDF" in " ".join(debug_lines)
+    else:
+        assert indexed == [
+            (str(tmp_path / "docs.db"), expected_url, "Reference PDF", "PDF-only content")
+        ]
+        assert any(f"indexing {expected_debug} URL {expected_url}" in line for line in debug_lines)
+
+
 def test_extract_pdf_document_normalizes_text_and_uses_metadata_title(monkeypatch):
     class FakePage:
         def extract_text(self):
@@ -1237,6 +1352,180 @@ def test_crawl_site_headful_indexes_linked_pdf(monkeypatch, tmp_path):
     assert indexed_pdf["content_md"] == "PDF-only content"
 
 
+def test_crawl_site_headful_indexes_pdf_detected_by_content_type(monkeypatch, tmp_path):
+    class FakeResponse:
+        url = "https://example.test/docs/download"
+        ok = True
+        status = 200
+        headers = {"content-type": "application/pdf"}
+
+        async def body(self):
+            return b"%PDF"
+
+    class FakeRequest:
+        async def get(self, url, timeout):
+            assert url == "https://example.test/docs/download"
+            return FakeResponse()
+
+    class FakePage:
+        url = ""
+
+        async def goto(self, url, wait_until, timeout):
+            self.url = url
+            if url.endswith("/download"):
+                return FakeResponse()
+            return types.SimpleNamespace(
+                url=url,
+                headers={"content-type": "text/html"},
+            )
+
+        async def title(self):
+            return "Docs"
+
+        async def content(self):
+            return "<main>PDF download</main>"
+
+        async def query_selector(self, selector):
+            return None
+
+        async def eval_on_selector_all(self, selector, script):
+            return [{"href": "/docs/download"}]
+
+    class FakeContext:
+        request = FakeRequest()
+
+        async def new_page(self):
+            return FakePage()
+
+    class FakeBrowser:
+        async def new_context(self, **kwargs):
+            return FakeContext()
+
+        async def close(self):
+            return None
+
+    class FakeChromium:
+        async def launch(self, headless):
+            return FakeBrowser()
+
+    class FakePlaywrightManager:
+        async def __aenter__(self):
+            return types.SimpleNamespace(chromium=FakeChromium())
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    async def fake_sleep(delay):
+        return None
+
+    monkeypatch.setitem(
+        sys.modules,
+        "playwright.async_api",
+        types.SimpleNamespace(async_playwright=lambda: FakePlaywrightManager()),
+    )
+    monkeypatch.setattr(crawl_cli.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(
+        crawl_cli, "_extract_pdf_document", lambda data: ("Download PDF", "PDF-only content")
+    )
+    index_file = tmp_path / "docs.db"
+    site = {
+        "name": "Example Docs",
+        "url": "https://example.test/docs",
+        "index_file": str(index_file),
+        "crawl": {"start_url": "https://example.test/docs", "max_depth": 1, "delay_seconds": 0},
+    }
+
+    assert asyncio.run(crawl_cli.crawl_site_headful(site, headless=True))
+    indexed_pdf = get_page(str(index_file), "https://example.test/docs/download")
+    assert indexed_pdf["title"] == "Download PDF"
+    assert indexed_pdf["content_md"] == "PDF-only content"
+
+
+def test_crawl_site_headful_continues_after_pdf_extraction_failure(monkeypatch, tmp_path):
+    class FakePage:
+        url = ""
+
+        async def goto(self, url, wait_until, timeout):
+            self.url = url
+            return types.SimpleNamespace(
+                url=url,
+                headers={"content-type": "text/html"},
+            )
+
+        async def title(self):
+            return "Guide"
+
+        async def content(self):
+            if self.url.endswith("/docs"):
+                return "<main>Start</main>"
+            return "<main>Guide content</main>"
+
+        async def query_selector(self, selector):
+            return None
+
+        async def eval_on_selector_all(self, selector, script):
+            if self.url.endswith("/docs"):
+                return [
+                    {"href": "/docs/reference.pdf"},
+                    {"href": "/docs/guide"},
+                ]
+            return []
+
+    class FakeContext:
+        async def new_page(self):
+            return FakePage()
+
+    class FakeBrowser:
+        async def new_context(self, **kwargs):
+            return FakeContext()
+
+        async def close(self):
+            return None
+
+    class FakeChromium:
+        async def launch(self, headless):
+            return FakeBrowser()
+
+    class FakePlaywrightManager:
+        async def __aenter__(self):
+            return types.SimpleNamespace(chromium=FakeChromium())
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    async def fake_sleep(delay):
+        return None
+
+    async def fail_index(*args, **kwargs):
+        raise crawl_cli.PdfExtractionError("PDF contains no extractable text")
+
+    indexed = []
+    monkeypatch.setitem(
+        sys.modules,
+        "playwright.async_api",
+        types.SimpleNamespace(async_playwright=lambda: FakePlaywrightManager()),
+    )
+    monkeypatch.setattr(crawl_cli.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(crawl_cli, "_index_pdf_document", fail_index)
+    monkeypatch.setattr(
+        crawl_cli,
+        "upsert_page",
+        lambda index_file, url, title, content: indexed.append((url, title, content)),
+    )
+    site = {
+        "name": "Example Docs",
+        "url": "https://example.test/docs",
+        "index_file": str(tmp_path / "docs.db"),
+        "crawl": {"start_url": "https://example.test/docs", "max_depth": 1, "delay_seconds": 0},
+    }
+
+    assert asyncio.run(crawl_cli.crawl_site_headful(site, headless=True))
+    assert indexed == [
+        ("https://example.test/docs", "Guide", "Start"),
+        ("https://example.test/docs/guide", "Guide", "Guide content"),
+    ]
+
+
 def test_reindex_selected_pages_indexes_targeted_pdf(monkeypatch, tmp_path):
     class FakeResponse:
         url = "https://example.test/docs/reference.pdf"
@@ -1310,6 +1599,170 @@ def test_reindex_selected_pages_indexes_targeted_pdf(monkeypatch, tmp_path):
         }
     ]
     assert get_page(str(index_file), "https://example.test/docs/reference.pdf")["content_md"] == (
+        "PDF-only content"
+    )
+
+
+def test_reindex_selected_pages_reports_pdf_extraction_failure_and_continues(
+    monkeypatch, tmp_path, capsys
+):
+    class FakeResponse:
+        url = "https://example.test/docs/broken.pdf"
+        ok = True
+        status = 200
+        headers = {"content-type": "application/pdf"}
+
+        async def body(self):
+            return b"%PDF"
+
+    class FakeRequest:
+        async def get(self, url, timeout):
+            return FakeResponse()
+
+    class FakeContext:
+        request = FakeRequest()
+
+        async def new_page(self):
+            return types.SimpleNamespace()
+
+    class FakeBrowser:
+        async def new_context(self, **kwargs):
+            return FakeContext()
+
+        async def close(self):
+            return None
+
+    class FakeChromium:
+        async def launch(self, headless):
+            return FakeBrowser()
+
+    class FakePlaywrightManager:
+        async def __aenter__(self):
+            return types.SimpleNamespace(chromium=FakeChromium())
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    async def fake_sleep(delay):
+        return None
+
+    monkeypatch.setitem(
+        sys.modules,
+        "playwright.async_api",
+        types.SimpleNamespace(async_playwright=lambda: FakePlaywrightManager()),
+    )
+    monkeypatch.setattr(crawl_cli.asyncio, "sleep", fake_sleep)
+
+    async def fail_index(*args, **kwargs):
+        raise crawl_cli.PdfExtractionError("PDF contains no extractable text")
+
+    monkeypatch.setattr(crawl_cli, "_index_pdf_document", fail_index)
+    index_file = tmp_path / "docs.db"
+    site = {
+        "name": "Example Docs",
+        "url": "https://example.test/docs",
+        "index_file": str(index_file),
+        "crawl": {"start_url": "https://example.test/docs", "delay_seconds": 0},
+    }
+
+    results = asyncio.run(
+        crawl_cli.reindex_selected_pages(
+            site, ["https://example.test/docs/broken.pdf"], headless=True
+        )
+    )
+
+    assert results == [
+        {
+            "url": "https://example.test/docs/broken.pdf",
+            "outcome": "failed",
+            "reason_code": "pdf_error",
+            "reason": "PDF extraction error: PDF contains no extractable text",
+        }
+    ]
+    assert "Targeted reindex summary: indexed=0 skipped=0 failed=1" in capsys.readouterr().out
+
+
+def test_reindex_selected_pages_indexes_pdf_detected_by_content_type(monkeypatch, tmp_path):
+    class FakeResponse:
+        url = "https://example.test/docs/download"
+        ok = True
+        status = 200
+        headers = {"content-type": "application/pdf"}
+
+        async def body(self):
+            return b"%PDF"
+
+    class FakeRequest:
+        async def get(self, url, timeout):
+            assert url == "https://example.test/docs/download"
+            return FakeResponse()
+
+    class FakePage:
+        url = ""
+
+        async def goto(self, url, wait_until, timeout):
+            self.url = url
+            return FakeResponse()
+
+    class FakeContext:
+        request = FakeRequest()
+
+        async def new_page(self):
+            return FakePage()
+
+    class FakeBrowser:
+        async def new_context(self, **kwargs):
+            return FakeContext()
+
+        async def close(self):
+            return None
+
+    class FakeChromium:
+        async def launch(self, headless):
+            return FakeBrowser()
+
+    class FakePlaywrightManager:
+        async def __aenter__(self):
+            return types.SimpleNamespace(chromium=FakeChromium())
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    async def fake_sleep(delay):
+        return None
+
+    monkeypatch.setitem(
+        sys.modules,
+        "playwright.async_api",
+        types.SimpleNamespace(async_playwright=lambda: FakePlaywrightManager()),
+    )
+    monkeypatch.setattr(crawl_cli.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(
+        crawl_cli, "_extract_pdf_document", lambda data: ("Download PDF", "PDF-only content")
+    )
+    index_file = tmp_path / "docs.db"
+    site = {
+        "name": "Example Docs",
+        "url": "https://example.test/docs",
+        "index_file": str(index_file),
+        "crawl": {"start_url": "https://example.test/docs", "delay_seconds": 0},
+    }
+
+    results = asyncio.run(
+        crawl_cli.reindex_selected_pages(
+            site, ["https://example.test/docs/download"], headless=True
+        )
+    )
+
+    assert results == [
+        {
+            "url": "https://example.test/docs/download",
+            "requested_url": "https://example.test/docs/download",
+            "outcome": "indexed",
+            "title": "Download PDF",
+        }
+    ]
+    assert get_page(str(index_file), "https://example.test/docs/download")["content_md"] == (
         "PDF-only content"
     )
 
