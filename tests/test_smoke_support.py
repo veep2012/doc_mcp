@@ -127,6 +127,7 @@ def test_optional_dependency_gate_uses_repository_install_command():
 
 
 def test_shared_helpers_import_without_tests_package(tmp_path):
+    """Shared helpers must not require pytest's test-package import behavior."""
     require_test_dependency("mcp.client.stdio", "MCP", "shared smoke test helpers")
     sitecustomize = tmp_path / "sitecustomize.py"
     sitecustomize.write_text(
@@ -153,7 +154,7 @@ def test_shared_helpers_import_without_tests_package(tmp_path):
         "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
     }
     result = subprocess.run(
-        [sys.executable, "-c", "import smoke_support; import test_support"],
+        [sys.executable, "-c", "import smoke_support\nimport test_support"],
         cwd=REPO_ROOT,
         env=env,
         capture_output=True,
