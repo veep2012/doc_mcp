@@ -109,7 +109,7 @@ List the most common failure modes for `doc-mcp` and the first corrective step f
 
 ### Tests Skip Because Playwright Or MCP Is Missing
 - Default `pytest` collection skips only tests that require unavailable Playwright or MCP dependencies.
-- Install the missing dependency with `python -m pip install playwright` or `python -m pip install mcp`, then rerun the affected test.
+- Install the repository's development/test dependencies with `python -m pip install -r requirements-dev.txt`, then rerun the affected test. For a targeted repair, you can install only the missing package with `python -m pip install playwright` or `python -m pip install mcp`.
 
 ### The Configured Browser Will Not Launch
 - Install the engine selected by `playwright.browser`:

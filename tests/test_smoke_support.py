@@ -7,7 +7,6 @@ import textwrap
 import pytest
 
 from tests.conftest import REPO_ROOT
-from tests.smoke.support import require_existing_path, require_executable
 
 
 def test_make_test_declares_unit_before_smoke():
@@ -66,12 +65,65 @@ def test_direct_pytest_excludes_smoke_by_default(tmp_path):
         shutil.rmtree(probe_dir, ignore_errors=True)
 
 
+def test_optional_dependency_gates_allow_collection_in_minimal_environment(tmp_path):
+    sitecustomize = tmp_path / "sitecustomize.py"
+    sitecustomize.write_text(
+        textwrap.dedent(
+            """
+            import importlib.abc
+            import sys
+
+            class BlockOptionalDependencies(importlib.abc.MetaPathFinder):
+                def find_spec(self, fullname, path=None, target=None):
+                    if fullname.split(".", 1)[0] in {"mcp", "playwright"}:
+                        raise ModuleNotFoundError(fullname)
+                    return None
+
+            sys.meta_path.insert(0, BlockOptionalDependencies())
+            """
+        ),
+        encoding="utf-8",
+    )
+
+    env = {
+        "PATH": os.environ.get("PATH", ""),
+        "PYTHONPATH": os.pathsep.join([str(tmp_path), str(REPO_ROOT / "src"), str(REPO_ROOT)]),
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    }
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "--collect-only",
+            "-q",
+            "tests/test_playwright_settings.py",
+            "tests/smoke/test_mcp_smoke.py",
+        ],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    output = result.stdout + result.stderr
+    assert result.returncode == 0, output
+    assert "2 tests collected" in result.stdout
+    assert "MCP is required for smoke tests" in output
+    assert "ModuleNotFoundError" not in output
+
+
 def test_missing_container_runtime_fails_with_actionable_message():
+    from tests.smoke.support import require_executable
+
     with pytest.raises(pytest.fail.Exception, match="Install Podman or Docker"):
         require_executable("definitely-missing-runtime", "Install Podman or Docker.")
 
 
 def test_missing_prepared_index_fails_with_actionable_message(tmp_path):
+    from tests.smoke.support import require_existing_path
+
     with pytest.raises(pytest.fail.Exception, match="Prepare the index with docmcp-crawl"):
         require_existing_path(
             tmp_path / "missing.db",
