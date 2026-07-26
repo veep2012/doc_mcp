@@ -15,13 +15,12 @@ from typing import TextIO
 
 import pytest
 
-try:
-    from mcp import ClientSession
-    from mcp.client.stdio import StdioServerParameters, stdio_client
-except ModuleNotFoundError:  # pragma: no cover - optional smoke dependency
-    pytest.skip("mcp is required for smoke tests", allow_module_level=True)
+from tests.conftest import REPO_ROOT, require_test_dependency
 
-from tests.conftest import REPO_ROOT
+require_test_dependency("mcp.client.stdio", "MCP", "smoke tests")
+
+from mcp import ClientSession  # noqa: E402
+from mcp.client.stdio import StdioServerParameters, stdio_client  # noqa: E402
 
 _SMOKE_ARTIFACT_DIRS: list[tempfile.TemporaryDirectory[str]] = []
 
