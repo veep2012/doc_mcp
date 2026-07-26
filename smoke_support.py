@@ -15,7 +15,7 @@ from typing import TextIO
 
 import pytest
 
-from tests.conftest import REPO_ROOT, require_test_dependency
+from test_support import REPO_ROOT, require_test_dependency
 
 require_test_dependency("mcp.client.stdio", "MCP", "smoke tests")
 

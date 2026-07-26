@@ -6,7 +6,7 @@ import textwrap
 
 import pytest
 
-from tests.conftest import REPO_ROOT, require_test_dependency
+from test_support import REPO_ROOT, require_test_dependency
 
 
 def test_make_test_declares_unit_before_smoke():
@@ -126,15 +126,53 @@ def test_optional_dependency_gate_uses_repository_install_command():
         )
 
 
+def test_shared_helpers_import_without_tests_package(tmp_path):
+    require_test_dependency("mcp.client.stdio", "MCP", "shared smoke test helpers")
+    sitecustomize = tmp_path / "sitecustomize.py"
+    sitecustomize.write_text(
+        textwrap.dedent(
+            """
+            import importlib.abc
+            import sys
+
+            class BlockTestsPackage(importlib.abc.MetaPathFinder):
+                def find_spec(self, fullname, path=None, target=None):
+                    if fullname == "tests" or fullname.startswith("tests."):
+                        raise ModuleNotFoundError(fullname)
+                    return None
+
+            sys.meta_path.insert(0, BlockTestsPackage())
+            """
+        ),
+        encoding="utf-8",
+    )
+
+    env = {
+        "PATH": os.environ.get("PATH", ""),
+        "PYTHONPATH": os.pathsep.join([str(tmp_path), str(REPO_ROOT / "src"), str(REPO_ROOT)]),
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    }
+    result = subprocess.run(
+        [sys.executable, "-c", "import smoke_support; import test_support"],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr or result.stdout
+
+
 def test_missing_container_runtime_fails_with_actionable_message():
-    from tests.smoke.support import require_executable
+    from smoke_support import require_executable
 
     with pytest.raises(pytest.fail.Exception, match="Install Podman or Docker"):
         require_executable("definitely-missing-runtime", "Install Podman or Docker.")
 
 
 def test_missing_prepared_index_fails_with_actionable_message(tmp_path):
-    from tests.smoke.support import require_existing_path
+    from smoke_support import require_existing_path
 
     with pytest.raises(pytest.fail.Exception, match="Prepare the index with docmcp-crawl"):
         require_existing_path(
