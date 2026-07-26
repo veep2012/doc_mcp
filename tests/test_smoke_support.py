@@ -6,7 +6,7 @@ import textwrap
 
 import pytest
 
-from tests.conftest import REPO_ROOT
+from tests.conftest import REPO_ROOT, require_test_dependency
 
 
 def test_make_test_declares_unit_before_smoke():
@@ -112,6 +112,18 @@ def test_optional_dependency_gates_allow_collection_in_minimal_environment(tmp_p
     assert "2 tests collected" in result.stdout
     assert "MCP is required for smoke tests" in output
     assert "ModuleNotFoundError" not in output
+
+
+def test_optional_dependency_gate_uses_repository_install_command():
+    with pytest.raises(
+        pytest.skip.Exception,
+        match=r"Install the repository test dependencies with: python -m pip install -r requirements-dev\.txt",
+    ):
+        require_test_dependency(
+            "docmcp_test_dependency_that_is_not_installed",
+            "Example dependency",
+            "example tests",
+        )
 
 
 def test_missing_container_runtime_fails_with_actionable_message():
