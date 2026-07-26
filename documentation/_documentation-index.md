@@ -45,6 +45,7 @@ Provide a single entry point for all files in `documentation/` and make it easy 
 ### Testing And Support
 - `test_scenarios/manual-test-scenarios.md` - Manual QA checklist for setup, authentication, crawling, indexing, and MCP client smoke tests.
 - `test_scenarios/testing_framework_test_scenarios.md` - Automated pytest and smoke scenario catalog for the repository test framework.
+- `test_scenarios/testing_framework_guide.md` - External-QA instructions for running, diagnosing, and extending the pytest and smoke framework.
 - `troubleshooting.md` - Common failure modes and recovery steps.
 
 ### Standards And Templates

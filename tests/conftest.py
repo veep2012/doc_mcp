@@ -1,25 +1,9 @@
 import hashlib
 import re
-from pathlib import Path
 
 import pytest
 
 import docmcp.vector_index as vector_index
-
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-TEST_DEPENDENCY_INSTALL_COMMAND = "python -m pip install -r requirements-dev.txt"
-
-
-def require_test_dependency(module_name: str, dependency_name: str, purpose: str):
-    """Skip tests consistently when an optional test dependency is unavailable."""
-    return pytest.importorskip(
-        module_name,
-        reason=(
-            f"{dependency_name} is required for {purpose}. "
-            f"Install the repository test dependencies with: {TEST_DEPENDENCY_INSTALL_COMMAND}"
-        ),
-    )
 
 
 class _FakeTextEmbedding:
