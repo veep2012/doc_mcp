@@ -1,3 +1,5 @@
+"""Shared test helpers located at the repository root."""
+
 from pathlib import Path
 
 import pytest
