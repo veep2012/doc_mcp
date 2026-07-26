@@ -4,7 +4,7 @@ import textwrap
 import pytest
 
 from docmcp.index_store import init_db, upsert_page
-from support.smoke import (
+from smoke_support import (
     call_search_docs,
     print_smoke_context,
     smoke_artifact_root,

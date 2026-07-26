@@ -56,6 +56,8 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - `TS-TF-008` - MCP smoke starts an isolated stdio server and verifies `search_docs` against a prepared index.
 - `TS-TF-009` - Missing smoke prerequisites fail with actionable messages.
 - `TS-TF-010` - Default collection remains usable and reports actionable skips for unavailable optional runtime dependencies.
+- `TS-TF-011` - Test files do not import shared helpers through the `tests.*` package path.
+- `TS-TF-012` - Shared helpers import successfully through the supported pytest and direct Python invocation modes.
 
 ### Scenario Details
 #### TS-TF-001
@@ -102,6 +104,14 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - Purpose: Keep collection usable in dependency-light environments.
 - Expected Result: Collection succeeds without Playwright or MCP; affected tests skip and print an installation command.
 
+#### TS-TF-011
+- Purpose: Prevent accidental reintroduction of package-dependent `tests.*` imports in test and smoke files.
+- Expected Result: The static AST guard fails with the source path, line number, and forbidden module when a `tests` or `tests.*` import is added.
+
+#### TS-TF-012
+- Purpose: Detect import-path regressions that appear only under a specific test entry point.
+- Expected Result: The helper modules import successfully through the `pytest` executable, `python -m pytest`, and direct Python import execution.
+
 ### Automated Test Mapping
 - `TS-TF-001` -> `tests/test_smoke_support.py::test_make_test_dry_run_lists_unit_before_smoke`
 - `TS-TF-002` -> `tests/test_smoke_support.py::test_direct_pytest_excludes_smoke_by_default`
@@ -112,7 +122,9 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - `TS-TF-007` -> `tests/smoke/test_crawl_smoke.py`
 - `TS-TF-008` -> `tests/smoke/test_mcp_smoke.py`
 - `TS-TF-009` -> `tests/test_smoke_support.py::{test_missing_container_runtime_fails_with_actionable_message,test_missing_prepared_index_fails_with_actionable_message}`
-- `TS-TF-010` -> `tests/test_playwright_settings.py::test_authentication_and_session_validation_use_site_playwright_settings`, `tests/support/smoke.py`, `tests/test_smoke_support.py::{test_optional_dependency_gates_allow_collection_in_minimal_environment,test_optional_dependency_gate_uses_repository_install_command,test_shared_helpers_import_without_tests_package}`
+- `TS-TF-010` -> `tests/test_playwright_settings.py::test_authentication_and_session_validation_use_site_playwright_settings`, `tests/support/smoke_support.py`, `tests/test_smoke_support.py::{test_optional_dependency_gates_allow_collection_in_minimal_environment,test_optional_dependency_gate_uses_repository_install_command,test_shared_helpers_import_without_tests_package}`
+- `TS-TF-011` -> `tests/test_smoke_support.py::test_test_files_do_not_use_forbidden_tests_package_imports`
+- `TS-TF-012` -> `tests/test_smoke_support.py::{test_shared_helpers_import_under_supported_invocation_modes,test_support_modules_import_as_top_level_modules}`
 
 ## Edge Cases
 - If Podman is installed but not usable in the current environment, rerun smoke tests with `CONTAINER_BIN=docker`.

@@ -1,12 +1,35 @@
+import ast
 import os
 import shutil
 import subprocess
 import sys
 import textwrap
+from pathlib import Path
 
 import pytest
 
-from support.dependencies import REPO_ROOT, require_test_dependency
+from test_support import REPO_ROOT, require_test_dependency
+
+
+def test_test_files_do_not_use_forbidden_tests_package_imports():
+    forbidden: list[tuple[str, int, str]] = []
+
+    for path in sorted((REPO_ROOT / "tests").rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            imported_modules: list[str] = []
+            if isinstance(node, ast.ImportFrom) and node.module:
+                imported_modules.append(node.module)
+            elif isinstance(node, ast.Import):
+                imported_modules.extend(alias.name for alias in node.names)
+
+            for module in imported_modules:
+                if module == "tests" or module.startswith("tests."):
+                    forbidden.append((str(path.relative_to(REPO_ROOT)), node.lineno, module))
+
+    assert not forbidden, "Forbidden tests-package imports found:\n" + "\n".join(
+        f"- {path}:{line}: {module}" for path, line, module in forbidden
+    )
 
 
 def test_make_test_declares_unit_before_smoke():
@@ -150,7 +173,7 @@ def test_shared_helpers_import_without_tests_package(tmp_path):
     env = {
         **os.environ,
         "PYTHONPATH": os.pathsep.join(
-            [str(tmp_path), str(REPO_ROOT / "src"), str(REPO_ROOT / "tests")]
+            [str(tmp_path), str(REPO_ROOT / "src"), str(REPO_ROOT / "tests" / "support")]
         ),
         "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
     }
@@ -158,8 +181,8 @@ def test_shared_helpers_import_without_tests_package(tmp_path):
         [
             sys.executable,
             "-c",
-            "import support.smoke\n"
-            "from support.dependencies import REPO_ROOT\n"
+            "import smoke_support\n"
+            "from test_support import REPO_ROOT\n"
             "assert (REPO_ROOT / 'pytest.ini').is_file()",
         ],
         cwd=REPO_ROOT,
@@ -172,15 +195,81 @@ def test_shared_helpers_import_without_tests_package(tmp_path):
     assert result.returncode == 0, result.stderr or result.stdout
 
 
+def test_shared_helpers_import_under_supported_invocation_modes():
+    require_test_dependency("mcp.client.stdio", "MCP", "shared helper invocation tests")
+    target = "tests/test_smoke_support.py::test_support_modules_import_as_top_level_modules"
+    pytest_executable = Path(sys.executable).with_name("pytest")
+    if not pytest_executable.is_file():
+        pytest_executable = Path(shutil.which("pytest") or "")
+    if not pytest_executable.is_file():
+        pytest.fail("The pytest executable is required for invocation-mode coverage.")
+
+    pytest_env = {
+        **os.environ,
+        "PYTHONPATH": str(REPO_ROOT / "src"),
+    }
+    direct_env = {
+        **os.environ,
+        "PYTHONPATH": os.pathsep.join(
+            [str(REPO_ROOT / "src"), str(REPO_ROOT / "tests" / "support")]
+        ),
+    }
+    commands = [
+        (
+            "pytest executable",
+            [str(pytest_executable), "-q", target],
+            pytest_env,
+        ),
+        (
+            "python -m pytest",
+            [sys.executable, "-m", "pytest", "-q", target],
+            pytest_env,
+        ),
+        (
+            "direct Python import",
+            [
+                sys.executable,
+                "-c",
+                "import test_support; import smoke_support",
+            ],
+            direct_env,
+        ),
+    ]
+
+    failures = []
+    for mode, command, command_env in commands:
+        result = subprocess.run(
+            command,
+            cwd=REPO_ROOT,
+            env=command_env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            failures.append(
+                f"{mode} failed with exit code {result.returncode}:\n"
+                f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+            )
+
+    assert not failures, "\n\n".join(failures)
+
+
+def test_support_modules_import_as_top_level_modules():
+    import smoke_support
+
+    assert smoke_support.REPO_ROOT == REPO_ROOT
+
+
 def test_missing_container_runtime_fails_with_actionable_message():
-    from support.smoke import require_executable
+    from smoke_support import require_executable
 
     with pytest.raises(pytest.fail.Exception, match="Install Podman or Docker"):
         require_executable("definitely-missing-runtime", "Install Podman or Docker.")
 
 
 def test_missing_prepared_index_fails_with_actionable_message(tmp_path):
-    from support.smoke import require_existing_path
+    from smoke_support import require_existing_path
 
     with pytest.raises(pytest.fail.Exception, match="Prepare the index with docmcp-crawl"):
         require_existing_path(
