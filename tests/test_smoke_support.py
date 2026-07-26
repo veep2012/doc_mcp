@@ -6,7 +6,7 @@ import textwrap
 
 import pytest
 
-from tests.test_support import REPO_ROOT, require_test_dependency
+from support.dependencies import REPO_ROOT, require_test_dependency
 
 
 def test_make_test_declares_unit_before_smoke():
@@ -126,20 +126,40 @@ def test_optional_dependency_gate_uses_repository_install_command():
         )
 
 
-def test_shared_helpers_import_from_tests_package():
-    """Shared helpers are importable through the tests package."""
+def test_shared_helpers_import_without_tests_package(tmp_path):
+    """Shared helpers remain importable when the tests package is unavailable."""
     require_test_dependency("mcp.client.stdio", "MCP", "shared smoke test helpers")
+    sitecustomize = tmp_path / "sitecustomize.py"
+    sitecustomize.write_text(
+        textwrap.dedent(
+            """
+            import importlib.abc
+            import sys
+
+            class BlockTestsPackage(importlib.abc.MetaPathFinder):
+                def find_spec(self, fullname, path=None, target=None):
+                    if fullname == "tests" or fullname.startswith("tests."):
+                        raise ModuleNotFoundError(fullname)
+                    return None
+
+            sys.meta_path.insert(0, BlockTestsPackage())
+            """
+        ),
+        encoding="utf-8",
+    )
     env = {
         **os.environ,
-        "PYTHONPATH": os.pathsep.join([str(REPO_ROOT / "src"), str(REPO_ROOT)]),
+        "PYTHONPATH": os.pathsep.join(
+            [str(tmp_path), str(REPO_ROOT / "src"), str(REPO_ROOT / "tests")]
+        ),
         "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
     }
     result = subprocess.run(
         [
             sys.executable,
             "-c",
-            "import tests.smoke_support\n"
-            "from tests.test_support import REPO_ROOT\n"
+            "import support.smoke\n"
+            "from support.dependencies import REPO_ROOT\n"
             "assert (REPO_ROOT / 'pytest.ini').is_file()",
         ],
         cwd=REPO_ROOT,
@@ -153,14 +173,14 @@ def test_shared_helpers_import_from_tests_package():
 
 
 def test_missing_container_runtime_fails_with_actionable_message():
-    from tests.smoke_support import require_executable
+    from support.smoke import require_executable
 
     with pytest.raises(pytest.fail.Exception, match="Install Podman or Docker"):
         require_executable("definitely-missing-runtime", "Install Podman or Docker.")
 
 
 def test_missing_prepared_index_fails_with_actionable_message(tmp_path):
-    from tests.smoke_support import require_existing_path
+    from support.smoke import require_existing_path
 
     with pytest.raises(pytest.fail.Exception, match="Prepare the index with docmcp-crawl"):
         require_existing_path(

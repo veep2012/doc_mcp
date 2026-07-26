@@ -5,7 +5,7 @@ from docmcp.config.playwright import (
     launch_browser,
     resolve_playwright_settings,
 )
-from tests.test_support import require_test_dependency
+from support.dependencies import require_test_dependency
 
 
 class _Page:

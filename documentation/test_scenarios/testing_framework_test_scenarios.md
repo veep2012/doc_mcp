@@ -10,7 +10,7 @@
 - Related Tickets: veep2012/doc_mcp#2
 
 ## Change Log
-- 2026-07-26 | v0.2 | Documented MCP smoke prerequisites and added optional-dependency collection-gate regression coverage.
+- 2026-07-26 | v0.2 | Documented MCP smoke prerequisites, added optional-dependency collection-gate regression coverage, and mapped the package-independent test support helpers.
 - 2026-05-03 | v0.1 | Added pytest framework scenario coverage, smoke prerequisites, and automated test mapping.
 
 ## Purpose
@@ -112,7 +112,7 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - `TS-TF-007` -> `tests/smoke/test_crawl_smoke.py`
 - `TS-TF-008` -> `tests/smoke/test_mcp_smoke.py`
 - `TS-TF-009` -> `tests/test_smoke_support.py::{test_missing_container_runtime_fails_with_actionable_message,test_missing_prepared_index_fails_with_actionable_message}`
-- `TS-TF-010` -> `tests/test_playwright_settings.py::test_authentication_and_session_validation_use_site_playwright_settings`, `tests/smoke_support.py`, `tests/test_smoke_support.py::{test_optional_dependency_gates_allow_collection_in_minimal_environment,test_optional_dependency_gate_uses_repository_install_command}`
+- `TS-TF-010` -> `tests/test_playwright_settings.py::test_authentication_and_session_validation_use_site_playwright_settings`, `tests/support/smoke.py`, `tests/test_smoke_support.py::{test_optional_dependency_gates_allow_collection_in_minimal_environment,test_optional_dependency_gate_uses_repository_install_command,test_shared_helpers_import_without_tests_package}`
 
 ## Edge Cases
 - If Podman is installed but not usable in the current environment, rerun smoke tests with `CONTAINER_BIN=docker`.

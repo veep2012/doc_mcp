@@ -19,7 +19,7 @@ Explain how external QA engineers install, run, diagnose, and extend the reposit
 - In scope:
   - Running unit, performance, and end-to-end smoke tests.
   - Understanding the test and runtime folder layout.
-  - Using `test_support.py` and `smoke_support.py`.
+  - Using the `support.dependencies` and `support.smoke` helper modules.
   - Collecting logs and reporting failures.
 - Out of scope:
   - Product-specific manual test steps.
@@ -62,8 +62,8 @@ The framework uses pytest and Make. Plain pytest intentionally excludes smoke te
 | `tests/` | Default pytest suite for application behavior and framework contracts. |
 | `tests/smoke/` | End-to-end tests that require the `smoke` marker. |
 | `tests/conftest.py` | Session-wide pytest fixtures; it replaces the external embedding backend with a deterministic fake for fast, repeatable tests. |
-| `tests/test_support.py` | Minimal shared helpers for the test suite. |
-| `tests/smoke_support.py` | Smoke-only helpers for prerequisites, subprocesses, containers, runtime isolation, context output, and MCP stdio calls. |
+| `tests/support/dependencies.py` | Minimal shared dependency and repository-path helpers for the test suite. |
+| `tests/support/smoke.py` | Smoke-only helpers for prerequisites, subprocesses, containers, runtime isolation, context output, and MCP stdio calls. |
 | `src/docmcp/` | Application implementation under test. |
 | `src/main.py`, `auth_cli.py`, `crawl_cli.py`, `vectorize_cli.py` | Repository-level CLI entry scripts used by smoke tests and manual verification. |
 | `config/sites.yaml.example` | Example site configuration; it is not a smoke-test workspace. |
@@ -163,8 +163,8 @@ flowchart TD
 - `tests/test_smoke_support.py`: protects the framework itself, including Make ordering, marker defaults, optional dependency gates, and actionable prerequisite messages.
 
 ## Shared Support Modules
-### `tests/test_support.py`
-This test-directory module contains lightweight shared helpers:
+### `support.dependencies`
+This test-only package module contains lightweight shared helpers. Pytest adds `tests/` to its import path, so tests import it as `support.dependencies` rather than `tests.*`.
 
 - `REPO_ROOT`: absolute `Path` to the repository root. Use it for subprocess working directories and repository files.
 - `TEST_DEPENDENCY_INSTALL_COMMAND`: canonical remediation command, `python -m pip install -r requirements-dev.txt`.
@@ -172,7 +172,7 @@ This test-directory module contains lightweight shared helpers:
 
 Use this module in tests that need a dependency only for a specific test. Do not duplicate import-skip messages in individual test files.
 
-### `tests/smoke_support.py`
+### `support.smoke`
 Smoke tests should reuse these helpers so that failures and cleanup are consistent:
 
 | Helper | Behavior |
@@ -214,7 +214,7 @@ Smoke configuration normally uses paths relative to `DOC_MCP_HOME`. The crawl sm
 - Generated databases are under `<runtime_root>/index/`; they are useful for local inspection while the pytest process is alive but are not test reports.
 - There is no permanent JUnit or HTML report configured by default. Redirect terminal output when a durable text record is needed, for example: `make test-smoke 2>&1 | tee e2e-test-run.log`.
 
-Because `smoke_support.py` registers cleanup with `atexit`, the temporary smoke directory is normally removed when pytest exits. Copy the needed log or capture the terminal output before ending the process. If a run is interrupted, a leftover `.local/smoke/` directory may remain and can be inspected after the fact.
+Because `support.smoke` registers cleanup with `atexit`, the temporary smoke directory is normally removed when pytest exits. Copy the needed log or capture the terminal output before ending the process. If a run is interrupted, a leftover `.local/smoke/` directory may remain and can be inspected after the fact.
 
 ## QA Workflow
 1. Confirm the checkout is clean enough to test and that Python 3.11 or newer is available.
@@ -251,8 +251,9 @@ Useful environment details are the operating system, Python version, pytest vers
 - [Manual Test Scenarios](manual-test-scenarios.md)
 - [Makefile](../../Makefile)
 - [pytest.ini](../../pytest.ini)
-- [test_support.py](../../tests/test_support.py)
-- [smoke_support.py](../../tests/smoke_support.py)
+- [Support package](../../tests/support/)
+- [Dependency helpers](../../tests/support/dependencies.py)
+- [Smoke helpers](../../tests/support/smoke.py)
 - [Smoke crawl test](../../tests/smoke/test_crawl_smoke.py)
 - [Smoke MCP test](../../tests/smoke/test_mcp_smoke.py)
 - [Development requirements](../../requirements-dev.txt)
