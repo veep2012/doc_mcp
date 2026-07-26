@@ -69,6 +69,7 @@ def test_authentication_and_session_validation_use_site_playwright_settings(monk
         ),
     )
     import docmcp.auth.session as session
+
     calls = {}
     site = {
         "name": "Docs",
