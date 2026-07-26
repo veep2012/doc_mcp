@@ -1,11 +1,11 @@
-"""Shared test helpers located at the repository root."""
+"""Shared test helpers for the repository test suite."""
 
 from pathlib import Path
 
 import pytest
 
 
-REPO_ROOT = Path(__file__).resolve().parent
+REPO_ROOT = Path(__file__).resolve().parents[1]
 TEST_DEPENDENCY_INSTALL_COMMAND = "python -m pip install -r requirements-dev.txt"
 
 

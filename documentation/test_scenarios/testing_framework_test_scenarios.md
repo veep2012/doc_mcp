@@ -112,7 +112,7 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - `TS-TF-007` -> `tests/smoke/test_crawl_smoke.py`
 - `TS-TF-008` -> `tests/smoke/test_mcp_smoke.py`
 - `TS-TF-009` -> `tests/test_smoke_support.py::{test_missing_container_runtime_fails_with_actionable_message,test_missing_prepared_index_fails_with_actionable_message}`
-- `TS-TF-010` -> `tests/test_playwright_settings.py::test_authentication_and_session_validation_use_site_playwright_settings`, `tests/smoke/support.py`, `tests/test_smoke_support.py::{test_optional_dependency_gates_allow_collection_in_minimal_environment,test_optional_dependency_gate_uses_repository_install_command}`
+- `TS-TF-010` -> `tests/test_playwright_settings.py::test_authentication_and_session_validation_use_site_playwright_settings`, `tests/smoke_support.py`, `tests/test_smoke_support.py::{test_optional_dependency_gates_allow_collection_in_minimal_environment,test_optional_dependency_gate_uses_repository_install_command}`
 
 ## Edge Cases
 - If Podman is installed but not usable in the current environment, rerun smoke tests with `CONTAINER_BIN=docker`.

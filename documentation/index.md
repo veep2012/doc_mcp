@@ -44,6 +44,7 @@ Provide the entry point for the repository documentation set and link to the ope
 ### Testing And Support
 - [Manual Test Scenarios](test_scenarios/manual-test-scenarios.md)
 - [Testing Framework Test Scenarios](test_scenarios/testing_framework_test_scenarios.md)
+- [External QA Test Framework Guide](test_scenarios/testing_framework_guide.md)
 - [Troubleshooting](troubleshooting.md)
 
 ### What This Project Does
