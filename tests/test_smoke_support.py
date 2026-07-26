@@ -149,7 +149,7 @@ def test_shared_helpers_import_without_tests_package(tmp_path):
     )
 
     env = {
-        "PATH": os.environ.get("PATH", ""),
+        **os.environ,
         "PYTHONPATH": os.pathsep.join([str(REPO_ROOT / "src"), str(tmp_path)]),
         "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
     }
