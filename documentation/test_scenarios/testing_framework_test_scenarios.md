@@ -5,11 +5,12 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-05-03
-- Last Updated: 2026-05-03
-- Version: v0.1
+- Last Updated: 2026-07-26
+- Version: v0.2
 - Related Tickets: veep2012/doc_mcp#2
 
 ## Change Log
+- 2026-07-26 | v0.2 | Documented MCP smoke prerequisites and added optional-dependency collection-gate regression coverage.
 - 2026-05-03 | v0.1 | Added pytest framework scenario coverage, smoke prerequisites, and automated test mapping.
 
 ## Purpose
@@ -36,7 +37,7 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - FR-3: Automated tests must cover index store, config loader, crawler helpers, and MCP tool behavior.
 - FR-4: Smoke tests must cover a crawl against a temporary static site and MCP stdio search against a prepared index.
 - FR-5: Missing smoke prerequisites must fail with actionable messages instead of tracebacks.
-- FR-6: Default test collection must skip tests requiring unavailable Playwright or MCP dependencies with installation guidance.
+- FR-6: Default test collection must remain usable when Playwright or MCP is unavailable, and affected tests must report installation guidance.
 
 ### Non-Functional Requirements
 - NFR-1: Test commands should use the active virtual-environment Python.
@@ -54,7 +55,7 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - `TS-TF-007` - Crawl smoke indexes a temporary static site through Podman or Docker.
 - `TS-TF-008` - MCP smoke starts an isolated stdio server and verifies `search_docs` against a prepared index.
 - `TS-TF-009` - Missing smoke prerequisites fail with actionable messages.
-- `TS-TF-010` - Default collection skips tests requiring unavailable optional runtime dependencies.
+- `TS-TF-010` - Default collection remains usable and reports actionable skips for unavailable optional runtime dependencies.
 
 ### Scenario Details
 #### TS-TF-001
@@ -99,7 +100,7 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 
 #### TS-TF-010
 - Purpose: Keep collection usable in dependency-light environments.
-- Expected Result: Missing Playwright or MCP skips only the affected tests and prints an installation command.
+- Expected Result: Collection succeeds without Playwright or MCP; affected tests skip and print an installation command.
 
 ### Automated Test Mapping
 - `TS-TF-001` -> `tests/test_smoke_support.py::test_make_test_dry_run_lists_unit_before_smoke`
@@ -111,7 +112,7 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - `TS-TF-007` -> `tests/smoke/test_crawl_smoke.py`
 - `TS-TF-008` -> `tests/smoke/test_mcp_smoke.py`
 - `TS-TF-009` -> `tests/test_smoke_support.py::{test_missing_container_runtime_fails_with_actionable_message,test_missing_prepared_index_fails_with_actionable_message}`
-- `TS-TF-010` -> `tests/test_playwright_settings.py::test_authentication_and_session_validation_use_site_playwright_settings`, `tests/smoke/support.py`
+- `TS-TF-010` -> `tests/test_playwright_settings.py::test_authentication_and_session_validation_use_site_playwright_settings`, `tests/smoke/support.py`, `tests/test_smoke_support.py::{test_optional_dependency_gates_allow_collection_in_minimal_environment,test_optional_dependency_gate_uses_repository_install_command}`
 
 ## Edge Cases
 - If Podman is installed but not usable in the current environment, rerun smoke tests with `CONTAINER_BIN=docker`.
