@@ -154,7 +154,13 @@ def test_shared_helpers_import_without_tests_package(tmp_path):
         "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
     }
     result = subprocess.run(
-        [sys.executable, "-c", "import smoke_support\nimport test_support"],
+        [
+            sys.executable,
+            "-c",
+            "import smoke_support\n"
+            "from test_support import REPO_ROOT\n"
+            "assert (REPO_ROOT / 'pytest.ini').is_file()",
+        ],
         cwd=REPO_ROOT,
         env=env,
         capture_output=True,
