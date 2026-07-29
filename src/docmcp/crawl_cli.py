@@ -64,6 +64,7 @@ try:
 
     HAS_PYPDF = True
 except ImportError:
+    PdfReader = None
     HAS_PYPDF = False
 
 
@@ -162,20 +163,38 @@ def _extract_pdf_document(pdf_bytes: bytes) -> tuple[str | None, str]:
     return title, text
 
 
-async def _fetch_pdf_document(context, url: str) -> tuple[str, str | None, str]:
-    """Fetch a PDF with the browser context's authenticated request client."""
-    response = await context.request.get(
-        url,
-        timeout=60000,
-        headers={"Accept": "application/pdf"},
-    )
-    if not response.ok:
-        raise PdfExtractionError(f"PDF request failed with HTTP {response.status}")
-    if not (_is_pdf_url(response.url) or _response_is_pdf(response)):
-        raise PdfExtractionError("response is not a PDF document")
-    title, content = _extract_pdf_document(await response.body())
-    preserve_query = "?" in url
-    return _normalize_url(response.url, strip_query=not preserve_query), title, content
+async def _fetch_pdf_document(
+    context, url: str, *, playwright=None, proxy: dict | None = None
+) -> tuple[str, str | None, str]:
+    """Fetch a PDF through a proxy-aware request context with browser session state."""
+    request_context = None
+    try:
+        request = context.request
+        if playwright is not None and hasattr(playwright, "request"):
+            request_context = await playwright.request.new_context(
+                storage_state=await context.storage_state(),
+                proxy=proxy,
+            )
+            request = request_context
+        response = await request.get(
+            url,
+            timeout=60000,
+            headers={"Accept": "application/pdf"},
+        )
+        if not response.ok:
+            raise PdfExtractionError(f"PDF request failed with HTTP {response.status}")
+        if not (_is_pdf_url(response.url) or _response_is_pdf(response)):
+            raise PdfExtractionError("response is not a PDF document")
+        title, content = _extract_pdf_document(await response.body())
+        preserve_query = "?" in url
+        return _normalize_url(response.url, strip_query=not preserve_query), title, content
+    except PdfExtractionError:
+        raise
+    except Exception as exc:
+        raise PdfExtractionError(f"PDF download failed: {exc}") from exc
+    finally:
+        if request_context is not None:
+            await request_context.dispose()
 
 
 _REDIRECT_POLICIES = frozenset({"final", "requested", "skip"})
@@ -513,9 +532,12 @@ async def _index_pdf_document(
     index_file: str,
     redirect_policy: str,
     debug,
+    playwright=None,
+    proxy: dict | None = None,
 ) -> tuple[str | None, str]:
     """Fetch, extract, and upsert a PDF into the SQLite page index."""
-    current_url, pdf_title, content_md = await _fetch_pdf_document(context, requested_url)
+    fetch_kwargs = {"playwright": playwright, "proxy": proxy} if playwright is not None else {}
+    current_url, pdf_title, content_md = await _fetch_pdf_document(context, requested_url, **fetch_kwargs)
     if current_url != requested_url:
         if redirect_policy == "requested":
             index_url = requested_url
@@ -678,6 +700,8 @@ async def crawl_site_headful(site: dict, headless: bool = False, debug: bool = F
                                 index_file=index_file,
                                 redirect_policy=redirect_policy,
                                 debug=_debug,
+                                playwright=p,
+                                proxy=settings.launch_options.get("proxy"),
                             )
                         except PdfExtractionError as exc:
                             print(f"[crawl]   ✗ PDF extraction error: {exc}")
@@ -902,6 +926,8 @@ async def reindex_selected_pages(
                             index_file=index_file,
                             redirect_policy=redirect_policy,
                             debug=_debug,
+                            playwright=p,
+                            proxy=settings.launch_options.get("proxy"),
                         )
                     except PdfExtractionError as exc:
                         message = f"PDF extraction error: {exc}"
@@ -1001,6 +1027,8 @@ async def reindex_selected_pages(
                             index_file=index_file,
                             redirect_policy=redirect_policy,
                             debug=_debug,
+                            playwright=p,
+                            proxy=settings.launch_options.get("proxy"),
                         )
                     else:
                         index_url, title = await _index_loaded_page(

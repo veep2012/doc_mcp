@@ -126,6 +126,105 @@ def test_fetch_pdf_document_accepts_content_type_only_and_preserves_query(monkey
     )
 
 
+def test_fetch_pdf_document_uses_proxy_and_authenticated_storage_state(monkeypatch):
+    class FakeResponse:
+        ok = True
+        status = 200
+        url = "https://private.example.test/reference.pdf"
+        headers = {"content-type": "application/pdf"}
+
+        async def body(self):
+            return b"%PDF"
+
+    class FakeRequestContext:
+        disposed = False
+
+        async def get(self, url, timeout, **kwargs):
+            assert url == "https://private.example.test/reference.pdf"
+            assert timeout == 60000
+            assert kwargs == {"headers": {"Accept": "application/pdf"}}
+            return FakeResponse()
+
+        async def dispose(self):
+            self.disposed = True
+
+    class FakeRequestFactory:
+        def __init__(self):
+            self.context = FakeRequestContext()
+            self.options = None
+
+        async def new_context(self, **kwargs):
+            self.options = kwargs
+            return self.context
+
+    request_factory = FakeRequestFactory()
+    context = types.SimpleNamespace(
+        request=None,
+        storage_state=lambda: _storage_state(),
+    )
+
+    async def _storage_state():
+        return {"cookies": [{"name": "session", "value": "redacted"}], "origins": []}
+
+    monkeypatch.setattr(
+        crawl_cli,
+        "_extract_pdf_document",
+        lambda data: ("Reference PDF", "PDF-only content"),
+    )
+
+    assert asyncio.run(
+        crawl_cli._fetch_pdf_document(
+            context,
+            "https://private.example.test/reference.pdf",
+            playwright=types.SimpleNamespace(request=request_factory),
+            proxy={"server": "http://proxy.example.test:8080"},
+        )
+    ) == (
+        "https://private.example.test/reference.pdf",
+        "Reference PDF",
+        "PDF-only content",
+    )
+    assert request_factory.options == {
+        "storage_state": {"cookies": [{"name": "session", "value": "redacted"}], "origins": []},
+        "proxy": {"server": "http://proxy.example.test:8080"},
+    }
+    assert request_factory.context.disposed
+
+
+def test_fetch_pdf_document_wraps_request_errors_and_disposes_request_context():
+    class FakeRequestContext:
+        disposed = False
+
+        async def get(self, *args, **kwargs):
+            raise OSError("getaddrinfo ENOTFOUND private.example.test")
+
+        async def dispose(self):
+            self.disposed = True
+
+    class FakeRequestFactory:
+        def __init__(self):
+            self.context = FakeRequestContext()
+
+        async def new_context(self, **kwargs):
+            return self.context
+
+    request_factory = FakeRequestFactory()
+
+    async def _storage_state():
+        return {"cookies": [], "origins": []}
+
+    context = types.SimpleNamespace(request=None, storage_state=_storage_state)
+    with pytest.raises(crawl_cli.PdfExtractionError, match="PDF download failed: .*ENOTFOUND"):
+        asyncio.run(
+            crawl_cli._fetch_pdf_document(
+                context,
+                "https://private.example.test/reference.pdf",
+                playwright=types.SimpleNamespace(request=request_factory),
+            )
+        )
+    assert request_factory.context.disposed
+
+
 @pytest.mark.parametrize(
     ("redirect_policy", "expected_url", "expected_debug"),
     [
