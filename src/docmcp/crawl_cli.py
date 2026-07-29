@@ -168,14 +168,14 @@ async def _fetch_pdf_document(
     """Fetch a PDF through a proxy-aware request context with browser session state."""
     request_context = None
     try:
-        request = context.request
+        request_client = context.request
         if playwright is not None and hasattr(playwright, "request"):
             request_context = await playwright.request.new_context(
                 storage_state=await context.storage_state(),
                 proxy=proxy,
             )
-            request = request_context
-        response = await request.get(
+            request_client = request_context
+        response = await request_client.get(
             url,
             timeout=60000,
             headers={"Accept": "application/pdf"},
@@ -535,8 +535,9 @@ async def _index_pdf_document(
     proxy: dict | None = None,
 ) -> tuple[str | None, str]:
     """Fetch, extract, and upsert a PDF into the SQLite page index."""
-    fetch_kwargs = {"playwright": playwright, "proxy": proxy} if playwright is not None else {}
-    current_url, pdf_title, content_md = await _fetch_pdf_document(context, requested_url, **fetch_kwargs)
+    current_url, pdf_title, content_md = await _fetch_pdf_document(
+        context, requested_url, playwright=playwright, proxy=proxy
+    )
     if current_url != requested_url:
         if redirect_policy == "requested":
             index_url = requested_url

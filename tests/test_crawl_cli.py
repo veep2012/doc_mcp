@@ -239,8 +239,9 @@ def test_index_pdf_document_applies_redirect_policy(
     indexed = []
     debug_lines = []
 
-    async def fake_fetch(context, requested_url):
+    async def fake_fetch(context, requested_url, **kwargs):
         assert requested_url == "https://example.test/docs/download"
+        assert kwargs == {"playwright": None, "proxy": None}
         return "https://example.test/docs/reference.pdf", "Reference PDF", "PDF-only content"
 
     monkeypatch.setattr(crawl_cli, "_fetch_pdf_document", fake_fetch)
