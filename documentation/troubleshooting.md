@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-07-19
-- Version: v1.13
+- Last Updated: 2026-07-29
+- Version: v1.14
 
 ## Change Log
+- 2026-07-29 | v1.14 | Added proxy and DNS troubleshooting for authenticated PDF downloads.
 - 2026-07-19 | v1.13 | Added PDF download-endpoint, HTTP-response, redirect-policy, and targeted-reindex failure guidance.
 - 2026-07-16 | v1.12 | Documented per-site browser installation and actionable missing-browser errors.
 - 2026-07-05 | v1.11 | Updated the Playwright Chromium recovery command to use `--with-deps chromium` so setup and troubleshooting guidance match the current install flow.
@@ -98,6 +99,7 @@ List the most common failure modes for `doc-mcp` and the first corrective step f
 - If a `.pdf` URL returns a non-2xx response or a non-PDF response, it is rejected and not indexed. Check the HTTP status and response headers in the server or site logs.
 - PDF redirects obey `crawl.redirect_policy`: use `final` to index the landing URL, `requested` to retain the original URL, or `skip` to load but not index redirected PDFs.
 - In targeted reindex mode, extraction failures appear as `reason_code=pdf_error`; the command continues with other selected URLs. Use the final reason breakdown to distinguish PDF failures from navigation or database failures.
+- PDF downloads use the configured `playwright.launch.proxy` and the browser context's saved storage state. If the error includes `ENOTFOUND`, confirm the proxy can resolve the PDF hostname, the proxy server is configured for the site, and authentication is current by re-running `docmcp-auth --site "My Docs" --force`.
 
 ### Windows Playwright Module Is Missing
 - A standalone `playwright` script may not be visible in the active environment; use `python -m ...` instead.
