@@ -9,7 +9,8 @@ from pathlib import Path
 import pytest
 
 from docmcp.harness.comparison import compare_responses
-from docmcp.harness.config import HarnessError, load_config
+from docmcp.harness.config import HarnessConfig, HarnessError, load_config
+from docmcp.harness.runner import _server_command
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -89,3 +90,19 @@ def test_comparison_allows_only_explicit_version_difference():
 
     assert compare_responses(baseline, current, ("result.serverInfo.version",)) == []
     assert compare_responses(baseline, current, ()) != []
+
+
+def test_server_command_quotes_wheel_filename(tmp_path: Path):
+    """TS-TF-013: configured wheel names cannot alter the container shell command."""
+    config = HarnessConfig(
+        tmp_path / "baseline.whl",
+        tmp_path / "current;echo unexpected.whl",
+        tmp_path / "fixture",
+        tmp_path / "artifacts",
+        "podman",
+        "python:3.11-slim",
+        30,
+        (),
+    )
+
+    assert "'/wheels/current;echo unexpected.whl'" in _server_command(config, config.current_wheel)[-1]

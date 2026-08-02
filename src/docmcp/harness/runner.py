@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import selectors
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -20,7 +21,7 @@ def _server_command(config: HarnessConfig, wheel: Path) -> list[str]:
         "-v", f"{wheel.parent}:/wheels:ro",
         "-e", "DOC_MCP_HOME=/fixture", "-e", "CONFIG_FILE=config/sites.yaml",
         config.image, "sh", "-c",
-        f"pip install --no-cache-dir /wheels/{wheel.name} >/dev/null && exec docmcp-server",
+        f"pip install --no-cache-dir {shlex.quote(f'/wheels/{wheel.name}')} >/dev/null && exec docmcp-server",
     ]
 
 
