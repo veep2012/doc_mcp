@@ -9,6 +9,7 @@ build/
 
 # Environment variables (contains sensitive proxy/credentials)
 .env
+.env-harness.local
 
 # Storage and index (runtime data)
 storage/
@@ -31,3 +32,4 @@ __pycache__/
 
 # Local smoke-test and scratch artifacts
 .local/
+artifacts/harness/

@@ -5,11 +5,12 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-05-03
-- Last Updated: 2026-07-26
-- Version: v0.2
+- Last Updated: 2026-08-02
+- Version: v0.3
 - Related Tickets: veep2012/doc_mcp#2
 
 ## Change Log
+- 2026-08-02 | v0.3 | Added packaged MCP version-comparison harness scenarios and automated mapping.
 - 2026-07-26 | v0.2 | Documented MCP smoke prerequisites, added optional-dependency collection-gate regression coverage, and mapped the package-independent test support helpers.
 - 2026-05-03 | v0.1 | Added pytest framework scenario coverage, smoke prerequisites, and automated test mapping.
 
@@ -38,6 +39,7 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - FR-4: Smoke tests must cover a crawl against a temporary static site and MCP stdio search against a prepared index.
 - FR-5: Missing smoke prerequisites must fail with actionable messages instead of tracebacks.
 - FR-6: Default test collection must remain usable when Playwright or MCP is unavailable, and affected tests must report installation guidance.
+- FR-7: The packaged-version harness must validate safe settings and fail on response differences other than explicitly allowlisted fields.
 
 ### Non-Functional Requirements
 - NFR-1: Test commands should use the active virtual-environment Python.
@@ -58,6 +60,7 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - `TS-TF-010` - Default collection remains usable and reports actionable skips for unavailable optional runtime dependencies.
 - `TS-TF-011` - Test files do not import shared helpers through the `tests.*` package path.
 - `TS-TF-012` - Shared helpers import successfully through the supported pytest and direct Python invocation modes.
+- `TS-TF-013` - The MCP version-comparison harness validates its fixture and safe configuration, normalizes only allowlisted fields, and reports unexpected differences.
 
 ### Scenario Details
 #### TS-TF-001
@@ -112,6 +115,13 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - Purpose: Detect import-path regressions that appear only under a specific test entry point.
 - Expected Result: The helper modules import successfully through the `pytest` executable, `python -m pytest`, and direct Python import execution.
 
+#### TS-TF-013
+- Purpose: Compare two packaged MCP server versions reproducibly without production data.
+- Preconditions: Both wheel paths exist; the fixture contains valid `config/sites.yaml`, referenced indexes, and the stable request corpus; Podman or Docker is available through `CONTAINER_BIN`.
+- Action: Run `python -m docmcp.harness` or `make harness`.
+- Expected Result: Both isolated containers receive identical requests. Only documented allowlisted fields are ignored; unexpected differences or startup, timeout, malformed-response, and runtime failures fail while retaining redacted artifacts.
+- Cleanup: The container command uses `--rm`; inspect the timestamped artifact directory if the comparison fails.
+
 ### Automated Test Mapping
 - `TS-TF-001` -> `tests/test_smoke_support.py::test_make_test_dry_run_lists_unit_before_smoke`
 - `TS-TF-002` -> `tests/test_smoke_support.py::test_direct_pytest_excludes_smoke_by_default`
@@ -125,11 +135,13 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - `TS-TF-010` -> `tests/test_playwright_settings.py::test_authentication_and_session_validation_use_site_playwright_settings`, `tests/support/smoke_support.py`, `tests/test_smoke_support.py::{test_optional_dependency_gates_allow_collection_in_minimal_environment,test_optional_dependency_gate_uses_repository_install_command,test_shared_helpers_import_without_tests_package}`
 - `TS-TF-011` -> `tests/test_smoke_support.py::test_test_files_do_not_use_forbidden_tests_package_imports`
 - `TS-TF-012` -> `tests/test_smoke_support.py::{test_shared_helpers_import_under_supported_invocation_modes,test_support_modules_import_as_top_level_modules}`
+- `TS-TF-013` -> `tests/test_harness.py`
 
 ## Edge Cases
 - If Podman is installed but not usable in the current environment, rerun smoke tests with `CONTAINER_BIN=docker`.
 - If the prepared MCP smoke index is missing, generate it locally or point the smoke test at another prepared SQLite file before retrying.
 - If `pytest` is invoked with explicit marker overrides, those overrides take precedence over the default exclusion in `pytest.ini`.
+- If a comparison timeout occurs, the failed run's baseline/current logs and `failure.log` remain under `artifacts/harness/`.
 
 ## References
 - [README.md](../../README.md)
@@ -139,3 +151,4 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - [src/docmcp/config/loader.py](../../src/docmcp/config/loader.py)
 - [src/docmcp/crawl_cli.py](../../src/docmcp/crawl_cli.py)
 - [src/docmcp/tools.py](../../src/docmcp/tools.py)
+- [src/docmcp/harness/runner.py](../../src/docmcp/harness/runner.py)

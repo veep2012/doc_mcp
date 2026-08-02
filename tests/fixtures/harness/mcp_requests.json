@@ -1,0 +1,45 @@
+[
+  {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {
+      "protocolVersion": "2024-11-05",
+      "capabilities": {},
+      "clientInfo": {"name": "doc-mcp-harness", "version": "1.0"}
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "id": 2,
+    "method": "tools/call",
+    "params": {"name": "get_version", "arguments": {}}
+  },
+  {
+    "jsonrpc": "2.0",
+    "id": 3,
+    "method": "tools/call",
+    "params": {
+      "name": "search_docs",
+      "arguments": {"site_name": "Harness Docs", "query": "alpha", "limit": 10}
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "id": 4,
+    "method": "tools/call",
+    "params": {
+      "name": "search_docs",
+      "arguments": {"site_name": "Harness Docs", "query": "missing phrase", "limit": 10}
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "id": 5,
+    "method": "tools/call",
+    "params": {
+      "name": "search_docs",
+      "arguments": {"site_name": "Missing Docs", "query": "alpha", "limit": 1}
+    }
+  }
+]

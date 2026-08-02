@@ -60,3 +60,7 @@ test-smoke: ## Run smoke tests with the selected container runtime
 
 .PHONY: test
 test: test-unit test-smoke ## Run unit tests first, then smoke tests
+
+.PHONY: harness
+harness: ## Compare baseline and current MCP wheels
+	CONTAINER_BIN=$(CONTAINER_BIN) PYTHONPATH=src $(VENV_PY) -m docmcp.harness
