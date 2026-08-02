@@ -1,6 +1,6 @@
 ---
 name: monthly-doc-actualizer
-description: Run daily documentation freshness checks and trigger full code-first documentation actualization when due. Use when repository docs must be revalidated against the current implementation in `api/`, `ci/init/`, `tests/`, and related source files.
+description: Run daily documentation freshness checks and trigger full code-first documentation actualization when due. Use when repository docs must be revalidated against the current implementation in `src/`, `config/`, `scripts/`, `tests/`, and related source files.
 ---
 
 # Monthly Doc Actualizer
@@ -39,11 +39,10 @@ Helper script:
 - Run full documentation actualization for `documentation/*.md` as a code-first review:
   - read `documentation/_documentation-index.md` to identify canonical docs by domain
   - inspect current implementation before editing docs:
-    - `api/routers`
-    - `api/schemas`
-    - `api/db`
-    - `ci/init/*.sql`
-    - `tests/api`
+    - `src/`
+    - `config/`
+    - `scripts/`
+    - `tests/`
     - any feature-specific source files touched by recent work
   - compare implementation to documentation and classify each mismatch:
     - stale doc text

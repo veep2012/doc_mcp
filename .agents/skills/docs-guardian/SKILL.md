@@ -45,6 +45,11 @@ For each target file in `documentation/`:
 - Confirm helper/control files use `_` prefix.
 - Confirm any new/renamed documentation files are added to `documentation/_documentation-index.md`.
  - Run `find documentation -type f -name '*.md' | rg '[A-Z]'` and require empty output.
+- Confirm examples, schema tables, and API descriptions do not expose database-only audit metadata as end-user fields. The following columns must not appear in public payload examples or workflow-view documentation:
+  - `created_at`
+  - `updated_at`
+  - `created_by`
+  - `updated_by`
 
 ### Step 4: Normalize and tighten content
 - Keep wording implementation-focused and concise.
@@ -52,7 +57,9 @@ For each target file in `documentation/`:
 - Remove sections that are not applicable; do not leave placeholder text in final docs.
 - Keep Mermaid diagrams only when they add clarity.
 - Change Log update policy:
-  - If the latest entry date matches today, update that latest entry description instead of adding a new entry.
+  - Keep at most one Change Log entry per calendar date in each document.
+  - Keep the newest Change Log entry first.
+  - If the document already has an entry for today's date, merge the new change into that existing entry instead of adding another row.
   - Add a new Change Log entry only when the calendar date changes.
 
 ### Step 5: Report result

@@ -22,7 +22,7 @@ Core rule:
 Use for any of the following:
 - Creating a new parent story.
 - Creating a new numbered sub-story.
-- Creating a new stage-based technical implementation story.
+- Creating a stage-based technical implementation story.
 - Refining story title or description.
 - Writing or tightening acceptance criteria.
 - Writing or tightening Definition of Done.

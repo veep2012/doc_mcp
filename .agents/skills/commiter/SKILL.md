@@ -1,11 +1,13 @@
 ---
 name: commiter
-description: Create and push a standardized git commit when the user explicitly requests a commit.
+description: Create standardized commits and push current repository changes when the user explicitly requests a commit.
 ---
 
 # Commiter (Repo Local Skill)
 
 Use this skill only when the user explicitly asks to create a commit.
+
+Scope boundary: this skill must not run `make test`. Project-specific testing belongs to the applicable testing skill.
 
 ## Goal
 Create a git commit with a single-line message in this exact format:
