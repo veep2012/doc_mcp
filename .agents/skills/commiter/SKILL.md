@@ -1,3 +1,8 @@
+---
+name: commiter
+description: Create and push a standardized git commit when the user explicitly requests a commit.
+---
+
 # Commiter (Repo Local Skill)
 
 Use this skill only when the user explicitly asks to create a commit.

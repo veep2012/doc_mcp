@@ -27,12 +27,12 @@ Track periodic documentation-refresh cadence for repository docs.
 - Last Full Actualization: 2026-04-24
 - Cadence Days: 30
 
-Use `skills/monthly-doc-actualizer/scripts/check_due.py` to evaluate due status and update these fields.
+Use `.agents/skills/monthly-doc-actualizer/scripts/check_due.py` to evaluate due status and update these fields.
 
 ## Edge Cases
 - If dates are manually edited to invalid format, due checks must fail fast.
 - If cadence is set to non-positive value, due checks must fail fast.
 
 ## References
-- `skills/monthly-doc-actualizer/SKILL.md`
-- `skills/monthly-doc-actualizer/scripts/check_due.py`
+- `.agents/skills/monthly-doc-actualizer/SKILL.md`
+- `.agents/skills/monthly-doc-actualizer/scripts/check_due.py`

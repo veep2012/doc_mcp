@@ -18,13 +18,13 @@ State is tracked in:
 - `documentation/_documentation_actualization_state.md`
 
 Helper script:
-- `skills/monthly-doc-actualizer/scripts/check_due.py`
+- `.agents/skills/monthly-doc-actualizer/scripts/check_due.py`
 
 ## Workflow (Required)
 
 ### Step 1: Run daily due check
 - Run:
-  - `python3 skills/monthly-doc-actualizer/scripts/check_due.py --state-file documentation/_documentation_actualization_state.md --mark-check`
+  - `python3 .agents/skills/monthly-doc-actualizer/scripts/check_due.py --state-file documentation/_documentation_actualization_state.md --mark-check`
 - Read output fields:
   - `DUE=true|false`
   - `LAST_FULL_ACTUALIZATION`
@@ -77,7 +77,7 @@ Helper script:
 
 ### Step 6: Mark completion
 - After successful actualization and validation, mark completion:
-  - `python3 skills/monthly-doc-actualizer/scripts/check_due.py --state-file documentation/_documentation_actualization_state.md --mark-full`
+  - `python3 .agents/skills/monthly-doc-actualizer/scripts/check_due.py --state-file documentation/_documentation_actualization_state.md --mark-full`
 
 ## Output Requirements
 
