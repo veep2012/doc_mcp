@@ -17,29 +17,16 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    # GitHub-hosted runners do not provide a Debian label. Run the job in a
-    # Debian Bookworm container while retaining the hosted runner's Docker
-    # daemon for the container-based smoke tests.
-    container:
-      image: node:22-bookworm
-      options: --volume /var/run/docker.sock:/var/run/docker.sock
 
     steps:
-      - name: Install Debian system dependencies
-        run: |
-          apt-get update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            ca-certificates \
-            curl \
-            docker.io \
-            git \
-            make \
-            python3 \
-            python3-pip \
-            python3-venv
-
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
 
       - name: Create virtual environment
         run: make local-venv
