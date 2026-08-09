@@ -1,23 +1,23 @@
 # Browser Automation
-playwright>=1.43.0
+playwright==1.61.0
 
 # HTML to Markdown
-markdownify>=0.12.0
+markdownify==1.2.3
 
 # MCP Server
 mcp==1.28.1
 
 # Config
-PyYAML>=6.0.1
+PyYAML==6.0.3
 
 # Utilities
-python-dotenv>=1.0.0
+python-dotenv==1.2.2
 
 # Embeddings
-fastembed>=0.7.2
+fastembed==0.8.0
 
 # Local vector index
-sqlite-vec>=0.1.9
+sqlite-vec==0.1.9
 
 # PDF text extraction
-pypdf>=5.0.0
+pypdf==6.14.2
