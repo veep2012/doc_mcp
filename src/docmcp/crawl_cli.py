@@ -274,9 +274,7 @@ async def _fetch_pdf_document(
                 )
                 if not is_pdf:
                     # The broad pattern also sees response-stage subresources;
-                    # release those and wait for the terminal PDF response.
-                    with contextlib.suppress(Exception):
-                        await cdp.send("Fetch.continueRequest", {"requestId": request_id})
+                    # release them in the shared response cleanup below.
                     return
                 result = await cdp.send("Fetch.getResponseBody", {"requestId": request_id})
                 raw = result.get("body", "")

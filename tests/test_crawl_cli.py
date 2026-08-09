@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import sqlite3
 import sys
 import types
@@ -199,6 +200,184 @@ def test_fetch_pdf_document_cdp_continues_redirect_and_captures_final_pdf(monkey
     assert result == (final_url, "Reference PDF", "PDF-only content")
     assert "redirect" in cdp.continued_request_ids
     assert "final" in cdp.continued_request_ids
+
+
+def _cdp_fetch_fixture(events, body_result):
+    class FakeCdp:
+        def __init__(self):
+            self.paused_handler = None
+            self.methods = []
+
+        def on(self, event_name, handler):
+            assert event_name == "Fetch.requestPaused"
+            self.paused_handler = handler
+
+        async def send(self, method, params=None):
+            self.methods.append((method, params))
+            if method == "Fetch.getResponseBody":
+                return body_result
+            return {}
+
+    class FakePdfPage:
+        closed = False
+
+        async def goto(self, url, **kwargs):
+            for event in events:
+                await cdp.paused_handler(event)
+
+        async def close(self):
+            self.closed = True
+
+    class FakePageContext:
+        async def new_cdp_session(self, pdf_page):
+            assert pdf_page is pdf_page_instance
+            return cdp
+
+    cdp = FakeCdp()
+    pdf_page_instance = FakePdfPage()
+    page_context = FakePageContext()
+
+    async def new_page():
+        return pdf_page_instance
+
+    context = types.SimpleNamespace(new_page=new_page)
+    page = types.SimpleNamespace(context=page_context)
+    return context, page, cdp, pdf_page_instance
+
+
+def test_fetch_pdf_document_cdp_rejects_html_body_before_parsing(monkeypatch):
+    event = {
+        "requestId": "html-error",
+        "responseStatusCode": 200,
+        "request": {"url": "https://example.test/error.pdf"},
+        "resourceType": "Document",
+        "responseHeaders": [{"name": "Content-Type", "value": "application/pdf"}],
+    }
+    context, page, cdp, pdf_page = _cdp_fetch_fixture(
+        [event], {"body": "<html>error</html>", "base64Encoded": False}
+    )
+    extract_called = False
+
+    def fail_extract(_data):
+        nonlocal extract_called
+        extract_called = True
+        raise AssertionError("HTML response reached the PDF parser")
+
+    monkeypatch.setattr(crawl_cli, "_extract_pdf_document", fail_extract)
+
+    with pytest.raises(crawl_cli.PdfExtractionError, match="response is not a PDF document"):
+        asyncio.run(
+            crawl_cli._fetch_pdf_document(
+                context,
+                "https://example.test/error.pdf",
+                page=page,
+            )
+        )
+
+    assert not extract_called
+    assert ("Fetch.disable", None) in cdp.methods
+    assert pdf_page.closed
+
+
+def test_fetch_pdf_document_cdp_decodes_base64_pdf_body(monkeypatch):
+    event = {
+        "requestId": "base64-pdf",
+        "responseStatusCode": 200,
+        "request": {"url": "https://example.test/reference.pdf"},
+        "resourceType": "Document",
+        "responseHeaders": [{"name": "Content-Type", "value": "application/pdf"}],
+    }
+    context, page, _cdp, _pdf_page = _cdp_fetch_fixture(
+        [event], {"body": base64.b64encode(b"%PDF-1.7\n").decode(), "base64Encoded": True}
+    )
+    extracted_body = None
+
+    def extract_pdf(data):
+        nonlocal extracted_body
+        extracted_body = data
+        return "Reference PDF", "PDF-only content"
+
+    monkeypatch.setattr(crawl_cli, "_extract_pdf_document", extract_pdf)
+
+    result = asyncio.run(
+        crawl_cli._fetch_pdf_document(
+            context,
+            "https://example.test/reference.pdf",
+            page=page,
+        )
+    )
+
+    assert result == (
+        "https://example.test/reference.pdf",
+        "Reference PDF",
+        "PDF-only content",
+    )
+    assert extracted_body == b"%PDF-1.7\n"
+
+
+def test_fetch_pdf_document_cdp_rejects_non_200_final_response():
+    event = {
+        "requestId": "missing-pdf",
+        "responseStatusCode": 404,
+        "request": {"url": "https://example.test/missing.pdf"},
+        "resourceType": "Document",
+        "responseHeaders": [{"name": "Content-Type", "value": "application/pdf"}],
+    }
+    context, page, _cdp, _pdf_page = _cdp_fetch_fixture(
+        [event], {"body": "%PDF-1.7\n", "base64Encoded": False}
+    )
+
+    with pytest.raises(crawl_cli.PdfExtractionError, match="HTTP 404"):
+        asyncio.run(
+            crawl_cli._fetch_pdf_document(
+                context,
+                "https://example.test/missing.pdf",
+                page=page,
+            )
+        )
+
+
+def test_fetch_pdf_document_cdp_ignores_unrelated_subresources(monkeypatch):
+    events = [
+        {
+            "requestId": "script",
+            "responseStatusCode": 200,
+            "request": {"url": "https://example.test/app.js"},
+            "resourceType": "Script",
+            "responseHeaders": [{"name": "Content-Type", "value": "application/javascript"}],
+        },
+        {
+            "requestId": "final-pdf",
+            "responseStatusCode": 200,
+            "request": {"url": "https://example.test/reference.pdf"},
+            "resourceType": "Other",
+            "responseHeaders": [{"name": "Content-Type", "value": "application/pdf"}],
+        },
+    ]
+    context, page, cdp, _pdf_page = _cdp_fetch_fixture(
+        events, {"body": "%PDF-1.7\n", "base64Encoded": False}
+    )
+    monkeypatch.setattr(
+        crawl_cli,
+        "_extract_pdf_document",
+        lambda data: ("Reference PDF", "PDF-only content"),
+    )
+
+    result = asyncio.run(
+        crawl_cli._fetch_pdf_document(
+            context,
+            "https://example.test/reference.pdf",
+            page=page,
+        )
+    )
+
+    assert result[0] == "https://example.test/reference.pdf"
+    assert [
+        params["requestId"] for method, params in cdp.methods if method == "Fetch.continueRequest"
+    ] == [
+        "script",
+        "final-pdf",
+    ]
 
 
 def test_fetch_pdf_document_uses_proxy_and_authenticated_storage_state(monkeypatch):
