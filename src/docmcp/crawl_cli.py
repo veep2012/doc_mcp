@@ -177,13 +177,13 @@ async def _fetch_pdf_document(
     ``Sec-Fetch-Mode: navigate``, and goes through the same proxy/DNS/TLS as
     any other page.
     """
-    page_context = getattr(page, "context", None) if page is not None else None
-    if callable(page_context):
-        page_context = page_context()
-    if page_context is not None and hasattr(page_context, "new_cdp_session"):
-        # Open a short-lived page so the main crawl page is not disturbed.
-        pdf_page = await context.new_page()
-        cdp = await page_context.new_cdp_session(pdf_page)
+    page_context = getattr(page, "context", None) if page is not None else None
+    if callable(page_context):
+        page_context = page_context()
+    if page_context is not None and hasattr(page_context, "new_cdp_session"):
+        # Open a short-lived page so the main crawl page is not disturbed.
+        pdf_page = await context.new_page()
+        cdp = await page_context.new_cdp_session(pdf_page)
         loop = asyncio.get_event_loop()
         captured: asyncio.Future = loop.create_future()
 
@@ -197,11 +197,13 @@ async def _fetch_pdf_document(
                 return
             # Response stage — grab the body before releasing.
             try:
+                status = event.get("responseStatusCode", 0)
+                if 300 <= status < 400:
+                    return
                 result = await cdp.send("Fetch.getResponseBody", {"requestId": request_id})
                 raw = result.get("body", "")
                 is_b64 = result.get("base64Encoded", False)
                 body = base64.b64decode(raw) if is_b64 else raw.encode()
-                status = event.get("responseStatusCode", 0)
                 final_url = event.get("request", {}).get("url", url)
                 if not captured.done():
                     captured.set_result((status, final_url, body))
@@ -218,7 +220,9 @@ async def _fetch_pdf_document(
             await cdp.send(
                 "Fetch.enable",
                 {
-                    "patterns": [{"urlPattern": url, "requestStage": "Response"}],
+                    "patterns": [
+                        {"urlPattern": "*", "resourceType": "Document", "requestStage": "Response"}
+                    ],
                 },
             )
             with contextlib.suppress(Exception):
@@ -246,21 +250,21 @@ async def _fetch_pdf_document(
                 await cdp.send("Fetch.disable")
             await pdf_page.close()
 
-    # Fallback: use the existing browser context request client when available.
-    request_context = None
-    try:
-        request_factory = getattr(playwright, "request", None) if playwright is not None else None
-        if request_factory is not None:
-            request_context = await request_factory.new_context(
-                storage_state=await context.storage_state(),
-                proxy=proxy,
-            )
-            request_client = request_context
-        else:
-            request_client = getattr(context, "request", None)
-            if request_client is None:
-                raise PdfExtractionError("PDF request client is unavailable")
-        response = await request_client.get(
+    # Fallback: use the existing browser context request client when available.
+    request_context = None
+    try:
+        request_factory = getattr(playwright, "request", None) if playwright is not None else None
+        if request_factory is not None:
+            request_context = await request_factory.new_context(
+                storage_state=await context.storage_state(),
+                proxy=proxy,
+            )
+            request_client = request_context
+        else:
+            request_client = getattr(context, "request", None)
+            if request_client is None:
+                raise PdfExtractionError("PDF request client is unavailable")
+        response = await request_client.get(
             url,
             timeout=60000,
             headers={"Accept": "application/pdf"},
@@ -621,12 +625,12 @@ async def _index_pdf_document(
     proxy: dict | None = None,
 ) -> tuple[str | None, str]:
     """Fetch, extract, and upsert a PDF into the SQLite page index."""
-    fetch_options = {"playwright": playwright, "proxy": proxy}
-    if page is not None:
-        fetch_options["page"] = page
-    current_url, pdf_title, content_md = await _fetch_pdf_document(
-        context, requested_url, **fetch_options
-    )
+    fetch_options = {"playwright": playwright, "proxy": proxy}
+    if page is not None:
+        fetch_options["page"] = page
+    current_url, pdf_title, content_md = await _fetch_pdf_document(
+        context, requested_url, **fetch_options
+    )
     if current_url != requested_url:
         if redirect_policy == "requested":
             index_url = requested_url
