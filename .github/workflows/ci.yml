@@ -32,4 +32,12 @@ jobs:
         run: make local-venv
 
       - name: Run tests
-        run: CONTAINER_BIN=docker make test
+        run: SMOKE_KEEP_ARTIFACTS=1 CONTAINER_BIN=docker make test
+
+      - name: Upload smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-artifacts
+          path: .local/smoke
+          if-no-files-found: ignore
