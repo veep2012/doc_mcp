@@ -20,4 +20,4 @@ fastembed==0.8.0
 sqlite-vec==0.1.9
 
 # PDF text extraction
-pypdf==6.14.2
+pypdf==6.15.0
