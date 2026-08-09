@@ -326,12 +326,14 @@ Run these scenarios after either `MT-003A` or `MT-003B`, using the command set f
   5. Repeat a selected PDF with `crawl.redirect_policy: final`, `requested`, and `skip` using a test endpoint that redirects to another PDF URL.
   6. Include a malformed, image-only, or unavailable PDF alongside a valid page or selected URL.
   7. Configure `playwright.launch.proxy` with a test PDF hostname that resolves only through that proxy, authenticate with `docmcp-auth`, and run `docmcp-crawl --site "My Docs" --debug`.
+  8. Configure a test endpoint that returns an HTML error page with a PDF URL or `Content-Type: application/pdf`, and repeat it through a redirect.
 - Expected result:
   - The PDF source URL and extracted text are present in the SQLite index and search results.
   - URL-based and content-type-based PDFs are both fetched through the authenticated browser session and indexed.
   - Both targeted reindex forms refresh the existing PDF record.
   - `final` stores the redirected landing URL, `requested` stores the original URL, and `skip` omits the redirected PDF from the index.
   - A PDF failure is reported without stopping later crawl pages or selected reindex URLs; targeted reindex reports `reason_code=pdf_error`.
+  - Intermediate 3xx responses do not fail the download; the terminal PDF response is captured and parsed, while an HTML body with PDF-looking metadata is rejected with `response is not a PDF document`.
   - The proxy-only PDF is downloaded and indexed without an `ENOTFOUND` error; debug output contains no session cookies or proxy credentials.
   - Images, JavaScript, and archive links remain excluded.
 
