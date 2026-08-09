@@ -125,9 +125,14 @@ def _echo_process_output(stdout: str | None, stderr: str | None) -> None:
 def smoke_artifact_root(test_name: str) -> Path:
     root = REPO_ROOT / ".local" / "smoke"
     root.mkdir(parents=True, exist_ok=True)
-    artifact_dir = tempfile.TemporaryDirectory(prefix=f"{test_name}-", dir=root)
-    _SMOKE_ARTIFACT_DIRS.append(artifact_dir)
-    artifact_root = Path(artifact_dir.name)
+    if os.environ.get("SMOKE_KEEP_ARTIFACTS"):
+        # TemporaryDirectory registers its own interpreter-shutdown finalizer,
+        # which would remove CI artifacts after our cleanup hook returns.
+        artifact_root = Path(tempfile.mkdtemp(prefix=f"{test_name}-", dir=root))
+    else:
+        artifact_dir = tempfile.TemporaryDirectory(prefix=f"{test_name}-", dir=root)
+        _SMOKE_ARTIFACT_DIRS.append(artifact_dir)
+        artifact_root = Path(artifact_dir.name)
     for child in ("config", "storage", "index", "logs"):
         (artifact_root / child).mkdir(parents=True, exist_ok=True)
     return artifact_root
