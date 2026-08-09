@@ -126,6 +126,81 @@ def test_fetch_pdf_document_accepts_content_type_only_and_preserves_query(monkey
     )
 
 
+def test_fetch_pdf_document_cdp_continues_redirect_and_captures_final_pdf(monkeypatch):
+    requested_url = "https://example.test/docs/reference.pdf"
+    final_url = "https://cdn.example.test/files/reference.pdf"
+
+    class FakeCdp:
+        def __init__(self):
+            self.paused_handler = None
+            self.continued_request_ids = []
+
+        def on(self, event_name, handler):
+            assert event_name == "Fetch.requestPaused"
+            self.paused_handler = handler
+
+        async def send(self, method, params=None):
+            if method == "Fetch.continueRequest":
+                self.continued_request_ids.append(params["requestId"])
+            elif method == "Fetch.getResponseBody":
+                return {"body": "%PDF-1.7\n", "base64Encoded": False}
+            return {}
+
+    class FakePdfPage:
+        async def goto(self, url, **kwargs):
+            assert url == requested_url
+            await cdp.paused_handler(
+                {
+                    "requestId": "redirect",
+                    "responseStatusCode": 302,
+                    "request": {"url": requested_url},
+                    "resourceType": "Document",
+                }
+            )
+            await cdp.paused_handler(
+                {
+                    "requestId": "final",
+                    "responseStatusCode": 200,
+                    "request": {"url": final_url},
+                    "resourceType": "Other",
+                    "responseHeaders": [{"name": "Content-Type", "value": "application/pdf"}],
+                }
+            )
+
+        async def close(self):
+            pass
+
+    class FakePageContext:
+        async def new_cdp_session(self, pdf_page):
+            assert pdf_page is pdf_page_instance
+            return cdp
+
+    cdp = FakeCdp()
+    pdf_page_instance = FakePdfPage()
+    page_context = FakePageContext()
+
+    async def new_page():
+        return pdf_page_instance
+
+    monkeypatch.setattr(
+        crawl_cli,
+        "_extract_pdf_document",
+        lambda data: ("Reference PDF", "PDF-only content"),
+    )
+
+    result = asyncio.run(
+        crawl_cli._fetch_pdf_document(
+            types.SimpleNamespace(new_page=new_page),
+            requested_url,
+            page=types.SimpleNamespace(context=page_context),
+        )
+    )
+
+    assert result == (final_url, "Reference PDF", "PDF-only content")
+    assert "redirect" in cdp.continued_request_ids
+    assert "final" in cdp.continued_request_ids
+
+
 def test_fetch_pdf_document_uses_proxy_and_authenticated_storage_state(monkeypatch):
     class FakeResponse:
         ok = True

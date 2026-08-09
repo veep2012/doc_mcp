@@ -129,6 +129,11 @@ def _is_pdf_content_type(content_type: str | None) -> bool:
     return bool(content_type and content_type.split(";", 1)[0].strip().lower() == "application/pdf")
 
 
+def _is_pdf_body(body: bytes) -> bool:
+    """Return True when raw response bytes have the PDF file signature."""
+    return body.startswith(b"%PDF-")
+
+
 def _response_is_pdf(response) -> bool:
     """Return True when a Playwright response is a PDF."""
     return response is not None and _is_pdf_content_type(response.headers.get("content-type"))
@@ -164,47 +169,122 @@ def _extract_pdf_document(pdf_bytes: bytes) -> tuple[str | None, str]:
     return title, text
 
 
+async def _fetch_pdf_with_request_client(
+    context, url: str, *, playwright=None, proxy: dict | None = None
+) -> tuple[str, str | None, str]:
+    """Fetch and extract a PDF through Playwright's authenticated request client.
+
+    The dedicated request context copies the browser context's ``storage_state``
+    so session cookies and other authentication state are preserved, and it
+    receives the configured proxy explicitly so PDF traffic follows the same
+    network route.  When no dedicated Playwright request factory is available,
+    ``context.request`` is used instead, preserving that context's own state.
+    """
+    request_context = None
+    try:
+        request_factory = getattr(playwright, "request", None) if playwright is not None else None
+        if request_factory is not None:
+            request_context = await request_factory.new_context(
+                storage_state=await context.storage_state(),
+                proxy=proxy,
+            )
+            request_client = request_context
+        else:
+            request_client = getattr(context, "request", None)
+            if request_client is None:
+                raise PdfExtractionError("PDF request client is unavailable")
+        response = await request_client.get(
+            url,
+            timeout=60000,
+            headers={"Accept": "application/pdf"},
+        )
+        if not response.ok:
+            raise PdfExtractionError(f"PDF request failed with HTTP {response.status}")
+        if not (_is_pdf_url(response.url) or _response_is_pdf(response)):
+            raise PdfExtractionError("response is not a PDF document")
+        title, content = _extract_pdf_document(await response.body())
+        preserve_query = "?" in url
+        return _normalize_url(response.url, strip_query=not preserve_query), title, content
+    except PdfExtractionError:
+        raise
+    except Exception as exc:
+        raise PdfExtractionError(f"PDF download failed: {exc}") from exc
+    finally:
+        if request_context is not None:
+            await request_context.dispose()
+
+
 async def _fetch_pdf_document(
     context, url: str, *, page=None, playwright=None, proxy: dict | None = None
 ) -> tuple[str, str | None, str]:
     """Fetch a PDF using the CDP Fetch domain to capture raw bytes before Chrome's PDF viewer.
 
-    The CDP ``Fetch.enable`` with ``requestStage: "Response"`` pauses every
-    response at the network layer before Chrome hands the bytes to any plugin or
+    The CDP ``Fetch.enable`` with ``requestStage: "Response"`` pauses responses
+    at the network layer before Chrome hands the bytes to any plugin or
     renderer.  This lets us read the raw response body (via
-    ``Fetch.getResponseBody``) and then release the request.  Because it is a
-    real browser navigation the request carries the correct session cookies,
-    ``Sec-Fetch-Mode: navigate``, and goes through the same proxy/DNS/TLS as
-    any other page.
+    ``Fetch.getResponseBody``) and then release the request.  Interception is
+    intentionally not limited to ``Document`` resources: after a redirect,
+    Chromium may classify a PDF download differently even though it is the
+    navigation's terminal response.
     """
-    page_context = getattr(page, "context", None) if page is not None else None
-    if callable(page_context):
-        page_context = page_context()
-    if page_context is not None and hasattr(page_context, "new_cdp_session"):
-        # Open a short-lived page so the main crawl page is not disturbed.
-        pdf_page = await context.new_page()
-        cdp = await page_context.new_cdp_session(pdf_page)
-        loop = asyncio.get_event_loop()
+    page_context = getattr(page, "context", None) if page is not None else None
+
+    if callable(page_context):
+
+        page_context = page_context()
+
+    if page_context is not None and hasattr(page_context, "new_cdp_session"):
+
+        # Open a short-lived page so the main crawl page is not disturbed.
+
+        pdf_page = await context.new_page()
+
+        cdp = await page_context.new_cdp_session(pdf_page)
+
+        loop = asyncio.get_running_loop()
         captured: asyncio.Future = loop.create_future()
 
         async def _on_paused(event):
             request_id = event.get("requestId")
-            stage = event.get("responseStatusCode")  # present only in response stage
-            if stage is None:
+            status = event.get("responseStatusCode")
+            if status is None:
                 # Request stage — just continue, we only want the response.
+                with contextlib.suppress(Exception):
+                    await cdp.send("Fetch.continueRequest", {"requestId": request_id})
+                return
+            if 300 <= status < 400:
+                # Redirect responses are intermediate Fetch stages. They do
+                # not have the PDF body and must never complete captured.
                 with contextlib.suppress(Exception):
                     await cdp.send("Fetch.continueRequest", {"requestId": request_id})
                 return
             # Response stage — grab the body before releasing.
             try:
-                status = event.get("responseStatusCode", 0)
-                if 300 <= status < 400:
-                    return
+                request = event.get("request", {})
+                response_headers = {
+                    str(header.get("name", "")).lower(): str(header.get("value", ""))
+                    for header in event.get("responseHeaders", [])
+                }
+                request_url = request.get("url", url)
+                is_document = event.get("resourceType") == "Document"
+                is_pdf = (
+                    is_document
+                    or _is_pdf_url(request_url)
+                    or _is_pdf_content_type(response_headers.get("content-type"))
+                )
+                if not is_pdf:
+                    # The broad pattern also sees response-stage subresources;
+                    # release those and wait for the terminal PDF response.
+                    with contextlib.suppress(Exception):
+                        await cdp.send("Fetch.continueRequest", {"requestId": request_id})
+                    return
                 result = await cdp.send("Fetch.getResponseBody", {"requestId": request_id})
                 raw = result.get("body", "")
                 is_b64 = result.get("base64Encoded", False)
                 body = base64.b64decode(raw) if is_b64 else raw.encode()
-                final_url = event.get("request", {}).get("url", url)
+                if not _is_pdf_body(body):
+                    raise PdfExtractionError("response is not a PDF document")
+                final_url = request_url
                 if not captured.done():
                     captured.set_result((status, final_url, body))
             except Exception as exc:
@@ -216,13 +296,12 @@ async def _fetch_pdf_document(
 
         cdp.on("Fetch.requestPaused", _on_paused)
         try:
-            # Enable CDP Fetch interception for this page only, response stage.
+            # Enable response-stage interception for every resource. Redirects
+            # and non-PDF subresources are released by the handler above.
             await cdp.send(
                 "Fetch.enable",
                 {
-                    "patterns": [
-                        {"urlPattern": "*", "resourceType": "Document", "requestStage": "Response"}
-                    ],
+                    "patterns": [{"urlPattern": "*", "requestStage": "Response"}],
                 },
             )
             with contextlib.suppress(Exception):
@@ -250,39 +329,7 @@ async def _fetch_pdf_document(
                 await cdp.send("Fetch.disable")
             await pdf_page.close()
 
-    # Fallback: use the existing browser context request client when available.
-    request_context = None
-    try:
-        request_factory = getattr(playwright, "request", None) if playwright is not None else None
-        if request_factory is not None:
-            request_context = await request_factory.new_context(
-                storage_state=await context.storage_state(),
-                proxy=proxy,
-            )
-            request_client = request_context
-        else:
-            request_client = getattr(context, "request", None)
-            if request_client is None:
-                raise PdfExtractionError("PDF request client is unavailable")
-        response = await request_client.get(
-            url,
-            timeout=60000,
-            headers={"Accept": "application/pdf"},
-        )
-        if not response.ok:
-            raise PdfExtractionError(f"PDF request failed with HTTP {response.status}")
-        if not (_is_pdf_url(response.url) or _response_is_pdf(response)):
-            raise PdfExtractionError("response is not a PDF document")
-        title, content = _extract_pdf_document(await response.body())
-        preserve_query = "?" in url
-        return _normalize_url(response.url, strip_query=not preserve_query), title, content
-    except PdfExtractionError:
-        raise
-    except Exception as exc:
-        raise PdfExtractionError(f"PDF download failed: {exc}") from exc
-    finally:
-        if request_context is not None:
-            await request_context.dispose()
+    return await _fetch_pdf_with_request_client(context, url, playwright=playwright, proxy=proxy)
 
 
 _REDIRECT_POLICIES = frozenset({"final", "requested", "skip"})
@@ -625,12 +672,16 @@ async def _index_pdf_document(
     proxy: dict | None = None,
 ) -> tuple[str | None, str]:
     """Fetch, extract, and upsert a PDF into the SQLite page index."""
-    fetch_options = {"playwright": playwright, "proxy": proxy}
-    if page is not None:
-        fetch_options["page"] = page
-    current_url, pdf_title, content_md = await _fetch_pdf_document(
-        context, requested_url, **fetch_options
-    )
+    fetch_options = {"playwright": playwright, "proxy": proxy}
+
+    if page is not None:
+
+        fetch_options["page"] = page
+
+    current_url, pdf_title, content_md = await _fetch_pdf_document(
+        context, requested_url, **fetch_options
+    )
+
     if current_url != requested_url:
         if redirect_policy == "requested":
             index_url = requested_url
