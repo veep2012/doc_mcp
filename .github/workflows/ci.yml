@@ -31,6 +31,9 @@ jobs:
       - name: Create virtual environment
         run: make local-venv
 
+      - name: Audit dependencies
+        run: make audit
+
       - name: Run tests
         run: SMOKE_KEEP_ARTIFACTS=1 CONTAINER_BIN=docker make test
 
