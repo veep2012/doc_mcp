@@ -35,6 +35,7 @@ class HarnessConfig:
     image: str
     timeout_seconds: int
     allowlist: tuple[str, ...]
+    requirements_file: Path | None = None
     verbose: bool = False
 
 
@@ -129,6 +130,19 @@ def load_config(
             "Harness fixture is missing configured index files: " + ", ".join(missing_indexes)
         )
 
+    requirements_file_value = values.get("HARNESS_REQUIREMENTS_FILE")
+    requirements_file = (
+        _resolve(requirements_file_value, root)
+        if requirements_file_value
+        else root / "requirements-mcp.txt"
+    )
+    if not requirements_file.is_file():
+        if requirements_file_value:
+            raise HarnessError(
+                f"Harness requirements file must be an existing file: {requirements_file}"
+            )
+        requirements_file = None
+
     runtime = os.environ.get("CONTAINER_BIN", values.get("CONTAINER_BIN", "podman"))
     if not shutil.which(runtime):
         raise HarnessError(
@@ -160,6 +174,7 @@ def load_config(
                 ),
             )
         ),
+        requirements_file=requirements_file,
         verbose=verbose_value == "true",
     )
     return config, corpus

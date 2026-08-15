@@ -6,11 +6,11 @@
 - Reviewers: Repository maintainers
 - Created: 2026-08-15
 - Last Updated: 2026-08-15
-- Version: v1.4
+- Version: v1.6
 - Related Tickets: veep2012/doc_mcp#2
 
 ## Change Log
-- 2026-08-15 | v1.4 | Kept verbose pip diagnostics on stderr so MCP stdout remains JSON-RPC only.
+- 2026-08-15 | v1.6 | Added the lightweight MCP dependency profile and dual full/MCP-only wheel output.
 
 ## Purpose
 Explain how to run the packaged-version harness that sends one stable MCP request corpus to a baseline wheel and a current wheel, then fails on any response difference that is not explicitly allowlisted.
@@ -48,6 +48,7 @@ The harness validates installed wheels rather than importing the working tree. I
 - FR-2: The fixture must contain valid `config/sites.yaml`, every configured index file, and a local `mcp_requests.json` copied from the tracked example.
 - FR-3: The request corpus must include `initialize`, `get_version`, and at least three `search_docs` calls.
 - FR-4: The harness must fail on malformed responses, startup failures, timeouts, unavailable runtimes, and non-allowlisted response differences.
+- FR-4a: Each run must remove containers labeled `docmcp.harness=true` before starting new comparison containers.
 - FR-5: Only explicitly configured response paths may be ignored during comparison.
 
 ### Non-Functional Requirements
@@ -64,8 +65,11 @@ The Make target is a thin launcher:
 ```text
 make harness
   -> .venv/bin/python -m docmcp.harness
-  -> container run --rm -i ...
-  -> pip install wheel && exec docmcp-server
+  -> remove stale containers labeled docmcp.harness=true
+  -> container run --rm -i --label docmcp.harness=true ...
+  -> pip install requirements-mcp.txt
+  -> pip install --no-deps wheel
+  -> exec docmcp-server
 ```
 
 The runner mounts the fixture at `/fixture` read-only and the wheel directory at `/wheels` read-only. It passes `DOC_MCP_HOME=/fixture` and `CONFIG_FILE=config/sites.yaml` to each container. The container is removed automatically after the comparison because the command uses `--rm`.
@@ -73,6 +77,8 @@ The runner mounts the fixture at `/fixture` read-only and the wheel directory at
 ### Repository files involved
 
 - `.env-harness` - local harness settings and wheel paths.
+- `requirements-mcp.txt` - lightweight MCP-serving dependency profile used by the harness.
+- `scripts/build_mcp_wheel.py` - derives the MCP-only wheel metadata from the full wheel.
 - `tests/fixtures/harness/config/sites.yaml` - sanitized site configuration.
 - `tests/fixtures/harness/mcp_requests.json.example` - tracked example MCP request corpus.
 - `tests/fixtures/harness/mcp_requests.json` - local request corpus copied from the example; ignored by Git.
@@ -101,6 +107,14 @@ Build the current wheel from the checkout:
 make wheel
 ls -1 dist/*.whl
 ```
+
+`make wheel` produces two current-version artifacts: the normal full wheel
+(`doc_mcp-<version>-py3-none-any.whl`) with crawler and vector dependencies,
+and an MCP-only wheel (`doc_mcp_no_crawler-<version>-py3-none-any.whl`) with only the
+MCP-serving dependency profile and only the `docmcp-server` console executable.
+The harness uses `requirements-mcp.txt` and installs either target wheel with
+`--no-deps`, so it does not download Playwright or FastEmbed merely to exercise
+MCP tools.
 
 Obtain the baseline wheel from a release artifact, previous build, or another checked-out revision. Keep both wheels in a directory accessible to the harness. For example:
 
@@ -160,6 +174,7 @@ HARNESS_IMAGE=python:3.11-slim
 HARNESS_TIMEOUT_SECONDS=30
 HARNESS_ALLOWLIST=result.serverInfo.version,result.content.0.text.version,result.structuredContent.result.version
 HARNESS_VERBOSE=false
+HARNESS_REQUIREMENTS_FILE=requirements-mcp.txt
 ```
 
 Run the harness with the local file when possible:
@@ -176,8 +191,9 @@ The required settings are:
 | `HARNESS_CURRENT_WHEEL` | Existing current `.whl` path. |
 | `HARNESS_FIXTURE_DIR` | Fixture root containing `config/sites.yaml`, indexes, and the corpus. |
 | `HARNESS_ARTIFACT_DIR` | Root directory for timestamped run diagnostics. |
+| `HARNESS_REQUIREMENTS_FILE` | Lightweight dependency profile installed before the target wheel. |
 
-Optional settings are `HARNESS_IMAGE`, `HARNESS_TIMEOUT_SECONDS`, `HARNESS_ALLOWLIST`, and `HARNESS_VERBOSE`. Set `HARNESS_VERBOSE=true` to show pip's verbose dependency-resolution output on the captured stderr stream, enable `MCP_LOG_LEVEL=DEBUG` in the container, and retain stderr when startup fails before `initialize`. Pip diagnostics never share stdout with the MCP JSON-RPC stream. Relative paths resolve from the repository root passed to the harness.
+Optional settings are `HARNESS_IMAGE`, `HARNESS_TIMEOUT_SECONDS`, `HARNESS_ALLOWLIST`, and `HARNESS_VERBOSE`. `HARNESS_REQUIREMENTS_FILE` defaults to `requirements-mcp.txt` when that file exists. Set `HARNESS_VERBOSE=true` to show pip's verbose dependency-resolution output on the captured stderr stream, enable `MCP_LOG_LEVEL=DEBUG` in the container, and retain stderr when startup fails before `initialize`. Pip diagnostics never share stdout with the MCP JSON-RPC stream. Relative paths resolve from the repository root passed to the harness.
 
 Do not put secrets, tokens, passwords, certificates, private keys, connection strings, or production data in `.env-harness`. The loader rejects settings whose names look secret-bearing.
 
@@ -294,6 +310,7 @@ Common failure categories are:
 - **Wheel validation**: a path is missing, not a file, or does not end in `.whl`.
 - **Fixture validation**: `sites.yaml`, an index, or the request corpus is missing or invalid.
 - **Runtime unavailable**: the selected Podman/Docker executable is not on `PATH`.
+- **Stale harness containers**: interrupted runs are cleaned automatically on the next run using the dedicated `docmcp.harness=true` label; unrelated containers are not removed.
 - **Startup failure**: the wheel cannot install or `docmcp-server` exits before responding.
 - **Malformed or mismatched response**: stdout is not one valid JSON response per request or the response ID differs from the request ID.
 - **Timeout**: a response is not produced within `HARNESS_TIMEOUT_SECONDS`.

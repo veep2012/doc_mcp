@@ -6,10 +6,10 @@
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
 - Last Updated: 2026-08-15
-- Version: v2.7
+- Version: v2.8
 
 ## Change Log
-- 2026-08-15 | v2.7 | Linked the dedicated harness testing guide and documented harness verbose diagnostics without contaminating MCP stdout.
+- 2026-08-15 | v2.8 | Linked the dedicated harness testing guide and documented the MCP-only dependency profile for packaged comparisons.
 - 2026-08-02 | v2.3 | Added the packaged-wheel MCP version comparison harness, its safe configuration, fixtures, diagnostics, and CI usage.
 - 2026-06-21 | v2.2 | Defined the vector sidecar compatibility contract with strict schema-version checks, deterministic keyword fallback reasons, rebuild-based migration guidance, crawl-fingerprint stale detection based on source content hashes and crawl timestamps, and release-facing search contract wording.
 - 2026-06-14 | v1.9 | Documented vector-search fallback to keyword for missing, stale, incompatible, unreadable, and empty sidecars.
@@ -280,8 +280,8 @@ copy the completed settings back to `.env-harness`.
 
 The required settings are `HARNESS_BASELINE_WHEEL`, `HARNESS_CURRENT_WHEEL`,
 `HARNESS_FIXTURE_DIR`, and `HARNESS_ARTIFACT_DIR`. Safe optional settings are
-`HARNESS_IMAGE`, `HARNESS_TIMEOUT_SECONDS`, `HARNESS_ALLOWLIST`, and
-`HARNESS_VERBOSE`.
+`HARNESS_IMAGE`, `HARNESS_TIMEOUT_SECONDS`, `HARNESS_ALLOWLIST`,
+`HARNESS_VERBOSE`, and `HARNESS_REQUIREMENTS_FILE`.
 `.env-harness` must not contain keys, tokens, passwords, certificates, private
 keys, connection strings, or production data. Override the container runtime
 with `CONTAINER_BIN=docker` or `make CONTAINER_BIN=docker harness`.

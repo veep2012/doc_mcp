@@ -40,7 +40,10 @@ wheel: ## Build a distributable wheel into dist/
 	fi
 	$(VENV_PY) -m pip install -r requirements-dev.txt
 	$(VENV_PY) -c "import shutil; shutil.rmtree('build', ignore_errors=True)"
-	$(VENV_PY) -m build --wheel --no-isolation
+	$(VENV_PY) -c "import shutil; shutil.rmtree('.local/wheel-build', ignore_errors=True)"
+	$(VENV_PY) -m build --wheel --no-isolation --outdir .local/wheel-build
+	cp .local/wheel-build/doc_mcp-*.whl dist/
+	$(VENV_PY) scripts/build_mcp_wheel.py --wheel "$$(find .local/wheel-build -name 'doc_mcp-*.whl' -print -quit)" --output-dir dist
 
 .PHONY: test-unit
 test-unit: ## Run unit tests (default pytest selection excludes smoke tests)

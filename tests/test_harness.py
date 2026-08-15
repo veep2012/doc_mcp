@@ -167,6 +167,9 @@ def test_server_command_quotes_wheel_filename(tmp_path: Path):
         "'/wheels/current;echo unexpected.whl'" in _server_command(config, config.current_wheel)[-1]
     )
 
+    assert "--label" in _server_command(config, config.current_wheel)
+    assert "docmcp.harness=true" in _server_command(config, config.current_wheel)
+
 
 def test_server_command_verbose_mode_exposes_install_and_server_logs(tmp_path: Path):
     """TS-TF-013: Verbose harness runs expose pip and server diagnostics."""
@@ -179,6 +182,7 @@ def test_server_command_verbose_mode_exposes_install_and_server_logs(tmp_path: P
         "python:3.11-slim",
         30,
         (),
+        None,
         True,
     )
 
@@ -187,3 +191,25 @@ def test_server_command_verbose_mode_exposes_install_and_server_logs(tmp_path: P
     assert "MCP_LOG_LEVEL=DEBUG" in command
     assert "pip install -v --no-cache-dir" in command[-1]
     assert "1>&2" in command[-1]
+
+
+def test_server_command_uses_minimal_requirements_profile(tmp_path: Path):
+    """TS-TF-013: Harness installs MCP dependencies without crawler extras."""
+    requirements = tmp_path / "requirements-mcp.txt"
+    requirements.write_text("mcp==1.28.1\n", encoding="utf-8")
+    config = HarnessConfig(
+        tmp_path / "baseline.whl",
+        tmp_path / "current.whl",
+        tmp_path / "fixture",
+        tmp_path / "artifacts",
+        "podman",
+        "python:3.11-slim",
+        30,
+        (),
+        requirements,
+    )
+
+    command = _server_command(config, config.current_wheel)
+
+    assert "/requirements/requirements-mcp.txt" in command[-1]
+    assert "pip install --no-cache-dir --no-deps /wheels/current.whl" in command[-1]

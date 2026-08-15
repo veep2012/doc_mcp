@@ -13,23 +13,90 @@ from .artifacts import create_run_dir, write_json, write_text
 from .comparison import compare_responses, normalize_response
 from .config import HarnessConfig, HarnessError, load_config
 
+_HARNESS_LABEL = "docmcp.harness=true"
+
+
+def _cleanup_stale_containers(config: HarnessConfig) -> None:
+    """Remove containers left by interrupted runs, limited to the harness label."""
+    try:
+        listed = subprocess.run(
+            [
+                config.container_bin,
+                "ps",
+                "-aq",
+                "--filter",
+                f"label={_HARNESS_LABEL}",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise HarnessError(f"Could not inspect stale harness containers: {exc}") from exc
+    if listed.returncode != 0:
+        detail = (listed.stderr or listed.stdout).strip()
+        raise HarnessError(f"Could not inspect stale harness containers: {detail}")
+
+    container_ids = [line.strip() for line in listed.stdout.splitlines() if line.strip()]
+    if not container_ids:
+        return
+    try:
+        removed = subprocess.run(
+            [config.container_bin, "rm", "-f", *container_ids],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise HarnessError(f"Could not remove stale harness containers: {exc}") from exc
+    if removed.returncode != 0:
+        detail = (removed.stderr or removed.stdout).strip()
+        raise HarnessError(f"Could not remove stale harness containers: {detail}")
+
 
 def _server_command(config: HarnessConfig, wheel: Path) -> list[str]:
     log_level = "DEBUG" if config.verbose else "INFO"
-    pip_command = (
-        f"pip install -v --no-cache-dir {shlex.quote(f'/wheels/{wheel.name}')} 1>&2"
-        if config.verbose
-        else f"pip install --no-cache-dir {shlex.quote(f'/wheels/{wheel.name}')} >/dev/null"
-    )
+    pip_output = " 1>&2" if config.verbose else " >/dev/null"
+    install_commands = []
+    if config.requirements_file is not None:
+        install_commands.append(
+            "pip install "
+            + ("-v " if config.verbose else "")
+            + f"--no-cache-dir -r /requirements/{shlex.quote(config.requirements_file.name)}"
+            + pip_output
+        )
+        install_commands.append(
+            "pip install "
+            + ("-v " if config.verbose else "")
+            + f"--no-cache-dir --no-deps {shlex.quote(f'/wheels/{wheel.name}')}"
+            + pip_output
+        )
+    else:
+        install_commands.append(
+            "pip install "
+            + ("-v " if config.verbose else "")
+            + f"--no-cache-dir {shlex.quote(f'/wheels/{wheel.name}')}"
+            + pip_output
+        )
+    pip_command = " && ".join(install_commands)
+    mounts = [
+        "-v",
+        f"{config.fixture_dir}:/fixture:ro",
+        "-v",
+        f"{wheel.parent}:/wheels:ro",
+    ]
+    if config.requirements_file is not None:
+        mounts.extend(["-v", f"{config.requirements_file.parent}:/requirements:ro"])
     return [
         config.container_bin,
         "run",
         "--rm",
         "-i",
-        "-v",
-        f"{config.fixture_dir}:/fixture:ro",
-        "-v",
-        f"{wheel.parent}:/wheels:ro",
+        "--label",
+        _HARNESS_LABEL,
+        *mounts,
         "-e",
         "DOC_MCP_HOME=/fixture",
         "-e",
@@ -121,6 +188,7 @@ def _run_version(
 def run_harness(env_file: Path | str = ".env-harness") -> Path:
     """Compare two packaged servers and return the diagnostic artifact directory."""
     config, requests = load_config(env_file)
+    _cleanup_stale_containers(config)
     run_dir = create_run_dir(config.artifact_dir)
     try:
         baseline = _run_version(config, config.baseline_wheel, requests, run_dir / "baseline")

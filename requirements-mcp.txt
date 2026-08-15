@@ -1,0 +1,4 @@
+# Minimal dependencies for the packaged MCP server and keyword-index tools.
+mcp==1.28.1
+PyYAML==6.0.3
+python-dotenv==1.2.2
