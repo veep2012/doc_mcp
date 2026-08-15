@@ -6,11 +6,11 @@
 - Reviewers: Repository maintainers
 - Created: 2026-08-15
 - Last Updated: 2026-08-15
-- Version: v1.6
+- Version: v1.8
 - Related Tickets: veep2012/doc_mcp#2
 
 ## Change Log
-- 2026-08-15 | v1.7 | Added the lightweight MCP dependency profile and dual full/MCP-only wheel output, including FastEmbed and sqlite-vec; documented shell overrides, live image-build progress, concurrent stderr artifact streaming for verbose model-backed runs, and fixed safety limits after removing the configurable harness timeout.
+- 2026-08-15 | v1.8 | Added recursive credential redaction for structured artifacts and aligned wheel validation documentation with the implemented path checks.
 
 ## Purpose
 Explain how to run the packaged-version harness that sends one stable MCP request corpus to a baseline wheel and a current wheel, then fails on any response difference that is not explicitly allowlisted.
@@ -36,7 +36,6 @@ Explain how to run the packaged-version harness that sends one stable MCP reques
 - **Current wheel**: The packaged `doc-mcp` version being validated.
 - **Fixture**: Sanitized configuration, request corpus, and local SQLite index mounted into both containers.
 - **Allowlist**: Dot-separated response paths removed before comparison because their differences are expected. Paths may traverse object keys, list indexes, and JSON-encoded tool text.
-- **Minimum baseline**: `doc-mcp 1.1.1`; earlier wheels are unsupported because they do not pin the runtime dependency versions required for reproducible startup.
 
 ## Background / Context
 The harness validates installed wheels rather than importing the working tree. It starts one isolated container for each wheel, installs the wheel into that container, sends the same newline-delimited MCP JSON-RPC requests to both servers, and compares the parsed responses in request order. The fixture is mounted read-only, and no production configuration or credentials are needed.
@@ -44,7 +43,6 @@ The harness validates installed wheels rather than importing the working tree. I
 ## Requirements
 ### Functional Requirements
 - FR-1: The baseline and current wheel paths must point to existing `.whl` files.
-- FR-1a: The baseline wheel must be `doc-mcp 1.1.1` or newer. Earlier baseline wheels are unsupported.
 - FR-2: The fixture must contain valid `config/sites.yaml`, every configured index file, and a local `mcp_requests.json` copied from the tracked example.
 - FR-3: The request corpus must include `initialize`, `get_version`, and at least three `search_docs` calls; the fixture's hybrid/vector configuration must exercise the vector backend.
 - FR-4: The harness must fail on malformed responses, startup failures, timeouts, unavailable runtimes, and non-allowlisted response differences.
@@ -127,11 +125,6 @@ cp dist/doc_mcp-*.whl /tmp/docmcp-harness-wheels/current.whl
 cp /path/to/baseline/doc_mcp-*.whl /tmp/docmcp-harness-wheels/baseline.whl
 ```
 
-The minimum supported baseline is `doc-mcp 1.1.1`. Use `1.1.1` or a newer
-wheel for `HARNESS_BASELINE_WHEEL`; earlier releases declare broad dependency
-ranges and can resolve incompatible MCP runtime versions during the isolated
-container install. The current wheel may be the same version or newer.
-
 The filenames do not need to be named `baseline.whl` and `current.whl`; the environment file may point directly to the generated names.
 
 ### 3. Create the local fixture index
@@ -189,7 +182,7 @@ The required settings are:
 
 | Setting | Meaning |
 | --- | --- |
-| `HARNESS_BASELINE_WHEEL` | Existing baseline `.whl` path; the baseline must be `doc-mcp 1.1.1` or newer. |
+| `HARNESS_BASELINE_WHEEL` | Existing baseline `.whl` path. |
 | `HARNESS_CURRENT_WHEEL` | Existing current `.whl` path. |
 | `HARNESS_FIXTURE_DIR` | Fixture root containing `config/sites.yaml`, indexes, and the corpus. |
 | `HARNESS_ARTIFACT_DIR` | Root directory for timestamped run diagnostics. |
@@ -296,7 +289,7 @@ artifacts/harness/<timestamp>/
 └── summary.md
 ```
 
-`normalized/` contains responses after allowlisted paths are removed. `diff.json` contains the request index and both values for every unexpected difference. When a run fails after artifact creation, `failure.log` records the error. Captured text diagnostics are passed through credential-like value redaction.
+`normalized/` contains responses after allowlisted paths are removed. `diff.json` contains the request index and both values for every unexpected difference. When a run fails after artifact creation, `failure.log` records the error. Text and JSON diagnostics recursively redact credential-like values, including nested objects and JSON-encoded tool text.
 
 To investigate a failure:
 

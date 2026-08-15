@@ -6,12 +6,12 @@
 - Reviewers: Repository maintainers
 - Created: 2026-05-03
 - Last Updated: 2026-08-15
-- Version: v0.9
+- Version: v1.2
 - Related Tickets: veep2012/doc_mcp#2
 
 ## Change Log
 - 2026-08-14 | v1.0 | Added the lightweight MCP dependency profile and dual full/MCP-only wheel output, including cached baseline/current harness images, live image-build progress, vector-search runtime coverage, shell timeout overrides, concurrent stderr artifact streaming for verbose runs, and fixed internal safety limits after removing the configurable harness timeout.
-- 2026-08-15 | v1.1 | Added corpus queries based on Harness Docs topics that exercise semantic vector-only retrieval as well as hybrid retrieval with keyword overlap.
+- 2026-08-15 | v1.2 | Added recursive credential redaction coverage for JSON harness artifacts and aligned the harness contract with the supported wheel-path validation.
 - 2026-08-02 | v0.3 | Added packaged MCP version-comparison harness scenarios and automated mapping.
 - 2026-07-26 | v0.2 | Documented MCP smoke prerequisites, added optional-dependency collection-gate regression coverage, and mapped the package-independent test support helpers.
 - 2026-05-03 | v0.1 | Added pytest framework scenario coverage, smoke prerequisites, and automated test mapping.
@@ -63,6 +63,7 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - `TS-TF-011` - Test files do not import shared helpers through the `tests.*` package path.
 - `TS-TF-012` - Shared helpers import successfully through the supported pytest and direct Python invocation modes.
 - `TS-TF-013` - The MCP version-comparison harness validates its fixture and safe configuration, exercises vector search with the MCP-only dependency profile, normalizes only allowlisted fields (including JSON-encoded `get_version` payload versions), and reports unexpected differences.
+- `TS-TF-014` - Harness JSON artifacts recursively redact credential-like values, including nested objects and JSON-encoded tool text.
 
 ### Scenario Details
 #### TS-TF-001
@@ -125,6 +126,12 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - Unit coverage of the default Podman setting must clear any process-level `CONTAINER_BIN` override so CI runtime selection does not affect the assertion.
 - Cleanup: The container command uses `--rm`; inspect the timestamped artifact directory if the comparison fails.
 
+#### TS-TF-014
+- Purpose: Prevent credential-like values from being preserved in structured harness diagnostics.
+- Preconditions: A temporary artifact path is writable.
+- Action: Write nested dictionaries, lists, and JSON-encoded text containing credential-like keys through the harness artifact writer.
+- Expected Result: The resulting JSON remains valid and contains `[REDACTED]` in place of credential values at every nested level.
+
 ### Automated Test Mapping
 - `TS-TF-001` -> `tests/test_smoke_support.py::test_make_test_dry_run_lists_unit_before_smoke`
 - `TS-TF-002` -> `tests/test_smoke_support.py::test_direct_pytest_excludes_smoke_by_default`
@@ -139,6 +146,7 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - `TS-TF-011` -> `tests/test_smoke_support.py::test_test_files_do_not_use_forbidden_tests_package_imports`
 - `TS-TF-012` -> `tests/test_smoke_support.py::{test_shared_helpers_import_under_supported_invocation_modes,test_support_modules_import_as_top_level_modules}`
 - `TS-TF-013` -> `tests/test_harness.py`
+- `TS-TF-014` -> `tests/test_harness.py::test_json_artifacts_redact_nested_credentials`
 
 ## Edge Cases
 - If Podman is installed but not usable in the current environment, rerun smoke tests with `CONTAINER_BIN=docker`.

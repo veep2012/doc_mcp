@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from docmcp.harness.artifacts import write_json
 from docmcp.harness.comparison import compare_responses
 from docmcp.harness.config import HarnessConfig, HarnessError, load_config
 from docmcp.harness.runner import _run_version, _server_command
@@ -303,3 +304,25 @@ def test_project_metadata_reads_full_runtime_requirements_file():
     assert 'dependencies = {file = ["requirements.txt"]}' in pyproject
     assert "playwright==" not in pyproject
     assert "fastembed==" not in pyproject
+
+
+def test_json_artifacts_redact_nested_credentials(tmp_path: Path):
+    """TS-TF-014: Structured diagnostics redact nested and JSON-encoded credentials."""
+    artifact = tmp_path / "artifact.json"
+    write_json(
+        artifact,
+        {
+            "token": "top-secret",
+            "nested": [{"api_key": "nested-secret"}],
+            "tool_text": json.dumps({"password": "encoded-secret", "ok": True}),
+        },
+    )
+
+    content = artifact.read_text(encoding="utf-8")
+    payload = json.loads(content)
+    assert payload["token"] == "[REDACTED]"
+    assert payload["nested"][0]["api_key"] == "[REDACTED]"
+    assert json.loads(payload["tool_text"])["password"] == "[REDACTED]"
+    assert "top-secret" not in content
+    assert "nested-secret" not in content
+    assert "encoded-secret" not in content
