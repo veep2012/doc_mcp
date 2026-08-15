@@ -5,10 +5,12 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-07-19
-- Version: v2.2
+- Last Updated: 2026-08-09
+- Version: v2.4
 
 ## Change Log
+- 2026-08-09 | v2.4 | Clarified redirected PDF response capture, PDF signature validation, and authenticated request fallback behavior.
+- 2026-07-29 | v2.3 | Documented proxy-backed, authenticated PDF download behavior.
 - 2026-07-19 | v2.2 | Clarified that PDF handling is automatic and applies to both `.pdf` URLs and `application/pdf` responses, including targeted reindexing.
 - 2026-07-12 | v2.1 | Removed unsupported credential and authentication-mode configuration guidance.
 - 2026-07-04 | v2.0 | Documented the targeted crawl CLI page-selection flags that override normal breadth-first crawling without adding new site configuration keys.
@@ -89,7 +91,7 @@ MCP_SERVER_NAME=docs-mcp
 - `crawl.ignore_https_errors`: defaults to `false`.
 - `crawl.allow_patterns`: defaults to an empty list.
 - `crawl.deny_patterns`: defaults to an empty list.
-- PDF handling has no site-specific configuration key. The crawler automatically recognizes `.pdf` URLs and responses with `Content-Type: application/pdf`; PDFs selected through `--pages` or `--pages-file` follow the same behavior.
+- PDF handling has no site-specific configuration key. The crawler automatically recognizes `.pdf` URLs and responses with `Content-Type: application/pdf`; PDFs selected through `--pages` or `--pages-file` follow the same behavior. When available, CDP captures the terminal response after continuing intermediate redirects; otherwise the authenticated request-client fallback copies the browser context's storage state and uses `playwright.launch.proxy`.
 - `playwright.browser`: defaults to `chromium`; launch and context settings default to empty mappings.
 - `vectorizer.chunk_size`: defaults to `800`.
 - `vectorizer.chunk_overlap`: defaults to `120`.
