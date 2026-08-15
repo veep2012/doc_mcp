@@ -98,6 +98,7 @@ def test_load_config_validates_fixture_and_corpus(tmp_path: Path, monkeypatch: p
     _fixture(tmp_path)
     (tmp_path / "baseline.whl").touch()
     (tmp_path / "current.whl").touch()
+    monkeypatch.delenv("CONTAINER_BIN", raising=False)
     monkeypatch.setattr("docmcp.harness.config.shutil.which", lambda _: "/usr/bin/docker")
 
     config, corpus = load_config(_write_env(tmp_path), root=tmp_path)

@@ -5,11 +5,12 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-05-03
-- Last Updated: 2026-08-02
-- Version: v0.3
+- Last Updated: 2026-08-15
+- Version: v0.4
 - Related Tickets: veep2012/doc_mcp#2
 
 ## Change Log
+- 2026-08-15 | v0.4 | Isolated the harness default-runtime unit assertion from CI-level `CONTAINER_BIN` overrides.
 - 2026-08-02 | v0.3 | Added packaged MCP version-comparison harness scenarios and automated mapping.
 - 2026-07-26 | v0.2 | Documented MCP smoke prerequisites, added optional-dependency collection-gate regression coverage, and mapped the package-independent test support helpers.
 - 2026-05-03 | v0.1 | Added pytest framework scenario coverage, smoke prerequisites, and automated test mapping.
@@ -120,6 +121,7 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - Preconditions: Both wheel paths exist; the fixture contains valid `config/sites.yaml`, referenced indexes, and the stable request corpus; Podman or Docker is available through `CONTAINER_BIN`.
 - Action: Run `python -m docmcp.harness` or `make harness`.
 - Expected Result: Both isolated containers receive identical requests. Only documented allowlisted fields are ignored; unexpected differences or startup, timeout, malformed-response, and runtime failures fail while retaining redacted artifacts.
+- Unit coverage of the default Podman setting must clear any process-level `CONTAINER_BIN` override so CI runtime selection does not affect the assertion.
 - Cleanup: The container command uses `--rm`; inspect the timestamped artifact directory if the comparison fails.
 
 ### Automated Test Mapping
