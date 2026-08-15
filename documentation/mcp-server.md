@@ -6,10 +6,10 @@
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
 - Last Updated: 2026-08-15
-- Version: v2.9
+- Version: v3.0
 
 ## Change Log
-- 2026-08-15 | v2.9 | Linked the dedicated harness testing guide, documented the MCP-only dependency profile, and clarified recursive diagnostic redaction for packaged comparisons.
+- 2026-08-15 | v3.0 | Consolidated packaged-version harness instructions in the dedicated harness testing guide and kept this reference as a cross-link.
 - 2026-08-02 | v2.3 | Added the packaged-wheel MCP version comparison harness, its safe configuration, fixtures, diagnostics, and CI usage.
 - 2026-06-21 | v2.2 | Defined the vector sidecar compatibility contract with strict schema-version checks, deterministic keyword fallback reasons, rebuild-based migration guidance, crawl-fingerprint stale detection based on source content hashes and crawl timestamps, and release-facing search contract wording.
 - 2026-06-14 | v1.9 | Documented vector-search fallback to keyword for missing, stale, incompatible, unreadable, and empty sidecars.
@@ -269,48 +269,8 @@ If `get_sites` fails with a path under `.venv/lib/.../site-packages/config/sites
 
 ### Packaged Version Comparison
 
-For step-by-step setup, fixture creation, examples, artifact inspection, and
-troubleshooting, see the [Harness Testing Guide](harness_testing.md).
-
-`python -m docmcp.harness` compares a baseline and current `doc-mcp` wheel
-against exactly the same MCP JSON-RPC corpus. `make harness` is only a launcher
-for that Python engine. Before running it, copy `.env-harness` to a local file,
-set `HARNESS_BASELINE_WHEEL` and `HARNESS_CURRENT_WHEEL` to built wheels, and
-copy the completed settings back to `.env-harness`.
-
-The required settings are `HARNESS_BASELINE_WHEEL`, `HARNESS_CURRENT_WHEEL`,
-`HARNESS_FIXTURE_DIR`, and `HARNESS_ARTIFACT_DIR`. Safe optional settings are
-`HARNESS_IMAGE`, `HARNESS_ALLOWLIST`,
-`HARNESS_VERBOSE`, and `HARNESS_REQUIREMENTS_FILE`.
-`.env-harness` must not contain keys, tokens, passwords, certificates, private
-keys, connection strings, or production data. Override the container runtime
-with `CONTAINER_BIN=docker` or `make CONTAINER_BIN=docker harness`.
-
-The fixture defaults to `tests/fixtures/harness` and must contain
-`config/sites.yaml`, every index referenced by that configuration, and
-`mcp_requests.json`. The configuration and request-corpus example are sanitized
-and version controlled; copy `mcp_requests.json.example` to the ignored local
-`mcp_requests.json`. The local SQLite index is generated because `index/` is
-ignored by Git. The fixture is mounted read-only into each isolated container. The request
-corpus is a JSON array of
-JSON-RPC requests, must include `initialize`, `get_version`, and at least three
-`search_docs` calls including empty or error behavior.
-
-Each run creates a timestamped directory under `HARNESS_ARTIFACT_DIR` with
-baseline/current command output and responses, normalized responses, `diff.json`,
-and a summary. Failed runs retain `failure.log`; text and JSON diagnostics
-recursively redact credential-like values, including nested objects and
-JSON-encoded tool text. The repository example explicitly allowlists the version in
-the initialization result and both JSON-encoded `get_version` payload fields:
-`result.serverInfo.version`, `result.content.0.text.version`, and
-`result.structuredContent.result.version`. Any
-other changed response, malformed response, startup failure, unavailable
-runtime, or timeout fails the run.
-
-For CI, build or provide both wheel artifacts first, write their workspace paths
-to `.env-harness`, and run `make harness` with the selected runtime available.
-For local failures, first confirm each wheel starts with the fixture, verify
-Podman/Docker with `CONTAINER_BIN`, and inspect the retained run directory.
+See the [Harness Testing Guide](harness_testing.md) for setup, execution,
+configuration, fixture requirements, artifacts, CI usage, and troubleshooting.
 
 ## Edge Cases
 - If the client launches an old wheel, `docmcp-server` may still reference `src.main`; rebuild and reinstall the wheel.
