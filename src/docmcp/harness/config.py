@@ -47,22 +47,35 @@ def _validate_corpus(path: Path) -> list[dict]:
         corpus = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise HarnessError(f"MCP request corpus is not valid JSON: {path}") from exc
-    if not isinstance(corpus, list) or not corpus or not all(isinstance(item, dict) for item in corpus):
+    if (
+        not isinstance(corpus, list)
+        or not corpus
+        or not all(isinstance(item, dict) for item in corpus)
+    ):
         raise HarnessError("MCP request corpus must be a non-empty JSON array of request objects.")
     methods = {request.get("method") for request in corpus}
     if "initialize" not in methods:
         raise HarnessError("MCP request corpus must include an initialize request.")
-    tools = [request.get("params", {}).get("name") for request in corpus if request.get("method") == "tools/call"]
+    tools = [
+        request.get("params", {}).get("name")
+        for request in corpus
+        if request.get("method") == "tools/call"
+    ]
     if "get_version" not in tools or tools.count("search_docs") < 3:
         raise HarnessError(
             "MCP request corpus must include get_version and at least three search_docs requests."
         )
-    if any(request.get("jsonrpc") != "2.0" or "id" not in request or not request.get("method") for request in corpus):
+    if any(
+        request.get("jsonrpc") != "2.0" or "id" not in request or not request.get("method")
+        for request in corpus
+    ):
         raise HarnessError("Each MCP request must contain jsonrpc='2.0', id, and method.")
     return corpus
 
 
-def load_config(env_file: Path | str = ".env-harness", *, root: Path | None = None) -> tuple[HarnessConfig, list[dict]]:
+def load_config(
+    env_file: Path | str = ".env-harness", *, root: Path | None = None
+) -> tuple[HarnessConfig, list[dict]]:
     """Load safe harness settings and return them with the immutable request corpus."""
     root = (root or Path.cwd()).resolve()
     env_path = _resolve(str(env_file), root)
@@ -71,7 +84,9 @@ def load_config(env_file: Path | str = ".env-harness", *, root: Path | None = No
     values = {key: value for key, value in dotenv_values(env_path).items() if value is not None}
     forbidden = [key for key in values if any(marker in key.upper() for marker in _SECRET_MARKERS)]
     if forbidden:
-        raise HarnessError(f".env-harness must not contain secret settings: {', '.join(sorted(forbidden))}")
+        raise HarnessError(
+            f".env-harness must not contain secret settings: {', '.join(sorted(forbidden))}"
+        )
     missing = [key for key in _REQUIRED if not values.get(key)]
     if missing:
         raise HarnessError(f".env-harness is missing required settings: {', '.join(missing)}")
@@ -87,7 +102,9 @@ def load_config(env_file: Path | str = ".env-harness", *, root: Path | None = No
     site_config = fixture / "config" / "sites.yaml"
     corpus = _validate_corpus(fixture / "mcp_requests.json")
     try:
-        original_root, original_config = os.environ.get("DOC_MCP_HOME"), os.environ.get("CONFIG_FILE")
+        original_root, original_config = os.environ.get("DOC_MCP_HOME"), os.environ.get(
+            "CONFIG_FILE"
+        )
         os.environ["DOC_MCP_HOME"], os.environ["CONFIG_FILE"] = str(fixture), "config/sites.yaml"
         fixture_config = load_site_config()
     except ConfigError as exc:
@@ -102,7 +119,9 @@ def load_config(env_file: Path | str = ".env-harness", *, root: Path | None = No
         else:
             os.environ["CONFIG_FILE"] = original_config
     missing_indexes = [
-        site["index_file"] for site in fixture_config["sites"] if not Path(site["index_file"]).is_file()
+        site["index_file"]
+        for site in fixture_config["sites"]
+        if not Path(site["index_file"]).is_file()
     ]
     if missing_indexes:
         raise HarnessError(
@@ -128,6 +147,14 @@ def load_config(env_file: Path | str = ".env-harness", *, root: Path | None = No
         container_bin=runtime,
         image=values.get("HARNESS_IMAGE", "python:3.11-slim"),
         timeout_seconds=timeout,
-        allowlist=tuple(filter(None, (item.strip() for item in values.get("HARNESS_ALLOWLIST", "serverInfo.version").split(",")))),
+        allowlist=tuple(
+            filter(
+                None,
+                (
+                    item.strip()
+                    for item in values.get("HARNESS_ALLOWLIST", "serverInfo.version").split(",")
+                ),
+            )
+        ),
     )
     return config, corpus

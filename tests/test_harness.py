@@ -34,7 +34,9 @@ def _write_env(tmp_path: Path, **values: str) -> Path:
     }
     defaults.update(values)
     path = tmp_path / ".env-harness"
-    path.write_text("\n".join(f"{key}={value}" for key, value in defaults.items()), encoding="utf-8")
+    path.write_text(
+        "\n".join(f"{key}={value}" for key, value in defaults.items()), encoding="utf-8"
+    )
     return path
 
 
@@ -52,10 +54,30 @@ def _fixture(tmp_path: Path) -> None:
         json.dumps(
             [
                 {"jsonrpc": "2.0", "id": 1, "method": "initialize"},
-                {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "get_version"}},
-                {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "search_docs"}},
-                {"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "search_docs"}},
-                {"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {"name": "search_docs"}},
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {"name": "get_version"},
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 3,
+                    "method": "tools/call",
+                    "params": {"name": "search_docs"},
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 4,
+                    "method": "tools/call",
+                    "params": {"name": "search_docs"},
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 5,
+                    "method": "tools/call",
+                    "params": {"name": "search_docs"},
+                },
             ]
         ),
         encoding="utf-8",
@@ -105,4 +127,6 @@ def test_server_command_quotes_wheel_filename(tmp_path: Path):
         (),
     )
 
-    assert "'/wheels/current;echo unexpected.whl'" in _server_command(config, config.current_wheel)[-1]
+    assert (
+        "'/wheels/current;echo unexpected.whl'" in _server_command(config, config.current_wheel)[-1]
+    )
