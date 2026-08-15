@@ -13,6 +13,7 @@ from docmcp.harness.artifacts import write_json
 from docmcp.harness.comparison import compare_responses
 from docmcp.harness.config import HarnessConfig, HarnessError, load_config
 from docmcp.harness.runner import _run_version, _server_command
+from docmcp.harness import runner
 from scripts.build_mcp_wheel import _read_mcp_requirements
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -108,6 +109,28 @@ def test_load_config_validates_fixture_and_corpus(tmp_path: Path, monkeypatch: p
 
     assert config.container_bin == "podman"
     assert len(corpus) == 5
+
+
+def test_load_config_rejects_invalid_verbose_value(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """TS-TF-015: Invalid verbosity settings fail before container execution."""
+    _fixture(tmp_path)
+    (tmp_path / "baseline.whl").touch()
+    (tmp_path / "current.whl").touch()
+    monkeypatch.setattr("docmcp.harness.config.shutil.which", lambda _: "/usr/bin/podman")
+
+    with pytest.raises(HarnessError, match="HARNESS_VERBOSE must be true or false"):
+        load_config(_write_env(tmp_path, HARNESS_VERBOSE="sometimes"), root=tmp_path)
+
+
+def test_load_config_rejects_invalid_image_value(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """TS-TF-015: Invalid image names fail before container execution."""
+    _fixture(tmp_path)
+    (tmp_path / "baseline.whl").touch()
+    (tmp_path / "current.whl").touch()
+    monkeypatch.setattr("docmcp.harness.config.shutil.which", lambda _: "/usr/bin/podman")
+
+    with pytest.raises(HarnessError, match="HARNESS_IMAGE must contain only image-repository"):
+        load_config(_write_env(tmp_path, HARNESS_IMAGE="docmcp harness"), root=tmp_path)
 
 
 def test_comparison_allows_only_explicit_version_difference():
@@ -249,6 +272,89 @@ def test_run_version_streams_large_stderr_without_blocking_stdout(
 
     assert [response["id"] for response in responses] == [1, 2]
     assert (output / "stderr.log").stat().st_size == 524288
+
+
+def _run_version_with_child(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, child: str) -> None:
+    monkeypatch.setattr(
+        "docmcp.harness.runner._server_command",
+        lambda _config, _wheel, _image=None: [sys.executable, "-c", child],
+    )
+    config = HarnessConfig(
+        tmp_path / "baseline.whl",
+        tmp_path / "current.whl",
+        tmp_path / "fixture",
+        tmp_path / "artifacts",
+        "podman",
+        "python:3.11-slim",
+        (),
+    )
+    with pytest.raises(HarnessError):
+        _run_version(
+            config,
+            config.current_wheel,
+            [{"jsonrpc": "2.0", "id": 1, "method": "initialize"}],
+            tmp_path / "run",
+        )
+    assert (tmp_path / "run" / "stderr.log").is_file()
+
+
+def test_run_version_rejects_malformed_response(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """TS-TF-016: Malformed MCP output fails the version run."""
+    _run_version_with_child(
+        tmp_path,
+        monkeypatch,
+        "import sys; next(sys.stdin); print('not-json', flush=True)",
+    )
+
+
+def test_run_version_rejects_mismatched_response_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """TS-TF-016: A response for the wrong request ID fails the version run."""
+    _run_version_with_child(
+        tmp_path,
+        monkeypatch,
+        "import json,sys; request=json.loads(next(sys.stdin)); print(json.dumps({'id': 99}), flush=True)",
+    )
+
+
+def test_run_version_rejects_early_server_exit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """TS-TF-016: A server that closes stdout before responding fails the version run."""
+    _run_version_with_child(tmp_path, monkeypatch, "import sys; next(sys.stdin)")
+
+
+def test_run_harness_preserves_comparison_failure_artifact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """TS-TF-016: Unexpected differences retain a failure log and diff artifact."""
+    config = HarnessConfig(
+        tmp_path / "baseline.whl",
+        tmp_path / "current.whl",
+        tmp_path / "fixture",
+        tmp_path / "artifacts",
+        "podman",
+        "python:3.11-slim",
+        (),
+    )
+    monkeypatch.setattr(runner, "load_config", lambda _env: (config, [{"id": 1}]))
+    monkeypatch.setattr(runner, "_cleanup_stale_containers", lambda _config: None)
+    monkeypatch.setattr(
+        runner, "_build_harness_image", lambda _config, _wheel, role: f"image:{role}"
+    )
+
+    def fake_run_version(_config, _wheel, _requests, output, _image):
+        value = "baseline" if output.name == "baseline" else "current"
+        return [{"id": 1, "result": value}]
+
+    monkeypatch.setattr(runner, "_run_version", fake_run_version)
+
+    with pytest.raises(HarnessError, match="unexpected difference"):
+        runner.run_harness(tmp_path / ".env-harness")
+
+    run_dirs = list((tmp_path / "artifacts").iterdir())
+    assert len(run_dirs) == 1
+    assert (run_dirs[0] / "diff.json").is_file()
+    assert (run_dirs[0] / "failure.log").is_file()
 
 
 def test_server_command_uses_minimal_requirements_profile(tmp_path: Path):

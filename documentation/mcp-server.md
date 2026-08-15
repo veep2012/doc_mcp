@@ -6,10 +6,10 @@
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
 - Last Updated: 2026-08-15
-- Version: v2.8
+- Version: v2.9
 
 ## Change Log
-- 2026-08-15 | v2.8 | Linked the dedicated harness testing guide and documented the MCP-only dependency profile for packaged comparisons.
+- 2026-08-15 | v2.9 | Linked the dedicated harness testing guide, documented the MCP-only dependency profile, and clarified recursive diagnostic redaction for packaged comparisons.
 - 2026-08-02 | v2.3 | Added the packaged-wheel MCP version comparison harness, its safe configuration, fixtures, diagnostics, and CI usage.
 - 2026-06-21 | v2.2 | Defined the vector sidecar compatibility contract with strict schema-version checks, deterministic keyword fallback reasons, rebuild-based migration guidance, crawl-fingerprint stale detection based on source content hashes and crawl timestamps, and release-facing search contract wording.
 - 2026-06-14 | v1.9 | Documented vector-search fallback to keyword for missing, stale, incompatible, unreadable, and empty sidecars.
@@ -298,8 +298,9 @@ JSON-RPC requests, must include `initialize`, `get_version`, and at least three
 
 Each run creates a timestamped directory under `HARNESS_ARTIFACT_DIR` with
 baseline/current command output and responses, normalized responses, `diff.json`,
-and a summary. Failed runs retain `failure.log`; diagnostics redact likely
-credential values. The repository example explicitly allowlists the version in
+and a summary. Failed runs retain `failure.log`; text and JSON diagnostics
+recursively redact credential-like values, including nested objects and
+JSON-encoded tool text. The repository example explicitly allowlists the version in
 the initialization result and both JSON-encoded `get_version` payload fields:
 `result.serverInfo.version`, `result.content.0.text.version`, and
 `result.structuredContent.result.version`. Any

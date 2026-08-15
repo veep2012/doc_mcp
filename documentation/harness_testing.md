@@ -6,11 +6,11 @@
 - Reviewers: Repository maintainers
 - Created: 2026-08-15
 - Last Updated: 2026-08-15
-- Version: v1.8
+- Version: v1.9
 - Related Tickets: veep2012/doc_mcp#2
 
 ## Change Log
-- 2026-08-15 | v1.8 | Added recursive credential redaction for structured artifacts and aligned wheel validation documentation with the implemented path checks.
+- 2026-08-15 | v1.9 | Documented recursive credential redaction, corrected direct source-tree invocation and optional requirements configuration, and synchronized harness scenario coverage.
 
 ## Purpose
 Explain how to run the packaged-version harness that sends one stable MCP request corpus to a baseline wheel and a current wheel, then fails on any response difference that is not explicitly allowlisted.
@@ -85,7 +85,7 @@ The runner mounts the fixture at `/fixture` read-only and the wheel directory at
 - `tests/fixtures/harness/index/ld_docs.db` - local SQLite index required by the fixture; the `index/` path is ignored by Git and must be created locally.
 - `src/docmcp/harness/config.py` - settings and fixture validation.
 - `src/docmcp/harness/runner.py` - container execution and artifact creation.
-- `tests/test_harness.py` - unit coverage for validation, comparison, and command quoting.
+- `tests/test_harness.py` - unit coverage for validation, comparison, command quoting, failure boundaries, artifact redaction, and preserved failure diagnostics.
 
 ## Setup
 
@@ -186,9 +186,8 @@ The required settings are:
 | `HARNESS_CURRENT_WHEEL` | Existing current `.whl` path. |
 | `HARNESS_FIXTURE_DIR` | Fixture root containing `config/sites.yaml`, indexes, and the corpus. |
 | `HARNESS_ARTIFACT_DIR` | Root directory for timestamped run diagnostics. |
-| `HARNESS_REQUIREMENTS_FILE` | Lightweight dependency profile installed before the target wheel. |
 
-Optional settings are `HARNESS_IMAGE`, `HARNESS_ALLOWLIST`, and `HARNESS_VERBOSE`. `HARNESS_IMAGE` is the generated image repository prefix; the harness builds `<prefix>:baseline` and `<prefix>:current` from `python:3.11-slim`. Image-build stdout and stderr are shown live in the terminal, while only server stderr is written to the per-version artifacts. `HARNESS_REQUIREMENTS_FILE` defaults to `requirements-mcp.txt` when that file exists. Set `HARNESS_VERBOSE=true` to retain pip dependency-resolution output and enable `MCP_LOG_LEVEL=DEBUG` in the container. The harness uses fixed internal safety limits: 15 minutes per image build and 180 seconds per MCP request/process shutdown. Container stderr streams directly into each version's `stderr.log` artifact while MCP stdout is processed, preventing verbose diagnostics from filling a subprocess pipe and blocking JSON-RPC responses. Pip diagnostics never share stdout with the MCP JSON-RPC stream. Relative paths resolve from the repository root passed to the harness.
+Optional settings are `HARNESS_IMAGE`, `HARNESS_ALLOWLIST`, `HARNESS_VERBOSE`, and `HARNESS_REQUIREMENTS_FILE`. `HARNESS_IMAGE` is the generated image repository prefix; the harness builds `<prefix>:baseline` and `<prefix>:current` from `python:3.11-slim`. Image-build stdout and stderr are shown live in the terminal, while only server stderr is written to the per-version artifacts. `HARNESS_REQUIREMENTS_FILE` defaults to `requirements-mcp.txt` when that file exists. Set `HARNESS_VERBOSE=true` to retain pip dependency-resolution output and enable `MCP_LOG_LEVEL=DEBUG` in the container. The harness uses fixed internal safety limits: 15 minutes per image build and 180 seconds per MCP request/process shutdown. Container stderr streams directly into each version's `stderr.log` artifact while MCP stdout is processed, preventing verbose diagnostics from filling a subprocess pipe and blocking JSON-RPC responses. Pip diagnostics never share stdout with the MCP JSON-RPC stream. Relative paths resolve from the repository root passed to the harness.
 
 Do not put secrets, tokens, passwords, certificates, private keys, connection strings, or production data in `.env-harness`. The loader rejects settings whose names look secret-bearing.
 
@@ -209,7 +208,7 @@ make CONTAINER_BIN=docker harness
 The process environment takes precedence over `CONTAINER_BIN` in `.env-harness`. For a direct Python invocation:
 
 ```bash
-CONTAINER_BIN=docker .venv/bin/python -m docmcp.harness
+CONTAINER_BIN=docker PYTHONPATH=src .venv/bin/python -m docmcp.harness
 ```
 
 The selected executable must be discoverable on `PATH` and able to run Linux containers.
@@ -342,7 +341,7 @@ The repository’s general CI test command uses Docker for smoke tests. The harn
 
 ## Testing Strategy
 - Unit tests: `tests/test_harness.py` validates safe settings, fixture and corpus rules, response comparison, and shell-command quoting.
-- Scenario coverage: TS-TF-013 in `documentation/test_scenarios/testing_framework_test_scenarios.md` defines the packaged comparison acceptance criteria.
+- Scenario coverage: TS-TF-013 through TS-TF-016 in `documentation/test_scenarios/testing_framework_test_scenarios.md` define packaged comparison, artifact-redaction, invalid-option, and failure-boundary acceptance criteria.
 - Manual verification: run a real comparison with two available wheels and inspect `summary.md`, `diff.json`, and the baseline/current responses.
 
 ## Rollout / Migration

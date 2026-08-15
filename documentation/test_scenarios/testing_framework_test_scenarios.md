@@ -11,7 +11,7 @@
 
 ## Change Log
 - 2026-08-14 | v1.0 | Added the lightweight MCP dependency profile and dual full/MCP-only wheel output, including cached baseline/current harness images, live image-build progress, vector-search runtime coverage, shell timeout overrides, concurrent stderr artifact streaming for verbose runs, and fixed internal safety limits after removing the configurable harness timeout.
-- 2026-08-15 | v1.2 | Added recursive credential redaction coverage for JSON harness artifacts and aligned the harness contract with the supported wheel-path validation.
+- 2026-08-15 | v1.3 | Added failure-boundary coverage for invalid harness options, malformed or mismatched MCP responses, early server exit, and preserved comparison-failure artifacts.
 - 2026-08-02 | v0.3 | Added packaged MCP version-comparison harness scenarios and automated mapping.
 - 2026-07-26 | v0.2 | Documented MCP smoke prerequisites, added optional-dependency collection-gate regression coverage, and mapped the package-independent test support helpers.
 - 2026-05-03 | v0.1 | Added pytest framework scenario coverage, smoke prerequisites, and automated test mapping.
@@ -64,6 +64,8 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - `TS-TF-012` - Shared helpers import successfully through the supported pytest and direct Python invocation modes.
 - `TS-TF-013` - The MCP version-comparison harness validates its fixture and safe configuration, exercises vector search with the MCP-only dependency profile, normalizes only allowlisted fields (including JSON-encoded `get_version` payload versions), and reports unexpected differences.
 - `TS-TF-014` - Harness JSON artifacts recursively redact credential-like values, including nested objects and JSON-encoded tool text.
+- `TS-TF-015` - Invalid harness option values fail validation with actionable errors before a comparison starts.
+- `TS-TF-016` - Malformed, mismatched, or prematurely closed MCP responses fail the run and preserve comparison diagnostics.
 
 ### Scenario Details
 #### TS-TF-001
@@ -132,6 +134,18 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - Action: Write nested dictionaries, lists, and JSON-encoded text containing credential-like keys through the harness artifact writer.
 - Expected Result: The resulting JSON remains valid and contains `[REDACTED]` in place of credential values at every nested level.
 
+#### TS-TF-015
+- Purpose: Reject unsafe or ambiguous optional harness settings before container execution.
+- Preconditions: Baseline and current wheel paths and a valid fixture exist.
+- Action: Load configurations with invalid `HARNESS_VERBOSE` or `HARNESS_IMAGE` values.
+- Expected Result: Configuration loading raises `HarnessError` identifying the invalid setting.
+
+#### TS-TF-016
+- Purpose: Fail safely when an MCP server violates the request/response protocol or exits before responding.
+- Preconditions: A temporary harness output directory is writable.
+- Action: Run a test server that emits malformed JSON, a response with the wrong request ID, or no response.
+- Expected Result: The harness raises `HarnessError`, terminates the child process, and retains the per-version diagnostic output. A comparison difference also creates `failure.log` in the run artifact directory.
+
 ### Automated Test Mapping
 - `TS-TF-001` -> `tests/test_smoke_support.py::test_make_test_dry_run_lists_unit_before_smoke`
 - `TS-TF-002` -> `tests/test_smoke_support.py::test_direct_pytest_excludes_smoke_by_default`
@@ -147,6 +161,8 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - `TS-TF-012` -> `tests/test_smoke_support.py::{test_shared_helpers_import_under_supported_invocation_modes,test_support_modules_import_as_top_level_modules}`
 - `TS-TF-013` -> `tests/test_harness.py`
 - `TS-TF-014` -> `tests/test_harness.py::test_json_artifacts_redact_nested_credentials`
+- `TS-TF-015` -> `tests/test_harness.py::{test_load_config_rejects_invalid_verbose_value,test_load_config_rejects_invalid_image_value}`
+- `TS-TF-016` -> `tests/test_harness.py::{test_run_version_rejects_malformed_response,test_run_version_rejects_mismatched_response_id,test_run_version_rejects_early_server_exit,test_run_harness_preserves_comparison_failure_artifact}`
 
 ## Edge Cases
 - If Podman is installed but not usable in the current environment, rerun smoke tests with `CONTAINER_BIN=docker`.
