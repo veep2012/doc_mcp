@@ -4,13 +4,15 @@ Scenario document: documentation/test_scenarios/testing_framework_test_scenarios
 """
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
 
 from docmcp.harness.comparison import compare_responses
 from docmcp.harness.config import HarnessConfig, HarnessError, load_config
-from docmcp.harness.runner import _server_command
+from docmcp.harness.runner import _run_version, _server_command
+from scripts.build_mcp_wheel import _read_mcp_requirements
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -107,6 +109,20 @@ def test_load_config_validates_fixture_and_corpus(tmp_path: Path, monkeypatch: p
     assert len(corpus) == 5
 
 
+def test_load_config_allows_shell_timeout_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """TS-TF-013: Operators can extend timeout for model-backed vector searches."""
+    _fixture(tmp_path)
+    (tmp_path / "baseline.whl").touch()
+    (tmp_path / "current.whl").touch()
+    monkeypatch.delenv("CONTAINER_BIN", raising=False)
+    monkeypatch.setenv("HARNESS_TIMEOUT_SECONDS", "600")
+    monkeypatch.setattr("docmcp.harness.config.shutil.which", lambda _: "/usr/bin/docker")
+
+    config, _ = load_config(_write_env(tmp_path, HARNESS_TIMEOUT_SECONDS="180"), root=tmp_path)
+
+    assert config.timeout_seconds == 600
+
+
 def test_comparison_allows_only_explicit_version_difference():
     baseline = [{"result": {"serverInfo": {"name": "doc-mcp", "version": "1.0"}}}]
     current = [{"result": {"serverInfo": {"name": "doc-mcp", "version": "2.0"}}}]
@@ -193,6 +209,44 @@ def test_server_command_verbose_mode_exposes_install_and_server_logs(tmp_path: P
     assert "1>&2" in command[-1]
 
 
+def test_run_version_streams_large_stderr_without_blocking_stdout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """TS-TF-013: Verbose stderr cannot deadlock MCP response processing."""
+    child = (
+        "import json,sys\n"
+        "for line in sys.stdin:\n"
+        " request=json.loads(line)\n"
+        " sys.stderr.write('x' * 262144)\n"
+        " sys.stderr.flush()\n"
+        " print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{}}), flush=True)\n"
+    )
+    monkeypatch.setattr(
+        "docmcp.harness.runner._server_command",
+        lambda _config, _wheel: [sys.executable, "-c", child],
+    )
+    config = HarnessConfig(
+        tmp_path / "baseline.whl",
+        tmp_path / "current.whl",
+        tmp_path / "fixture",
+        tmp_path / "artifacts",
+        "podman",
+        "python:3.11-slim",
+        5,
+        (),
+    )
+    output = tmp_path / "run"
+    requests = [
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize"},
+        {"jsonrpc": "2.0", "id": 2, "method": "tools/call"},
+    ]
+
+    responses = _run_version(config, config.current_wheel, requests, output)
+
+    assert [response["id"] for response in responses] == [1, 2]
+    assert (output / "stderr.log").stat().st_size == 524288
+
+
 def test_server_command_uses_minimal_requirements_profile(tmp_path: Path):
     """TS-TF-013: Harness installs MCP dependencies without crawler extras."""
     requirements = tmp_path / "requirements-mcp.txt"
@@ -213,3 +267,37 @@ def test_server_command_uses_minimal_requirements_profile(tmp_path: Path):
 
     assert "/requirements/requirements-mcp.txt" in command[-1]
     assert "pip install --no-cache-dir --no-deps /wheels/current.whl" in command[-1]
+
+
+def test_mcp_profile_includes_vector_runtime_without_crawler_extras():
+    """TS-TF-013: MCP-only harness installs vector lookup dependencies."""
+    requirements = (REPO_ROOT / "requirements-mcp.txt").read_text(encoding="utf-8")
+
+    assert "fastembed==0.8.0" in requirements
+    assert "sqlite-vec==0.1.9" in requirements
+    assert "playwright" not in requirements
+    assert "markdownify" not in requirements
+    assert "pypdf" not in requirements
+
+
+def test_mcp_wheel_metadata_reads_the_shared_requirements_profile(tmp_path: Path):
+    """TS-TF-013: MCP wheel metadata has no independently duplicated versions."""
+    requirements_file = tmp_path / "requirements-mcp.txt"
+    requirements_file.write_text(
+        "# comment\nmcp==9.9.9\nfastembed==8.8.8  # pinned vector runtime\n", encoding="utf-8"
+    )
+
+    assert _read_mcp_requirements(requirements_file) == (
+        "Requires-Dist: mcp==9.9.9",
+        "Requires-Dist: fastembed==8.8.8",
+    )
+
+
+def test_project_metadata_reads_full_runtime_requirements_file():
+    """TS-TF-013: Full wheel dependencies are not duplicated in pyproject.toml."""
+    pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+
+    assert 'dynamic = ["dependencies"]' in pyproject
+    assert 'dependencies = {file = ["requirements.txt"]}' in pyproject
+    assert "playwright==" not in pyproject
+    assert "fastembed==" not in pyproject

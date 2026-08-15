@@ -10,7 +10,7 @@
 - Related Tickets: veep2012/doc_mcp#2
 
 ## Change Log
-- 2026-08-15 | v0.9 | Added the lightweight MCP dependency profile and dual full/MCP-only wheel output.
+- 2026-08-15 | v0.9 | Added the lightweight MCP dependency profile and dual full/MCP-only wheel output, including vector-search runtime coverage, shell timeout overrides, and concurrent stderr artifact streaming for verbose runs.
 - 2026-08-02 | v0.3 | Added packaged MCP version-comparison harness scenarios and automated mapping.
 - 2026-07-26 | v0.2 | Documented MCP smoke prerequisites, added optional-dependency collection-gate regression coverage, and mapped the package-independent test support helpers.
 - 2026-05-03 | v0.1 | Added pytest framework scenario coverage, smoke prerequisites, and automated test mapping.
@@ -40,7 +40,7 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - FR-4: Smoke tests must cover a crawl against a temporary static site and MCP stdio search against a prepared index.
 - FR-5: Missing smoke prerequisites must fail with actionable messages instead of tracebacks.
 - FR-6: Default test collection must remain usable when Playwright or MCP is unavailable, and affected tests must report installation guidance.
-- FR-7: The packaged-version harness must validate safe settings and fail on response differences other than explicitly allowlisted fields.
+- FR-7: The packaged-version harness must validate safe settings, exercise vector search through the MCP-only dependency profile, and fail on response differences other than explicitly allowlisted fields.
 
 ### Non-Functional Requirements
 - NFR-1: Test commands should use the active virtual-environment Python.
@@ -61,7 +61,7 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - `TS-TF-010` - Default collection remains usable and reports actionable skips for unavailable optional runtime dependencies.
 - `TS-TF-011` - Test files do not import shared helpers through the `tests.*` package path.
 - `TS-TF-012` - Shared helpers import successfully through the supported pytest and direct Python invocation modes.
-- `TS-TF-013` - The MCP version-comparison harness validates its fixture and safe configuration, normalizes only allowlisted fields (including JSON-encoded `get_version` payload versions), and reports unexpected differences.
+- `TS-TF-013` - The MCP version-comparison harness validates its fixture and safe configuration, exercises vector search with the MCP-only dependency profile, normalizes only allowlisted fields (including JSON-encoded `get_version` payload versions), and reports unexpected differences.
 
 ### Scenario Details
 #### TS-TF-001
@@ -120,7 +120,7 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - Purpose: Compare two packaged MCP server versions reproducibly without production data.
 - Preconditions: Both wheel paths exist; the fixture contains valid `config/sites.yaml`, referenced indexes, and the stable request corpus; Podman or Docker is available through `CONTAINER_BIN`.
 - Action: Run `python -m docmcp.harness` or `make harness`.
-- Expected Result: Both isolated containers receive identical requests. The MCP dependency profile is installed before each target wheel, and the wheel itself is installed with `--no-deps`; crawler/vector dependencies are not required for MCP comparison. Stale containers labeled `docmcp.harness=true` are removed before startup. Only documented allowlisted fields are ignored; an allowlist path may traverse response objects, list indexes, and JSON-encoded tool text. Unexpected differences or startup, timeout, malformed-response, and runtime failures fail while retaining redacted artifacts. With `HARNESS_VERBOSE=true`, pip and server debug diagnostics are retained on stderr when startup fails before `initialize`; MCP stdout remains JSON-RPC only.
+- Expected Result: Both isolated containers receive identical requests. The MCP dependency profile, including FastEmbed and sqlite-vec, is installed before each target wheel, and the wheel itself is installed with `--no-deps`; crawler-only dependencies are not required for MCP comparison. The MCP-only wheel derives its dependency metadata from the same pinned `requirements-mcp.txt` profile used by the harness. The fixture's hybrid/vector search produces vector-backed results instead of `vector_backend_unavailable` fallback. Stale containers labeled `docmcp.harness=true` are removed before startup. Only documented allowlisted fields are ignored; an allowlist path may traverse response objects, list indexes, and JSON-encoded tool text. Unexpected differences or startup, timeout, malformed-response, and runtime failures fail while retaining redacted artifacts. Container stderr must stream directly into the version artifact while MCP stdout is processed, so verbose pip, HTTP, model-download, and server diagnostics cannot fill a pipe and block JSON-RPC responses. MCP stdout remains JSON-RPC only.
 - Unit coverage of the default Podman setting must clear any process-level `CONTAINER_BIN` override so CI runtime selection does not affect the assertion.
 - Cleanup: The container command uses `--rm`; inspect the timestamped artifact directory if the comparison fails.
 

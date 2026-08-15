@@ -84,6 +84,15 @@ def load_config(
     if not env_path.is_file():
         raise HarnessError(f"Harness configuration file not found: {env_path}")
     values = {key: value for key, value in dotenv_values(env_path).items() if value is not None}
+    # Shell-provided HARNESS_* values intentionally override the local file so
+    # operators can extend startup/request timeouts for model-backed searches.
+    values.update(
+        {
+            key: value
+            for key, value in os.environ.items()
+            if key.startswith("HARNESS_") or key == "CONTAINER_BIN"
+        }
+    )
     forbidden = [key for key in values if any(marker in key.upper() for marker in _SECRET_MARKERS)]
     if forbidden:
         raise HarnessError(

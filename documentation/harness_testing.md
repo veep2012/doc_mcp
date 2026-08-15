@@ -10,7 +10,7 @@
 - Related Tickets: veep2012/doc_mcp#2
 
 ## Change Log
-- 2026-08-15 | v1.6 | Added the lightweight MCP dependency profile and dual full/MCP-only wheel output.
+- 2026-08-15 | v1.6 | Added the lightweight MCP dependency profile and dual full/MCP-only wheel output, including FastEmbed and sqlite-vec; documented shell overrides and concurrent stderr artifact streaming for verbose model-backed runs.
 
 ## Purpose
 Explain how to run the packaged-version harness that sends one stable MCP request corpus to a baseline wheel and a current wheel, then fails on any response difference that is not explicitly allowlisted.
@@ -46,7 +46,7 @@ The harness validates installed wheels rather than importing the working tree. I
 - FR-1: The baseline and current wheel paths must point to existing `.whl` files.
 - FR-1a: The baseline wheel must be `doc-mcp 1.1.1` or newer. Earlier baseline wheels are unsupported.
 - FR-2: The fixture must contain valid `config/sites.yaml`, every configured index file, and a local `mcp_requests.json` copied from the tracked example.
-- FR-3: The request corpus must include `initialize`, `get_version`, and at least three `search_docs` calls.
+- FR-3: The request corpus must include `initialize`, `get_version`, and at least three `search_docs` calls; the fixture's hybrid/vector configuration must exercise the vector backend.
 - FR-4: The harness must fail on malformed responses, startup failures, timeouts, unavailable runtimes, and non-allowlisted response differences.
 - FR-4a: Each run must remove containers labeled `docmcp.harness=true` before starting new comparison containers.
 - FR-5: Only explicitly configured response paths may be ignored during comparison.
@@ -67,7 +67,7 @@ make harness
   -> .venv/bin/python -m docmcp.harness
   -> remove stale containers labeled docmcp.harness=true
   -> container run --rm -i --label docmcp.harness=true ...
-  -> pip install requirements-mcp.txt
+  -> pip install requirements-mcp.txt (MCP, FastEmbed, and sqlite-vec; no crawler extras)
   -> pip install --no-deps wheel
   -> exec docmcp-server
 ```
@@ -77,8 +77,9 @@ The runner mounts the fixture at `/fixture` read-only and the wheel directory at
 ### Repository files involved
 
 - `.env-harness` - local harness settings and wheel paths.
-- `requirements-mcp.txt` - lightweight MCP-serving dependency profile used by the harness.
-- `scripts/build_mcp_wheel.py` - derives the MCP-only wheel metadata from the full wheel.
+- `requirements.txt` - single-source, pinned full runtime dependency profile used by the full wheel and development installation.
+- `requirements-mcp.txt` - pinned MCP/vector dependency profile used by the harness and MCP-only wheel builder.
+- `scripts/build_mcp_wheel.py` - derives the MCP-only wheel metadata from the full wheel and reads dependencies from `requirements-mcp.txt`.
 - `tests/fixtures/harness/config/sites.yaml` - sanitized site configuration.
 - `tests/fixtures/harness/mcp_requests.json.example` - tracked example MCP request corpus.
 - `tests/fixtures/harness/mcp_requests.json` - local request corpus copied from the example; ignored by Git.
@@ -113,8 +114,9 @@ ls -1 dist/*.whl
 and an MCP-only wheel (`doc_mcp_no_crawler-<version>-py3-none-any.whl`) with only the
 MCP-serving dependency profile and only the `docmcp-server` console executable.
 The harness uses `requirements-mcp.txt` and installs either target wheel with
-`--no-deps`, so it does not download Playwright or FastEmbed merely to exercise
-MCP tools.
+`--no-deps`. The profile includes FastEmbed and sqlite-vec because the harness
+fixture uses hybrid search and must exercise vector lookup, but it excludes
+crawler-only packages such as Playwright, markdownify, and pypdf.
 
 Obtain the baseline wheel from a release artifact, previous build, or another checked-out revision. Keep both wheels in a directory accessible to the harness. For example:
 
@@ -193,7 +195,7 @@ The required settings are:
 | `HARNESS_ARTIFACT_DIR` | Root directory for timestamped run diagnostics. |
 | `HARNESS_REQUIREMENTS_FILE` | Lightweight dependency profile installed before the target wheel. |
 
-Optional settings are `HARNESS_IMAGE`, `HARNESS_TIMEOUT_SECONDS`, `HARNESS_ALLOWLIST`, and `HARNESS_VERBOSE`. `HARNESS_REQUIREMENTS_FILE` defaults to `requirements-mcp.txt` when that file exists. Set `HARNESS_VERBOSE=true` to show pip's verbose dependency-resolution output on the captured stderr stream, enable `MCP_LOG_LEVEL=DEBUG` in the container, and retain stderr when startup fails before `initialize`. Pip diagnostics never share stdout with the MCP JSON-RPC stream. Relative paths resolve from the repository root passed to the harness.
+Optional settings are `HARNESS_IMAGE`, `HARNESS_TIMEOUT_SECONDS`, `HARNESS_ALLOWLIST`, and `HARNESS_VERBOSE`. Shell-provided `HARNESS_*` values override `.env-harness`, so `HARNESS_TIMEOUT_SECONDS=600 make harness` can extend the allowance for model-backed vector startup and requests. `HARNESS_REQUIREMENTS_FILE` defaults to `requirements-mcp.txt` when that file exists. Set `HARNESS_VERBOSE=true` to retain pip dependency-resolution output and enable `MCP_LOG_LEVEL=DEBUG` in the container. Container stderr streams directly into each version's `stderr.log` artifact while MCP stdout is processed, preventing verbose diagnostics from filling a subprocess pipe and blocking JSON-RPC responses. Pip diagnostics never share stdout with the MCP JSON-RPC stream. Relative paths resolve from the repository root passed to the harness.
 
 Do not put secrets, tokens, passwords, certificates, private keys, connection strings, or production data in `.env-harness`. The loader rejects settings whose names look secret-bearing.
 

@@ -116,51 +116,53 @@ def _run_version(
     command = _server_command(config, wheel)
     write_text(output / "command.log", "$ " + " ".join(command) + "\n")
     process: subprocess.Popen[str] | None = None
+    stderr_path = output / "stderr.log"
     try:
-        process = subprocess.Popen(
-            command,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
-        assert process.stdin and process.stdout
-        responses = []
-        for request in requests:
-            process.stdin.write(json.dumps(request, separators=(",", ":")) + "\n")
-            process.stdin.flush()
-            selector = selectors.DefaultSelector()
-            selector.register(process.stdout, selectors.EVENT_READ)
-            if not selector.select(config.timeout_seconds):
-                raise HarnessError(
-                    f"{wheel.name} timed out after {config.timeout_seconds} seconds waiting for {request['method']}."
-                )
-            line = process.stdout.readline()
-            selector.close()
-            if not line:
-                raise HarnessError(
-                    f"{wheel.name} closed MCP stdout before responding to {request['method']}."
-                )
-            try:
-                response = json.loads(line)
-            except json.JSONDecodeError as exc:
-                raise HarnessError(f"{wheel.name} returned malformed MCP JSON: {line!r}") from exc
-            if not isinstance(response, dict) or response.get("id") != request["id"]:
-                raise HarnessError(
-                    f"{wheel.name} returned an invalid response for request id {request['id']!r}."
-                )
-            responses.append(response)
-        process.stdin.close()
-        process.stdin = None
-        _, stderr = process.communicate(timeout=config.timeout_seconds)
-        write_text(output / "stderr.log", stderr)
-        write_json(output / "responses.json", responses)
-        return responses
+        with stderr_path.open("w", encoding="utf-8") as stderr_stream:
+            process = subprocess.Popen(
+                command,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=stderr_stream,
+                text=True,
+            )
+            assert process.stdin and process.stdout
+            responses = []
+            for request in requests:
+                process.stdin.write(json.dumps(request, separators=(",", ":")) + "\n")
+                process.stdin.flush()
+                with selectors.DefaultSelector() as selector:
+                    selector.register(process.stdout, selectors.EVENT_READ)
+                    if not selector.select(config.timeout_seconds):
+                        raise HarnessError(
+                            f"{wheel.name} timed out after {config.timeout_seconds} seconds "
+                            f"waiting for {request['method']}."
+                        )
+                line = process.stdout.readline()
+                if not line:
+                    raise HarnessError(
+                        f"{wheel.name} closed MCP stdout before responding to {request['method']}."
+                    )
+                try:
+                    response = json.loads(line)
+                except json.JSONDecodeError as exc:
+                    raise HarnessError(
+                        f"{wheel.name} returned malformed MCP JSON: {line!r}"
+                    ) from exc
+                if not isinstance(response, dict) or response.get("id") != request["id"]:
+                    raise HarnessError(
+                        f"{wheel.name} returned an invalid response for request id {request['id']!r}."
+                    )
+                responses.append(response)
+            process.stdin.close()
+            process.stdin = None
+            process.wait(timeout=config.timeout_seconds)
+            write_json(output / "responses.json", responses)
+            return responses
     except subprocess.TimeoutExpired as exc:
         assert process is not None
         process.kill()
-        _, stderr = process.communicate()
-        write_text(output / "stderr.log", stderr)
+        process.wait()
         raise HarnessError(
             f"{wheel.name} timed out after {config.timeout_seconds} seconds."
         ) from exc
@@ -168,8 +170,7 @@ def _run_version(
         assert process is not None
         if process.poll() is None:
             process.kill()
-        _, stderr = process.communicate()
-        write_text(output / "stderr.log", stderr)
+        process.wait()
         raise
     except OSError as exc:
         raise HarnessError(
