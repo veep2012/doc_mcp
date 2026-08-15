@@ -109,20 +109,6 @@ def test_load_config_validates_fixture_and_corpus(tmp_path: Path, monkeypatch: p
     assert len(corpus) == 5
 
 
-def test_load_config_allows_shell_timeout_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """TS-TF-013: Operators can extend timeout for model-backed vector searches."""
-    _fixture(tmp_path)
-    (tmp_path / "baseline.whl").touch()
-    (tmp_path / "current.whl").touch()
-    monkeypatch.delenv("CONTAINER_BIN", raising=False)
-    monkeypatch.setenv("HARNESS_TIMEOUT_SECONDS", "600")
-    monkeypatch.setattr("docmcp.harness.config.shutil.which", lambda _: "/usr/bin/docker")
-
-    config, _ = load_config(_write_env(tmp_path, HARNESS_TIMEOUT_SECONDS="180"), root=tmp_path)
-
-    assert config.timeout_seconds == 600
-
-
 def test_comparison_allows_only_explicit_version_difference():
     baseline = [{"result": {"serverInfo": {"name": "doc-mcp", "version": "1.0"}}}]
     current = [{"result": {"serverInfo": {"name": "doc-mcp", "version": "2.0"}}}]
@@ -175,7 +161,6 @@ def test_server_command_quotes_wheel_filename(tmp_path: Path):
         tmp_path / "artifacts",
         "podman",
         "python:3.11-slim",
-        30,
         (),
     )
 
@@ -196,7 +181,6 @@ def test_server_command_verbose_mode_exposes_install_and_server_logs(tmp_path: P
         tmp_path / "artifacts",
         "podman",
         "python:3.11-slim",
-        30,
         (),
         None,
         True,
@@ -207,6 +191,26 @@ def test_server_command_verbose_mode_exposes_install_and_server_logs(tmp_path: P
     assert "MCP_LOG_LEVEL=DEBUG" in command
     assert "pip install -v --no-cache-dir" in command[-1]
     assert "1>&2" in command[-1]
+
+
+def test_server_command_uses_prebuilt_harness_image(tmp_path: Path):
+    """TS-TF-013: Tagged harness images start without reinstalling dependencies."""
+    config = HarnessConfig(
+        tmp_path / "baseline.whl",
+        tmp_path / "current.whl",
+        tmp_path / "fixture",
+        tmp_path / "artifacts",
+        "podman",
+        "python:3.11-slim",
+        (),
+    )
+
+    command = _server_command(config, config.current_wheel, "docmcp-harness:current")
+
+    assert "docmcp-harness:current" in command
+    assert "exec docmcp-server" == command[-1]
+    assert "pip install" not in " ".join(command)
+    assert "/wheels" not in " ".join(command)
 
 
 def test_run_version_streams_large_stderr_without_blocking_stdout(
@@ -223,7 +227,7 @@ def test_run_version_streams_large_stderr_without_blocking_stdout(
     )
     monkeypatch.setattr(
         "docmcp.harness.runner._server_command",
-        lambda _config, _wheel: [sys.executable, "-c", child],
+        lambda _config, _wheel, _image=None: [sys.executable, "-c", child],
     )
     config = HarnessConfig(
         tmp_path / "baseline.whl",
@@ -232,7 +236,6 @@ def test_run_version_streams_large_stderr_without_blocking_stdout(
         tmp_path / "artifacts",
         "podman",
         "python:3.11-slim",
-        5,
         (),
     )
     output = tmp_path / "run"
@@ -258,7 +261,6 @@ def test_server_command_uses_minimal_requirements_profile(tmp_path: Path):
         tmp_path / "artifacts",
         "podman",
         "python:3.11-slim",
-        30,
         (),
         requirements,
     )

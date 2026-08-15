@@ -10,7 +10,7 @@
 - Related Tickets: veep2012/doc_mcp#2
 
 ## Change Log
-- 2026-08-15 | v1.6 | Added the lightweight MCP dependency profile and dual full/MCP-only wheel output, including FastEmbed and sqlite-vec; documented shell overrides and concurrent stderr artifact streaming for verbose model-backed runs.
+- 2026-08-15 | v1.7 | Added the lightweight MCP dependency profile and dual full/MCP-only wheel output, including FastEmbed and sqlite-vec; documented shell overrides, live image-build progress, concurrent stderr artifact streaming for verbose model-backed runs, and fixed safety limits after removing the configurable harness timeout.
 
 ## Purpose
 Explain how to run the packaged-version harness that sends one stable MCP request corpus to a baseline wheel and a current wheel, then fails on any response difference that is not explicitly allowlisted.
@@ -66,9 +66,10 @@ The Make target is a thin launcher:
 make harness
   -> .venv/bin/python -m docmcp.harness
   -> remove stale containers labeled docmcp.harness=true
-  -> container run --rm -i --label docmcp.harness=true ...
-  -> pip install requirements-mcp.txt (MCP, FastEmbed, and sqlite-vec; no crawler extras)
-  -> pip install --no-deps wheel
+  -> container build --tag docmcp-harness:baseline ...
+  -> container build --tag docmcp-harness:current ...
+  -> container run --rm -i --label docmcp.harness=true docmcp-harness:baseline ...
+  -> container run --rm -i --label docmcp.harness=true docmcp-harness:current ...
   -> exec docmcp-server
 ```
 
@@ -76,7 +77,7 @@ The runner mounts the fixture at `/fixture` read-only and the wheel directory at
 
 ### Repository files involved
 
-- `.env-harness` - local harness settings and wheel paths.
+- `.env-harness` - local harness settings, generated image repository name, and wheel paths.
 - `requirements.txt` - single-source, pinned full runtime dependency profile used by the full wheel and development installation.
 - `requirements-mcp.txt` - pinned MCP/vector dependency profile used by the harness and MCP-only wheel builder.
 - `scripts/build_mcp_wheel.py` - derives the MCP-only wheel metadata from the full wheel and reads dependencies from `requirements-mcp.txt`.
@@ -172,8 +173,7 @@ HARNESS_BASELINE_WHEEL=/tmp/docmcp-harness-wheels/baseline.whl
 HARNESS_CURRENT_WHEEL=/tmp/docmcp-harness-wheels/current.whl
 HARNESS_FIXTURE_DIR=tests/fixtures/harness
 HARNESS_ARTIFACT_DIR=artifacts/harness
-HARNESS_IMAGE=python:3.11-slim
-HARNESS_TIMEOUT_SECONDS=30
+HARNESS_IMAGE=docmcp-harness
 HARNESS_ALLOWLIST=result.serverInfo.version,result.content.0.text.version,result.structuredContent.result.version
 HARNESS_VERBOSE=false
 HARNESS_REQUIREMENTS_FILE=requirements-mcp.txt
@@ -195,7 +195,7 @@ The required settings are:
 | `HARNESS_ARTIFACT_DIR` | Root directory for timestamped run diagnostics. |
 | `HARNESS_REQUIREMENTS_FILE` | Lightweight dependency profile installed before the target wheel. |
 
-Optional settings are `HARNESS_IMAGE`, `HARNESS_TIMEOUT_SECONDS`, `HARNESS_ALLOWLIST`, and `HARNESS_VERBOSE`. Shell-provided `HARNESS_*` values override `.env-harness`, so `HARNESS_TIMEOUT_SECONDS=600 make harness` can extend the allowance for model-backed vector startup and requests. `HARNESS_REQUIREMENTS_FILE` defaults to `requirements-mcp.txt` when that file exists. Set `HARNESS_VERBOSE=true` to retain pip dependency-resolution output and enable `MCP_LOG_LEVEL=DEBUG` in the container. Container stderr streams directly into each version's `stderr.log` artifact while MCP stdout is processed, preventing verbose diagnostics from filling a subprocess pipe and blocking JSON-RPC responses. Pip diagnostics never share stdout with the MCP JSON-RPC stream. Relative paths resolve from the repository root passed to the harness.
+Optional settings are `HARNESS_IMAGE`, `HARNESS_ALLOWLIST`, and `HARNESS_VERBOSE`. `HARNESS_IMAGE` is the generated image repository prefix; the harness builds `<prefix>:baseline` and `<prefix>:current` from `python:3.11-slim`. Image-build stdout and stderr are shown live in the terminal, while only server stderr is written to the per-version artifacts. `HARNESS_REQUIREMENTS_FILE` defaults to `requirements-mcp.txt` when that file exists. Set `HARNESS_VERBOSE=true` to retain pip dependency-resolution output and enable `MCP_LOG_LEVEL=DEBUG` in the container. The harness uses fixed internal safety limits: 15 minutes per image build and 180 seconds per MCP request/process shutdown. Container stderr streams directly into each version's `stderr.log` artifact while MCP stdout is processed, preventing verbose diagnostics from filling a subprocess pipe and blocking JSON-RPC responses. Pip diagnostics never share stdout with the MCP JSON-RPC stream. Relative paths resolve from the repository root passed to the harness.
 
 Do not put secrets, tokens, passwords, certificates, private keys, connection strings, or production data in `.env-harness`. The loader rejects settings whose names look secret-bearing.
 
@@ -315,7 +315,7 @@ Common failure categories are:
 - **Stale harness containers**: interrupted runs are cleaned automatically on the next run using the dedicated `docmcp.harness=true` label; unrelated containers are not removed.
 - **Startup failure**: the wheel cannot install or `docmcp-server` exits before responding.
 - **Malformed or mismatched response**: stdout is not one valid JSON response per request or the response ID differs from the request ID.
-- **Timeout**: a response is not produced within `HARNESS_TIMEOUT_SECONDS`.
+- **Timeout**: an image build exceeds 15 minutes or an MCP request exceeds 180 seconds.
 - **Unexpected difference**: normalized baseline and current responses differ.
 
 ## CI usage

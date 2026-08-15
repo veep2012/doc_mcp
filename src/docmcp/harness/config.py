@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,6 +20,7 @@ _REQUIRED = (
     "HARNESS_ARTIFACT_DIR",
 )
 _SECRET_MARKERS = ("KEY", "PASSWORD", "TOKEN", "SECRET", "CREDENTIAL", "CERTIFICATE", "PRIVATE")
+_IMAGE_PREFIX_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$")
 
 
 class HarnessError(RuntimeError):
@@ -33,10 +35,10 @@ class HarnessConfig:
     artifact_dir: Path
     container_bin: str
     image: str
-    timeout_seconds: int
     allowlist: tuple[str, ...]
     requirements_file: Path | None = None
     verbose: bool = False
+    image_prefix: str = "docmcp-harness"
 
 
 def _resolve(value: str, root: Path) -> Path:
@@ -84,8 +86,7 @@ def load_config(
     if not env_path.is_file():
         raise HarnessError(f"Harness configuration file not found: {env_path}")
     values = {key: value for key, value in dotenv_values(env_path).items() if value is not None}
-    # Shell-provided HARNESS_* values intentionally override the local file so
-    # operators can extend startup/request timeouts for model-backed searches.
+    # Shell-provided HARNESS_* values intentionally override the local file.
     values.update(
         {
             key: value
@@ -157,23 +158,22 @@ def load_config(
         raise HarnessError(
             f"Container runtime '{runtime}' is unavailable. Install Podman or Docker, or set CONTAINER_BIN=docker."
         )
-    try:
-        timeout = int(values.get("HARNESS_TIMEOUT_SECONDS", "30"))
-    except ValueError as exc:
-        raise HarnessError("HARNESS_TIMEOUT_SECONDS must be a positive integer.") from exc
-    if timeout <= 0:
-        raise HarnessError("HARNESS_TIMEOUT_SECONDS must be a positive integer.")
     verbose_value = values.get("HARNESS_VERBOSE", "false").strip().lower()
     if verbose_value not in {"true", "false"}:
         raise HarnessError("HARNESS_VERBOSE must be true or false.")
+    image_prefix = values.get("HARNESS_IMAGE", "docmcp-harness").strip()
+    if not _IMAGE_PREFIX_PATTERN.fullmatch(image_prefix):
+        raise HarnessError(
+            "HARNESS_IMAGE must contain only image-repository characters "
+            "(letters, numbers, '.', '-', '_', and '/')."
+        )
     config = HarnessConfig(
         baseline_wheel=baseline,
         current_wheel=current,
         fixture_dir=fixture,
         artifact_dir=_resolve(values["HARNESS_ARTIFACT_DIR"], root),
         container_bin=runtime,
-        image=values.get("HARNESS_IMAGE", "python:3.11-slim"),
-        timeout_seconds=timeout,
+        image="python:3.11-slim",
         allowlist=tuple(
             filter(
                 None,
@@ -185,5 +185,6 @@ def load_config(
         ),
         requirements_file=requirements_file,
         verbose=verbose_value == "true",
+        image_prefix=image_prefix,
     )
     return config, corpus

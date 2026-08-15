@@ -280,7 +280,7 @@ copy the completed settings back to `.env-harness`.
 
 The required settings are `HARNESS_BASELINE_WHEEL`, `HARNESS_CURRENT_WHEEL`,
 `HARNESS_FIXTURE_DIR`, and `HARNESS_ARTIFACT_DIR`. Safe optional settings are
-`HARNESS_IMAGE`, `HARNESS_TIMEOUT_SECONDS`, `HARNESS_ALLOWLIST`,
+`HARNESS_IMAGE`, `HARNESS_ALLOWLIST`,
 `HARNESS_VERBOSE`, and `HARNESS_REQUIREMENTS_FILE`.
 `.env-harness` must not contain keys, tokens, passwords, certificates, private
 keys, connection strings, or production data. Override the container runtime
