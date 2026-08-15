@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-08-02
-- Version: v2.3
+- Last Updated: 2026-08-15
+- Version: v2.5
 
 ## Change Log
+- 2026-08-15 | v2.5 | Linked the dedicated harness testing guide and clarified local fixture-index and all version allowlist paths.
 - 2026-08-02 | v2.3 | Added the packaged-wheel MCP version comparison harness, its safe configuration, fixtures, diagnostics, and CI usage.
 - 2026-06-21 | v2.2 | Defined the vector sidecar compatibility contract with strict schema-version checks, deterministic keyword fallback reasons, rebuild-based migration guidance, crawl-fingerprint stale detection based on source content hashes and crawl timestamps, and release-facing search contract wording.
 - 2026-06-14 | v1.9 | Documented vector-search fallback to keyword for missing, stale, incompatible, unreadable, and empty sidecars.
@@ -268,6 +269,9 @@ If `get_sites` fails with a path under `.venv/lib/.../site-packages/config/sites
 
 ### Packaged Version Comparison
 
+For step-by-step setup, fixture creation, examples, artifact inspection, and
+troubleshooting, see the [Harness Testing Guide](harness_testing.md).
+
 `python -m docmcp.harness` compares a baseline and current `doc-mcp` wheel
 against exactly the same MCP JSON-RPC corpus. `make harness` is only a launcher
 for that Python engine. Before running it, copy `.env-harness` to a local file,
@@ -283,15 +287,21 @@ with `CONTAINER_BIN=docker` or `make CONTAINER_BIN=docker harness`.
 
 The fixture defaults to `tests/fixtures/harness` and must contain
 `config/sites.yaml`, every index referenced by that configuration, and
-`mcp_requests.json`. The fixture is sanitized, version controlled, and mounted
-read-only into each isolated container. The request corpus is a JSON array of
+`mcp_requests.json`. The configuration and request-corpus example are sanitized
+and version controlled; copy `mcp_requests.json.example` to the ignored local
+`mcp_requests.json`. The local SQLite index is generated because `index/` is
+ignored by Git. The fixture is mounted read-only into each isolated container. The request
+corpus is a JSON array of
 JSON-RPC requests, must include `initialize`, `get_version`, and at least three
 `search_docs` calls including empty or error behavior.
 
 Each run creates a timestamped directory under `HARNESS_ARTIFACT_DIR` with
 baseline/current command output and responses, normalized responses, `diff.json`,
 and a summary. Failed runs retain `failure.log`; diagnostics redact likely
-credential values. Only `result.serverInfo.version` is allowlisted by default. Any
+credential values. The repository example explicitly allowlists the version in
+the initialization result and both JSON-encoded `get_version` payload fields:
+`result.serverInfo.version`, `result.content.0.text.version`, and
+`result.structuredContent.result.version`. Any
 other changed response, malformed response, startup failure, unavailable
 runtime, or timeout fails the run.
 

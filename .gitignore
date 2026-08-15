@@ -14,6 +14,8 @@ build/
 # Storage and index (runtime data)
 storage/
 index/
+tests/fixtures/harness/index/
+tests/fixtures/harness/mcp_requests.json
 
 # Site config contains real URLs and credentials — use sites.yaml.example as template
 config/sites.yaml

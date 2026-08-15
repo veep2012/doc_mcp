@@ -2,19 +2,56 @@
 
 from __future__ import annotations
 
+import json
 from copy import deepcopy
 from typing import Any
 
 
 def _remove_path(value: Any, path: str) -> None:
-    current = value
-    parts = path.split(".")
-    for part in parts[:-1]:
-        if not isinstance(current, dict):
-            return
-        current = current.get(part)
-    if isinstance(current, dict):
-        current.pop(parts[-1], None)
+    """Remove a dot-separated path, including keys in JSON-encoded response text."""
+
+    def remove(current: Any, parts: list[str]) -> tuple[Any, bool]:
+        if not parts:
+            return current, False
+        if isinstance(current, dict):
+            part = parts[0]
+            if len(parts) == 1:
+                if part not in current:
+                    return current, False
+                current.pop(part)
+                return current, True
+            if part not in current:
+                return current, False
+            child, removed = remove(current[part], parts[1:])
+            if removed:
+                current[part] = child
+            return current, removed
+        if isinstance(current, list):
+            try:
+                index = int(parts[0])
+            except ValueError:
+                return current, False
+            if index < 0 or index >= len(current):
+                return current, False
+            child, removed = remove(current[index], parts[1:])
+            if removed:
+                current[index] = child
+            return current, removed
+        if isinstance(current, str):
+            try:
+                decoded = json.loads(current)
+            except json.JSONDecodeError:
+                return current, False
+            decoded, removed = remove(decoded, parts)
+            if not removed:
+                return current, False
+            return (
+                json.dumps(decoded, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+                True,
+            )
+        return current, False
+
+    remove(value, path.split("."))
 
 
 def normalize_response(response: dict[str, Any], allowlist: tuple[str, ...]) -> dict[str, Any]:

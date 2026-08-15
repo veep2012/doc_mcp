@@ -130,8 +130,9 @@ make harness
 The harness runs `python -m docmcp.harness` through the project virtual
 environment. It uses `CONTAINER_BIN` with the same precedence as smoke tests;
 for example, run `make CONTAINER_BIN=docker harness` when Docker is preferred.
-See [the MCP server reference](documentation/mcp-server.md) for fixture,
-artifact, CI, and troubleshooting details.
+See the [dedicated harness testing guide](documentation/harness_testing.md) for
+fixture setup, examples, artifacts, CI, and troubleshooting details, and the
+[MCP server reference](documentation/mcp-server.md) for the runtime contract.
 
 ## Install On Another Environment
 

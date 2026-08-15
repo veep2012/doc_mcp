@@ -3,5 +3,5 @@ sites:
     url: "https://example.test"
     auth_required: false
     session_file: null
-    index_file: "index/harness.db"
+    index_file: "index/example.db"
     search_engine: keyword

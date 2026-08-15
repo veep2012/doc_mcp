@@ -115,6 +115,41 @@ def test_comparison_allows_only_explicit_version_difference():
     assert compare_responses(baseline, current, ()) != []
 
 
+def test_comparison_allowlists_version_in_get_version_tool_payload():
+    """TS-TF-013: Allowlist the version without hiding another tool-result change."""
+    baseline_payload = json.dumps(
+        {"package_name": "doc-mcp", "server_name": "docs-mcp", "version": "1.1.1"}, indent=2
+    )
+    current_payload = json.dumps(
+        {"package_name": "doc-mcp", "server_name": "docs-mcp", "version": "1.1.2"}, indent=2
+    )
+    baseline = [
+        {
+            "result": {
+                "content": [{"type": "text", "text": baseline_payload}],
+                "structuredContent": {"result": baseline_payload},
+            }
+        }
+    ]
+    current = [
+        {
+            "result": {
+                "content": [{"type": "text", "text": current_payload}],
+                "structuredContent": {"result": current_payload},
+            }
+        }
+    ]
+    allowlist = ("result.content.0.text.version", "result.structuredContent.result.version")
+
+    assert compare_responses(baseline, current, allowlist) == []
+
+    current[0]["result"]["content"][0]["text"] = json.dumps(
+        {"package_name": "doc-mcp", "server_name": "other-server", "version": "1.1.2"},
+        indent=2,
+    )
+    assert compare_responses(baseline, current, allowlist) != []
+
+
 def test_server_command_quotes_wheel_filename(tmp_path: Path):
     """TS-TF-013: configured wheel names cannot alter the container shell command."""
     config = HarnessConfig(
