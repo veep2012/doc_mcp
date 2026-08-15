@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-26
-- Last Updated: 2026-07-19
-- Version: v1.6
+- Last Updated: 2026-07-29
+- Version: v1.7
 
 ## Change Log
+- 2026-07-29 | v1.7 | Added proxy-only PDF download verification.
 - 2026-07-19 | v1.6 | Expanded PDF crawl and targeted-reindex checks to cover content-type detection, failures, redirects, and continued processing.
 - 2026-07-16 | v1.5 | Added configured-browser installation and missing-browser recovery expectations.
 - 2026-07-05 | v1.4 | Updated the manual setup and wheel-install verification steps to use `python -m playwright install --with-deps chromium`.
@@ -324,12 +325,16 @@ Run these scenarios after either `MT-003A` or `MT-003B`, using the command set f
   4. Re-run the PDF URL with `--pages` and then from a `--pages-file`.
   5. Repeat a selected PDF with `crawl.redirect_policy: final`, `requested`, and `skip` using a test endpoint that redirects to another PDF URL.
   6. Include a malformed, image-only, or unavailable PDF alongside a valid page or selected URL.
+  7. Configure `playwright.launch.proxy` with a test PDF hostname that resolves only through that proxy, authenticate with `docmcp-auth`, and run `docmcp-crawl --site "My Docs" --debug`.
+  8. Configure a test endpoint that returns an HTML error page with a PDF URL or `Content-Type: application/pdf`, and repeat it through a redirect.
 - Expected result:
   - The PDF source URL and extracted text are present in the SQLite index and search results.
   - URL-based and content-type-based PDFs are both fetched through the authenticated browser session and indexed.
   - Both targeted reindex forms refresh the existing PDF record.
   - `final` stores the redirected landing URL, `requested` stores the original URL, and `skip` omits the redirected PDF from the index.
   - A PDF failure is reported without stopping later crawl pages or selected reindex URLs; targeted reindex reports `reason_code=pdf_error`.
+  - Intermediate 3xx responses do not fail the download; the terminal PDF response is captured and parsed, while an HTML body with PDF-looking metadata is rejected with `response is not a PDF document`.
+  - The proxy-only PDF is downloaded and indexed without an `ENOTFOUND` error; debug output contains no session cookies or proxy credentials.
   - Images, JavaScript, and archive links remain excluded.
 
 ### MT-011: Expired Session Stops Crawl

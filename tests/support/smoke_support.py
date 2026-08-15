@@ -26,6 +26,8 @@ _SMOKE_ARTIFACT_DIRS: list[tempfile.TemporaryDirectory[str]] = []
 
 
 def _cleanup_smoke_artifacts() -> None:
+    if os.environ.get("SMOKE_KEEP_ARTIFACTS"):
+        return
     while _SMOKE_ARTIFACT_DIRS:
         _SMOKE_ARTIFACT_DIRS.pop().cleanup()
 
@@ -123,9 +125,14 @@ def _echo_process_output(stdout: str | None, stderr: str | None) -> None:
 def smoke_artifact_root(test_name: str) -> Path:
     root = REPO_ROOT / ".local" / "smoke"
     root.mkdir(parents=True, exist_ok=True)
-    artifact_dir = tempfile.TemporaryDirectory(prefix=f"{test_name}-", dir=root)
-    _SMOKE_ARTIFACT_DIRS.append(artifact_dir)
-    artifact_root = Path(artifact_dir.name)
+    if os.environ.get("SMOKE_KEEP_ARTIFACTS"):
+        # TemporaryDirectory registers its own interpreter-shutdown finalizer,
+        # which would remove CI artifacts after our cleanup hook returns.
+        artifact_root = Path(tempfile.mkdtemp(prefix=f"{test_name}-", dir=root))
+    else:
+        artifact_dir = tempfile.TemporaryDirectory(prefix=f"{test_name}-", dir=root)
+        _SMOKE_ARTIFACT_DIRS.append(artifact_dir)
+        artifact_root = Path(artifact_dir.name)
     for child in ("config", "storage", "index", "logs"):
         (artifact_root / child).mkdir(parents=True, exist_ok=True)
     return artifact_root
@@ -221,10 +228,33 @@ async def call_search_docs(
         env=smoke_env(runtime_root),
     )
 
-    async with stdio_client(server, errlog=errlog or sys.stderr) as streams:
-        async with ClientSession(*streams) as session:
-            await session.initialize()
-            result = await session.call_tool(
-                "search_docs", {"site_name": site_name, "query": query}
-            )
-            return result.content[0].text
+    try:
+        async with stdio_client(server, errlog=errlog or sys.stderr) as streams:
+            async with ClientSession(*streams) as session:
+                await session.initialize()
+                result = await session.call_tool(
+                    "search_docs", {"site_name": site_name, "query": query}
+                )
+                return result.content[0].text
+    except Exception as exc:
+        # MCP wraps a server startup failure as "Connection closed". Include the
+        # child's stderr in the pytest failure so CI exposes the actual cause.
+        if errlog is not None:
+            errlog.flush()
+            log_path = getattr(errlog, "name", None)
+            if log_path and log_path != "<stderr>":
+                try:
+                    server_stderr = Path(log_path).read_text(encoding="utf-8").strip()
+                except OSError as read_exc:
+                    server_stderr = f"Unable to read server stderr: {read_exc}"
+            else:
+                server_stderr = ""
+        else:
+            server_stderr = ""
+
+        detail = server_stderr or "<server stderr was empty>"
+        raise RuntimeError(
+            "MCP stdio server exited before completing the request.\n"
+            f"Original error: {exc}\n"
+            f"Server stderr:\n{detail}"
+        ) from exc

@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import sqlite3
 import sys
 import types
@@ -126,6 +127,358 @@ def test_fetch_pdf_document_accepts_content_type_only_and_preserves_query(monkey
     )
 
 
+def test_fetch_pdf_document_cdp_continues_redirect_and_captures_final_pdf(monkeypatch):
+    requested_url = "https://example.test/docs/reference.pdf"
+    final_url = "https://cdn.example.test/files/reference.pdf"
+
+    class FakeCdp:
+        def __init__(self):
+            self.paused_handler = None
+            self.continued_request_ids = []
+
+        def on(self, event_name, handler):
+            assert event_name == "Fetch.requestPaused"
+            self.paused_handler = handler
+
+        async def send(self, method, params=None):
+            if method == "Fetch.continueRequest":
+                self.continued_request_ids.append(params["requestId"])
+            elif method == "Fetch.getResponseBody":
+                return {"body": "%PDF-1.7\n", "base64Encoded": False}
+            return {}
+
+    class FakePdfPage:
+        async def goto(self, url, **kwargs):
+            assert url == requested_url
+            await cdp.paused_handler(
+                {
+                    "requestId": "redirect",
+                    "responseStatusCode": 302,
+                    "request": {"url": requested_url},
+                    "resourceType": "Document",
+                }
+            )
+            await cdp.paused_handler(
+                {
+                    "requestId": "final",
+                    "responseStatusCode": 200,
+                    "request": {"url": final_url},
+                    "resourceType": "Other",
+                    "responseHeaders": [{"name": "Content-Type", "value": "application/pdf"}],
+                }
+            )
+
+        async def close(self):
+            pass
+
+    class FakePageContext:
+        async def new_cdp_session(self, pdf_page):
+            assert pdf_page is pdf_page_instance
+            return cdp
+
+    cdp = FakeCdp()
+    pdf_page_instance = FakePdfPage()
+    page_context = FakePageContext()
+
+    async def new_page():
+        return pdf_page_instance
+
+    monkeypatch.setattr(
+        crawl_cli,
+        "_extract_pdf_document",
+        lambda data: ("Reference PDF", "PDF-only content"),
+    )
+
+    result = asyncio.run(
+        crawl_cli._fetch_pdf_document(
+            types.SimpleNamespace(new_page=new_page),
+            requested_url,
+            page=types.SimpleNamespace(context=page_context),
+        )
+    )
+
+    assert result == (final_url, "Reference PDF", "PDF-only content")
+    assert "redirect" in cdp.continued_request_ids
+    assert "final" in cdp.continued_request_ids
+
+
+def _cdp_fetch_fixture(events, body_result):
+    class FakeCdp:
+        def __init__(self):
+            self.paused_handler = None
+            self.methods = []
+
+        def on(self, event_name, handler):
+            assert event_name == "Fetch.requestPaused"
+            self.paused_handler = handler
+
+        async def send(self, method, params=None):
+            self.methods.append((method, params))
+            if method == "Fetch.getResponseBody":
+                return body_result
+            return {}
+
+    class FakePdfPage:
+        closed = False
+
+        async def goto(self, url, **kwargs):
+            for event in events:
+                await cdp.paused_handler(event)
+
+        async def close(self):
+            self.closed = True
+
+    class FakePageContext:
+        async def new_cdp_session(self, pdf_page):
+            assert pdf_page is pdf_page_instance
+            return cdp
+
+    cdp = FakeCdp()
+    pdf_page_instance = FakePdfPage()
+    page_context = FakePageContext()
+
+    async def new_page():
+        return pdf_page_instance
+
+    context = types.SimpleNamespace(new_page=new_page)
+    page = types.SimpleNamespace(context=page_context)
+    return context, page, cdp, pdf_page_instance
+
+
+def test_fetch_pdf_document_cdp_rejects_html_body_before_parsing(monkeypatch):
+    event = {
+        "requestId": "html-error",
+        "responseStatusCode": 200,
+        "request": {"url": "https://example.test/error.pdf"},
+        "resourceType": "Document",
+        "responseHeaders": [{"name": "Content-Type", "value": "application/pdf"}],
+    }
+    context, page, cdp, pdf_page = _cdp_fetch_fixture(
+        [event], {"body": "<html>error</html>", "base64Encoded": False}
+    )
+    extract_called = False
+
+    def fail_extract(_data):
+        nonlocal extract_called
+        extract_called = True
+        raise AssertionError("HTML response reached the PDF parser")
+
+    monkeypatch.setattr(crawl_cli, "_extract_pdf_document", fail_extract)
+
+    with pytest.raises(crawl_cli.PdfExtractionError, match="response is not a PDF document"):
+        asyncio.run(
+            crawl_cli._fetch_pdf_document(
+                context,
+                "https://example.test/error.pdf",
+                page=page,
+            )
+        )
+
+    assert not extract_called
+    assert ("Fetch.disable", None) in cdp.methods
+    assert pdf_page.closed
+
+
+def test_fetch_pdf_document_cdp_decodes_base64_pdf_body(monkeypatch):
+    event = {
+        "requestId": "base64-pdf",
+        "responseStatusCode": 200,
+        "request": {"url": "https://example.test/reference.pdf"},
+        "resourceType": "Document",
+        "responseHeaders": [{"name": "Content-Type", "value": "application/pdf"}],
+    }
+    context, page, _cdp, _pdf_page = _cdp_fetch_fixture(
+        [event], {"body": base64.b64encode(b"%PDF-1.7\n").decode(), "base64Encoded": True}
+    )
+    extracted_body = None
+
+    def extract_pdf(data):
+        nonlocal extracted_body
+        extracted_body = data
+        return "Reference PDF", "PDF-only content"
+
+    monkeypatch.setattr(crawl_cli, "_extract_pdf_document", extract_pdf)
+
+    result = asyncio.run(
+        crawl_cli._fetch_pdf_document(
+            context,
+            "https://example.test/reference.pdf",
+            page=page,
+        )
+    )
+
+    assert result == (
+        "https://example.test/reference.pdf",
+        "Reference PDF",
+        "PDF-only content",
+    )
+    assert extracted_body == b"%PDF-1.7\n"
+
+
+def test_fetch_pdf_document_cdp_rejects_non_200_final_response():
+    event = {
+        "requestId": "missing-pdf",
+        "responseStatusCode": 404,
+        "request": {"url": "https://example.test/missing.pdf"},
+        "resourceType": "Document",
+        "responseHeaders": [{"name": "Content-Type", "value": "application/pdf"}],
+    }
+    context, page, _cdp, _pdf_page = _cdp_fetch_fixture(
+        [event], {"body": "%PDF-1.7\n", "base64Encoded": False}
+    )
+
+    with pytest.raises(crawl_cli.PdfExtractionError, match="HTTP 404"):
+        asyncio.run(
+            crawl_cli._fetch_pdf_document(
+                context,
+                "https://example.test/missing.pdf",
+                page=page,
+            )
+        )
+
+
+def test_fetch_pdf_document_cdp_ignores_unrelated_subresources(monkeypatch):
+    events = [
+        {
+            "requestId": "script",
+            "responseStatusCode": 200,
+            "request": {"url": "https://example.test/app.js"},
+            "resourceType": "Script",
+            "responseHeaders": [{"name": "Content-Type", "value": "application/javascript"}],
+        },
+        {
+            "requestId": "final-pdf",
+            "responseStatusCode": 200,
+            "request": {"url": "https://example.test/reference.pdf"},
+            "resourceType": "Other",
+            "responseHeaders": [{"name": "Content-Type", "value": "application/pdf"}],
+        },
+    ]
+    context, page, cdp, _pdf_page = _cdp_fetch_fixture(
+        events, {"body": "%PDF-1.7\n", "base64Encoded": False}
+    )
+    monkeypatch.setattr(
+        crawl_cli,
+        "_extract_pdf_document",
+        lambda data: ("Reference PDF", "PDF-only content"),
+    )
+
+    result = asyncio.run(
+        crawl_cli._fetch_pdf_document(
+            context,
+            "https://example.test/reference.pdf",
+            page=page,
+        )
+    )
+
+    assert result[0] == "https://example.test/reference.pdf"
+    assert [
+        params["requestId"] for method, params in cdp.methods if method == "Fetch.continueRequest"
+    ] == [
+        "script",
+        "final-pdf",
+    ]
+
+
+def test_fetch_pdf_document_uses_proxy_and_authenticated_storage_state(monkeypatch):
+    class FakeResponse:
+        ok = True
+        status = 200
+        url = "https://private.example.test/reference.pdf"
+        headers = {"content-type": "application/pdf"}
+
+        async def body(self):
+            return b"%PDF"
+
+    class FakeRequestContext:
+        disposed = False
+
+        async def get(self, url, timeout, **kwargs):
+            assert url == "https://private.example.test/reference.pdf"
+            assert timeout == 60000
+            assert kwargs == {"headers": {"Accept": "application/pdf"}}
+            return FakeResponse()
+
+        async def dispose(self):
+            self.disposed = True
+
+    class FakeRequestFactory:
+        def __init__(self):
+            self.context = FakeRequestContext()
+            self.options = None
+
+        async def new_context(self, **kwargs):
+            self.options = kwargs
+            return self.context
+
+    request_factory = FakeRequestFactory()
+    context = types.SimpleNamespace(
+        request=None,
+        storage_state=lambda: _storage_state(),
+    )
+
+    async def _storage_state():
+        return {"cookies": [{"name": "session", "value": "redacted"}], "origins": []}
+
+    monkeypatch.setattr(
+        crawl_cli,
+        "_extract_pdf_document",
+        lambda data: ("Reference PDF", "PDF-only content"),
+    )
+
+    assert asyncio.run(
+        crawl_cli._fetch_pdf_document(
+            context,
+            "https://private.example.test/reference.pdf",
+            playwright=types.SimpleNamespace(request=request_factory),
+            proxy={"server": "http://proxy.example.test:8080"},
+        )
+    ) == (
+        "https://private.example.test/reference.pdf",
+        "Reference PDF",
+        "PDF-only content",
+    )
+    assert request_factory.options == {
+        "storage_state": {"cookies": [{"name": "session", "value": "redacted"}], "origins": []},
+        "proxy": {"server": "http://proxy.example.test:8080"},
+    }
+    assert request_factory.context.disposed
+
+
+def test_fetch_pdf_document_wraps_request_errors_and_disposes_request_context():
+    class FakeRequestContext:
+        disposed = False
+
+        async def get(self, *args, **kwargs):
+            raise OSError("getaddrinfo ENOTFOUND private.example.test")
+
+        async def dispose(self):
+            self.disposed = True
+
+    class FakeRequestFactory:
+        def __init__(self):
+            self.context = FakeRequestContext()
+
+        async def new_context(self, **kwargs):
+            return self.context
+
+    request_factory = FakeRequestFactory()
+
+    async def _storage_state():
+        return {"cookies": [], "origins": []}
+
+    context = types.SimpleNamespace(request=None, storage_state=_storage_state)
+    with pytest.raises(crawl_cli.PdfExtractionError, match="PDF download failed: .*ENOTFOUND"):
+        asyncio.run(
+            crawl_cli._fetch_pdf_document(
+                context,
+                "https://private.example.test/reference.pdf",
+                playwright=types.SimpleNamespace(request=request_factory),
+            )
+        )
+    assert request_factory.context.disposed
+
+
 @pytest.mark.parametrize(
     ("redirect_policy", "expected_url", "expected_debug"),
     [
@@ -140,8 +493,9 @@ def test_index_pdf_document_applies_redirect_policy(
     indexed = []
     debug_lines = []
 
-    async def fake_fetch(context, requested_url):
+    async def fake_fetch(context, requested_url, **kwargs):
         assert requested_url == "https://example.test/docs/download"
+        assert kwargs == {"playwright": None, "proxy": None}
         return "https://example.test/docs/reference.pdf", "Reference PDF", "PDF-only content"
 
     monkeypatch.setattr(crawl_cli, "_fetch_pdf_document", fake_fetch)
