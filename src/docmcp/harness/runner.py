@@ -15,6 +15,12 @@ from .config import HarnessConfig, HarnessError, load_config
 
 
 def _server_command(config: HarnessConfig, wheel: Path) -> list[str]:
+    log_level = "DEBUG" if config.verbose else "INFO"
+    pip_command = (
+        f"pip install -v --no-cache-dir {shlex.quote(f'/wheels/{wheel.name}')} 1>&2"
+        if config.verbose
+        else f"pip install --no-cache-dir {shlex.quote(f'/wheels/{wheel.name}')} >/dev/null"
+    )
     return [
         config.container_bin,
         "run",
@@ -28,10 +34,12 @@ def _server_command(config: HarnessConfig, wheel: Path) -> list[str]:
         "DOC_MCP_HOME=/fixture",
         "-e",
         "CONFIG_FILE=config/sites.yaml",
+        "-e",
+        f"MCP_LOG_LEVEL={log_level}",
         config.image,
         "sh",
         "-c",
-        f"pip install --no-cache-dir {shlex.quote(f'/wheels/{wheel.name}')} >/dev/null && exec docmcp-server",
+        f"{pip_command} && exec docmcp-server",
     ]
 
 
@@ -89,6 +97,13 @@ def _run_version(
         raise HarnessError(
             f"{wheel.name} timed out after {config.timeout_seconds} seconds."
         ) from exc
+    except HarnessError:
+        assert process is not None
+        if process.poll() is None:
+            process.kill()
+        _, stderr = process.communicate()
+        write_text(output / "stderr.log", stderr)
+        raise
     except OSError as exc:
         raise HarnessError(
             f"Could not start {wheel.name} with {config.container_bin}: {exc}"

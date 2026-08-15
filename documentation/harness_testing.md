@@ -6,11 +6,11 @@
 - Reviewers: Repository maintainers
 - Created: 2026-08-15
 - Last Updated: 2026-08-15
-- Version: v1.2
+- Version: v1.4
 - Related Tickets: veep2012/doc_mcp#2
 
 ## Change Log
-- 2026-08-15 | v1.2 | Added the minimum supported baseline requirement: `doc-mcp 1.1.1` or newer.
+- 2026-08-15 | v1.4 | Kept verbose pip diagnostics on stderr so MCP stdout remains JSON-RPC only.
 
 ## Purpose
 Explain how to run the packaged-version harness that sends one stable MCP request corpus to a baseline wheel and a current wheel, then fails on any response difference that is not explicitly allowlisted.
@@ -159,6 +159,7 @@ HARNESS_ARTIFACT_DIR=artifacts/harness
 HARNESS_IMAGE=python:3.11-slim
 HARNESS_TIMEOUT_SECONDS=30
 HARNESS_ALLOWLIST=result.serverInfo.version,result.content.0.text.version,result.structuredContent.result.version
+HARNESS_VERBOSE=false
 ```
 
 Run the harness with the local file when possible:
@@ -176,7 +177,7 @@ The required settings are:
 | `HARNESS_FIXTURE_DIR` | Fixture root containing `config/sites.yaml`, indexes, and the corpus. |
 | `HARNESS_ARTIFACT_DIR` | Root directory for timestamped run diagnostics. |
 
-Optional settings are `HARNESS_IMAGE`, `HARNESS_TIMEOUT_SECONDS`, and `HARNESS_ALLOWLIST`. Relative paths resolve from the repository root passed to the harness.
+Optional settings are `HARNESS_IMAGE`, `HARNESS_TIMEOUT_SECONDS`, `HARNESS_ALLOWLIST`, and `HARNESS_VERBOSE`. Set `HARNESS_VERBOSE=true` to show pip's verbose dependency-resolution output on the captured stderr stream, enable `MCP_LOG_LEVEL=DEBUG` in the container, and retain stderr when startup fails before `initialize`. Pip diagnostics never share stdout with the MCP JSON-RPC stream. Relative paths resolve from the repository root passed to the harness.
 
 Do not put secrets, tokens, passwords, certificates, private keys, connection strings, or production data in `.env-harness`. The loader rejects settings whose names look secret-bearing.
 
@@ -284,6 +285,7 @@ To investigate a failure:
 ```bash
 find artifacts/harness -maxdepth 2 -type f -print
 sed -n '1,160p' artifacts/harness/<timestamp>/failure.log
+sed -n '1,240p' artifacts/harness/<timestamp>/baseline/stderr.log
 sed -n '1,240p' artifacts/harness/<timestamp>/diff.json
 ```
 

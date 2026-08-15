@@ -6,11 +6,11 @@
 - Reviewers: Repository maintainers
 - Created: 2026-05-03
 - Last Updated: 2026-08-15
-- Version: v0.5
+- Version: v0.7
 - Related Tickets: veep2012/doc_mcp#2
 
 ## Change Log
-- 2026-08-15 | v0.5 | Isolated the harness default-runtime unit assertion from CI-level `CONTAINER_BIN` overrides and added precise allowlisting of JSON-encoded `get_version` payload versions.
+- 2026-08-15 | v0.7 | Added harness verbose diagnostics on stderr and preserved precise allowlisting of JSON-encoded `get_version` payload versions.
 - 2026-08-02 | v0.3 | Added packaged MCP version-comparison harness scenarios and automated mapping.
 - 2026-07-26 | v0.2 | Documented MCP smoke prerequisites, added optional-dependency collection-gate regression coverage, and mapped the package-independent test support helpers.
 - 2026-05-03 | v0.1 | Added pytest framework scenario coverage, smoke prerequisites, and automated test mapping.
@@ -120,7 +120,7 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - Purpose: Compare two packaged MCP server versions reproducibly without production data.
 - Preconditions: Both wheel paths exist; the fixture contains valid `config/sites.yaml`, referenced indexes, and the stable request corpus; Podman or Docker is available through `CONTAINER_BIN`.
 - Action: Run `python -m docmcp.harness` or `make harness`.
-- Expected Result: Both isolated containers receive identical requests. Only documented allowlisted fields are ignored; an allowlist path may traverse response objects, list indexes, and JSON-encoded tool text. Unexpected differences or startup, timeout, malformed-response, and runtime failures fail while retaining redacted artifacts.
+- Expected Result: Both isolated containers receive identical requests. Only documented allowlisted fields are ignored; an allowlist path may traverse response objects, list indexes, and JSON-encoded tool text. Unexpected differences or startup, timeout, malformed-response, and runtime failures fail while retaining redacted artifacts. With `HARNESS_VERBOSE=true`, pip and server debug diagnostics are retained on stderr when startup fails before `initialize`; MCP stdout remains JSON-RPC only.
 - Unit coverage of the default Podman setting must clear any process-level `CONTAINER_BIN` override so CI runtime selection does not affect the assertion.
 - Cleanup: The container command uses `--rm`; inspect the timestamped artifact directory if the comparison fails.
 

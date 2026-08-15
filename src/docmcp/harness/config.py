@@ -35,6 +35,7 @@ class HarnessConfig:
     image: str
     timeout_seconds: int
     allowlist: tuple[str, ...]
+    verbose: bool = False
 
 
 def _resolve(value: str, root: Path) -> Path:
@@ -139,6 +140,9 @@ def load_config(
         raise HarnessError("HARNESS_TIMEOUT_SECONDS must be a positive integer.") from exc
     if timeout <= 0:
         raise HarnessError("HARNESS_TIMEOUT_SECONDS must be a positive integer.")
+    verbose_value = values.get("HARNESS_VERBOSE", "false").strip().lower()
+    if verbose_value not in {"true", "false"}:
+        raise HarnessError("HARNESS_VERBOSE must be true or false.")
     config = HarnessConfig(
         baseline_wheel=baseline,
         current_wheel=current,
@@ -156,5 +160,6 @@ def load_config(
                 ),
             )
         ),
+        verbose=verbose_value == "true",
     )
     return config, corpus
