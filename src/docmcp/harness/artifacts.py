@@ -7,6 +7,7 @@ import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 _REDACT_QUOTED = re.compile(
     r"(?i)((?:api[_-]?key|password|token|secret|credential)\s*[=:]\s*)\"[^\"]*\"|"
@@ -49,7 +50,8 @@ def _redact_value(value: Any) -> Any:
 
 
 def create_run_dir(root: Path) -> Path:
-    path = root / datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    path = root / f"{timestamp}-{uuid4().hex}"
     path.mkdir(parents=True, exist_ok=False)
     return path
 

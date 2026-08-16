@@ -5,18 +5,34 @@ Scenario document: documentation/test_scenarios/testing_framework_test_scenarios
 
 import json
 import sys
+import uuid
 from pathlib import Path
 
 import pytest
 
-from docmcp.harness.artifacts import write_json
+from docmcp.harness.artifacts import create_run_dir, write_json
 from docmcp.harness.comparison import compare_responses
 from docmcp.harness.config import HarnessConfig, HarnessError, load_config
 from docmcp.harness.runner import _run_version, _server_command
 from docmcp.harness import runner
+from docmcp.index_store import init_db, upsert_page
 from scripts.build_mcp_wheel import _read_mcp_requirements
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_create_run_dir_uses_unique_timestamped_names(tmp_path: Path):
+    """TS-TF-023: Rapid run-directory creation cannot collide."""
+    first = create_run_dir(tmp_path)
+    second = create_run_dir(tmp_path)
+
+    assert first != second
+    assert first.is_dir() and second.is_dir()
+    for path in (first, second):
+        timestamp, suffix = path.name.rsplit("-", maxsplit=1)
+        assert timestamp.endswith("Z")
+        assert len(timestamp) == 16
+        assert uuid.UUID(suffix).hex == suffix
 
 
 def test_make_harness_is_thin_python_launcher():
@@ -48,9 +64,15 @@ def _fixture(tmp_path: Path) -> None:
     fixture = tmp_path / "fixture"
     (fixture / "config").mkdir(parents=True)
     (fixture / "index").mkdir()
-    (fixture / "index" / "harness.db").touch()
+    init_db(str(fixture / "index" / "harness.db"))
+    upsert_page(
+        str(fixture / "index" / "harness.db"),
+        "https://example.test/harness",
+        "Harness",
+        "Harness fixture content.",
+    )
     (fixture / "config" / "sites.yaml").write_text(
-        "sites:\n- name: Harness\n  url: https://example.test\n  auth_required: false\n"
+        "sites:\n- name: Harness\n  url: https://example.test\n  auth_required: false\n  search_engine: keyword\n"
         "  session_file: null\n  index_file: index/harness.db\n",
         encoding="utf-8",
     )
@@ -58,6 +80,7 @@ def _fixture(tmp_path: Path) -> None:
         json.dumps(
             [
                 {"jsonrpc": "2.0", "id": 1, "method": "initialize"},
+                {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
                 {
                     "jsonrpc": "2.0",
                     "id": 2,
@@ -108,7 +131,94 @@ def test_load_config_validates_fixture_and_corpus(tmp_path: Path, monkeypatch: p
     config, corpus = load_config(_write_env(tmp_path), root=tmp_path)
 
     assert config.container_bin == "podman"
-    assert len(corpus) == 5
+    assert len(corpus) == 6
+    assert corpus[1]["method"] == "notifications/initialized"
+    assert "id" not in corpus[1]
+
+
+def test_load_config_uses_project_env_container_runtime(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """TS-TF-021: Project .env supplies the runtime when process env is unset."""
+    _fixture(tmp_path)
+    (tmp_path / ".env").write_text("CONTAINER_BIN=docker\n", encoding="utf-8")
+    (tmp_path / "baseline.whl").touch()
+    (tmp_path / "current.whl").touch()
+    monkeypatch.delenv("CONTAINER_BIN", raising=False)
+    monkeypatch.setattr("docmcp.harness.config.shutil.which", lambda _: "/usr/bin/docker")
+
+    config, _ = load_config(_write_env(tmp_path), root=tmp_path)
+
+    assert config.container_bin == "docker"
+
+
+def test_load_config_process_runtime_overrides_project_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """TS-TF-021: Process/Make runtime overrides project .env."""
+    _fixture(tmp_path)
+    (tmp_path / ".env").write_text("CONTAINER_BIN=docker\n", encoding="utf-8")
+    (tmp_path / "baseline.whl").touch()
+    (tmp_path / "current.whl").touch()
+    monkeypatch.setenv("CONTAINER_BIN", "podman")
+    monkeypatch.setattr("docmcp.harness.config.shutil.which", lambda _: "/usr/bin/podman")
+
+    config, _ = load_config(_write_env(tmp_path), root=tmp_path)
+
+    assert config.container_bin == "podman"
+
+
+def test_load_config_rejects_empty_index(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """TS-TF-020: Empty source indexes fail harness preflight."""
+    _fixture(tmp_path)
+    (tmp_path / "fixture" / "index" / "harness.db").write_bytes(b"")
+    (tmp_path / "baseline.whl").touch()
+    (tmp_path / "current.whl").touch()
+    monkeypatch.setattr("docmcp.harness.config.shutil.which", lambda _: "/usr/bin/podman")
+
+    with pytest.raises(HarnessError, match="index is empty"):
+        load_config(_write_env(tmp_path), root=tmp_path)
+
+
+def test_load_config_rejects_missing_hybrid_vector_sidecar(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """TS-TF-020: Hybrid fixtures require a vector sidecar during preflight."""
+    _fixture(tmp_path)
+    sites = tmp_path / "fixture" / "config" / "sites.yaml"
+    sites.write_text(
+        sites.read_text(encoding="utf-8").replace(
+            "search_engine: keyword", "search_engine: hybrid"
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "baseline.whl").touch()
+    (tmp_path / "current.whl").touch()
+    monkeypatch.setattr("docmcp.harness.config.shutil.which", lambda _: "/usr/bin/podman")
+
+    with pytest.raises(HarnessError, match="vector sidecar is missing"):
+        load_config(_write_env(tmp_path), root=tmp_path)
+
+
+def test_load_config_rejects_empty_hybrid_vector_sidecar(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """TS-TF-020: Empty hybrid sidecars fail harness preflight."""
+    _fixture(tmp_path)
+    sites = tmp_path / "fixture" / "config" / "sites.yaml"
+    sites.write_text(
+        sites.read_text(encoding="utf-8").replace(
+            "search_engine: keyword", "search_engine: hybrid"
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "fixture" / "index" / "harness.vec.db").touch()
+    (tmp_path / "baseline.whl").touch()
+    (tmp_path / "current.whl").touch()
+    monkeypatch.setattr("docmcp.harness.config.shutil.which", lambda _: "/usr/bin/podman")
+
+    with pytest.raises(HarnessError, match="vector sidecar is empty"):
+        load_config(_write_env(tmp_path), root=tmp_path)
 
 
 def test_load_config_rejects_invalid_verbose_value(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -272,6 +382,146 @@ def test_run_version_streams_large_stderr_without_blocking_stdout(
 
     assert [response["id"] for response in responses] == [1, 2]
     assert (output / "stderr.log").stat().st_size == 524288
+
+
+def test_run_version_skips_notification_responses(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """TS-TF-017: Notifications are sent without waiting for a response."""
+    child = (
+        "import json,sys\n"
+        "for line in sys.stdin:\n"
+        " request=json.loads(line)\n"
+        " if request['method'].startswith('notifications/'):\n"
+        "  continue\n"
+        " print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{}}), flush=True)\n"
+    )
+    monkeypatch.setattr(
+        "docmcp.harness.runner._server_command",
+        lambda _config, _wheel, _image=None: [sys.executable, "-c", child],
+    )
+    config = HarnessConfig(
+        tmp_path / "baseline.whl",
+        tmp_path / "current.whl",
+        tmp_path / "fixture",
+        tmp_path / "artifacts",
+        "podman",
+        "python:3.11-slim",
+        (),
+    )
+    requests = [
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize"},
+        {"jsonrpc": "2.0", "method": "notifications/initialized"},
+        {"jsonrpc": "2.0", "id": 2, "method": "tools/call"},
+    ]
+
+    responses = _run_version(config, config.current_wheel, requests, tmp_path / "run")
+
+    assert [response["id"] for response in responses] == [1, 2]
+
+
+def test_run_version_redacts_stderr_artifact(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """TS-TF-018: Successful stderr artifacts redact credential-like values."""
+    child = (
+        "import json,sys\n"
+        "for line in sys.stdin:\n"
+        " request=json.loads(line)\n"
+        " sys.stderr.write(\"token=success-secret password='password-secret'\\n\")\n"
+        " sys.stderr.flush()\n"
+        " print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{}}), flush=True)\n"
+    )
+    monkeypatch.setattr(
+        "docmcp.harness.runner._server_command",
+        lambda _config, _wheel, _image=None: [sys.executable, "-c", child],
+    )
+    config = HarnessConfig(
+        tmp_path / "baseline.whl",
+        tmp_path / "current.whl",
+        tmp_path / "fixture",
+        tmp_path / "artifacts",
+        "podman",
+        "python:3.11-slim",
+        (),
+    )
+
+    _run_version(
+        config,
+        config.current_wheel,
+        [{"jsonrpc": "2.0", "id": 1, "method": "initialize"}],
+        tmp_path / "run",
+    )
+
+    content = (tmp_path / "run" / "stderr.log").read_text(encoding="utf-8")
+    assert "success-secret" not in content
+    assert "password-secret" not in content
+    assert content.count("[REDACTED]") == 2
+
+
+def test_run_version_redacts_stderr_on_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """TS-TF-018: Failed stderr artifacts are redacted before retention."""
+    child = (
+        "import sys\n"
+        "next(sys.stdin)\n"
+        "sys.stderr.write('api_key=failure-secret\\n')\n"
+        "sys.stderr.flush()\n"
+        "print('not-json', flush=True)\n"
+    )
+    monkeypatch.setattr(
+        "docmcp.harness.runner._server_command",
+        lambda _config, _wheel, _image=None: [sys.executable, "-c", child],
+    )
+    config = HarnessConfig(
+        tmp_path / "baseline.whl",
+        tmp_path / "current.whl",
+        tmp_path / "fixture",
+        tmp_path / "artifacts",
+        "podman",
+        "python:3.11-slim",
+        (),
+    )
+
+    with pytest.raises(HarnessError):
+        _run_version(
+            config,
+            config.current_wheel,
+            [{"jsonrpc": "2.0", "id": 1, "method": "initialize"}],
+            tmp_path / "run",
+        )
+
+    content = (tmp_path / "run" / "stderr.log").read_text(encoding="utf-8")
+    assert "failure-secret" not in content
+    assert "[REDACTED]" in content
+
+
+def test_run_version_times_out_on_partial_response(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """TS-TF-019: Partial stdout fragments cannot bypass the response deadline."""
+    child = (
+        "import sys,time\n"
+        "next(sys.stdin)\n"
+        "sys.stdout.write('{\\\"jsonrpc\\\":')\n"
+        "sys.stdout.flush()\n"
+        "time.sleep(1)\n"
+    )
+    monkeypatch.setattr(
+        "docmcp.harness.runner._server_command",
+        lambda _config, _wheel, _image=None: [sys.executable, "-c", child],
+    )
+    monkeypatch.setattr("docmcp.harness.runner._REQUEST_TIMEOUT_SECONDS", 0.05)
+    config = HarnessConfig(
+        tmp_path / "baseline.whl",
+        tmp_path / "current.whl",
+        tmp_path / "fixture",
+        tmp_path / "artifacts",
+        "podman",
+        "python:3.11-slim",
+        (),
+    )
+
+    with pytest.raises(HarnessError, match="timed out"):
+        _run_version(
+            config,
+            config.current_wheel,
+            [{"jsonrpc": "2.0", "id": 1, "method": "initialize"}],
+            tmp_path / "run",
+        )
 
 
 def _run_version_with_child(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, child: str) -> None:

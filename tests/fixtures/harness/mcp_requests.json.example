@@ -11,6 +11,11 @@
   },
   {
     "jsonrpc": "2.0",
+    "method": "notifications/initialized",
+    "params": {}
+  },
+  {
+    "jsonrpc": "2.0",
     "id": 2,
     "method": "tools/call",
     "params": {"name": "get_version", "arguments": {}}

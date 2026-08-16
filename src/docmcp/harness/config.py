@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import sqlite3
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,6 +13,15 @@ from pathlib import Path
 from dotenv import dotenv_values
 
 from ..config.loader import ConfigError, load_config as load_site_config
+from ..vector_index import (
+    VECTOR_SIDECAR_SCHEMA_VERSION,
+    VectorIndexError,
+    _connect_ro_vector_index,
+    _read_vector_sidecar_meta,
+    _site_embedding_model,
+    _source_index_fingerprint,
+    resolve_vector_index_file,
+)
 
 _REQUIRED = (
     "HARNESS_BASELINE_WHEEL",
@@ -41,6 +51,11 @@ class HarnessConfig:
     image_prefix: str = "docmcp-harness"
 
 
+def _is_notification(request: dict) -> bool:
+    method = request.get("method")
+    return isinstance(method, str) and method.startswith("notifications/")
+
+
 def _resolve(value: str, root: Path) -> Path:
     path = Path(value).expanduser()
     return path if path.is_absolute() else root / path
@@ -60,6 +75,21 @@ def _validate_corpus(path: Path) -> list[dict]:
     methods = {request.get("method") for request in corpus}
     if "initialize" not in methods:
         raise HarnessError("MCP request corpus must include an initialize request.")
+    initialize_index = next(
+        index for index, request in enumerate(corpus) if request.get("method") == "initialize"
+    )
+    initialized_index = next(
+        (
+            index
+            for index, request in enumerate(corpus)
+            if request.get("method") == "notifications/initialized"
+        ),
+        None,
+    )
+    if initialized_index != initialize_index + 1:
+        raise HarnessError(
+            "MCP request corpus must send notifications/initialized immediately after initialize."
+        )
     tools = []
     for request in corpus:
         params = request.get("params", {})
@@ -71,12 +101,100 @@ def _validate_corpus(path: Path) -> list[dict]:
         raise HarnessError(
             "MCP request corpus must include get_version and at least three search_docs requests."
         )
-    if any(
-        request.get("jsonrpc") != "2.0" or "id" not in request or not request.get("method")
-        for request in corpus
-    ):
-        raise HarnessError("Each MCP request must contain jsonrpc='2.0', id, and method.")
+    for request in corpus:
+        if request.get("jsonrpc") != "2.0" or not request.get("method"):
+            raise HarnessError("Each MCP request must contain jsonrpc='2.0' and method.")
+        if _is_notification(request):
+            if "id" in request:
+                raise HarnessError("MCP notifications must not contain an id.")
+        elif "id" not in request:
+            raise HarnessError("Each MCP request must contain an id unless it is a notification.")
     return corpus
+
+
+def _validate_source_index(site: dict) -> tuple[int, str | None, str]:
+    index_path = Path(site["index_file"])
+    if not index_path.is_file():
+        raise HarnessError(f"Harness fixture index is missing: {index_path}")
+    if index_path.stat().st_size == 0:
+        raise HarnessError(f"Harness fixture index is empty: {index_path}")
+    try:
+        fingerprint = _source_index_fingerprint(str(index_path))
+        if fingerprint is None or fingerprint[0] <= 0:
+            raise HarnessError(f"Harness fixture index contains no pages: {index_path}")
+        with sqlite3.connect(f"{index_path.resolve().as_uri()}?mode=ro", uri=True) as conn:
+            integrity = conn.execute("PRAGMA integrity_check").fetchone()
+            if not integrity or integrity[0] != "ok":
+                raise HarnessError(f"Harness fixture index failed integrity check: {index_path}")
+            conn.execute("SELECT 1 FROM pages LIMIT 1").fetchone()
+        return fingerprint
+    except (OSError, sqlite3.Error) as exc:
+        raise HarnessError(f"Harness fixture index is unreadable: {index_path}: {exc}") from exc
+
+
+def _validate_vector_sidecar(site: dict, source_fingerprint: tuple[int, str | None, str]) -> None:
+    sidecar_path = Path(resolve_vector_index_file(site))
+    if not sidecar_path.is_file():
+        raise HarnessError(
+            f"Harness fixture vector sidecar is missing for {site['name']!r}: {sidecar_path}"
+        )
+    if sidecar_path.stat().st_size == 0:
+        raise HarnessError(
+            f"Harness fixture vector sidecar is empty for {site['name']!r}: {sidecar_path}"
+        )
+    conn = None
+    try:
+        conn = _connect_ro_vector_index(str(sidecar_path))
+        if conn is None:
+            raise HarnessError(f"Harness fixture vector sidecar is unreadable: {sidecar_path}")
+        (
+            _source_index_file,
+            embedding_model,
+            embedding_dimensions,
+            source_content_hash,
+            source_max_last_crawled,
+        ) = _read_vector_sidecar_meta(conn, site["name"])
+        if embedding_model != _site_embedding_model(site) or embedding_dimensions <= 0:
+            raise HarnessError(
+                f"Harness fixture vector sidecar metadata is incompatible for {site['name']!r}: "
+                f"{sidecar_path}"
+            )
+        if (source_fingerprint[1], source_fingerprint[2]) != (
+            source_max_last_crawled,
+            source_content_hash,
+        ):
+            raise HarnessError(
+                f"Harness fixture vector sidecar is stale for {site['name']!r}: {sidecar_path}"
+            )
+        metadata = conn.execute(
+            "SELECT page_count, chunk_count FROM vector_meta WHERE site_name = ?",
+            (site["name"],),
+        ).fetchone()
+        chunk_count = conn.execute(
+            "SELECT COUNT(*) FROM vector_chunks WHERE site_name = ?", (site["name"],)
+        ).fetchone()[0]
+        embedding_count = conn.execute("SELECT COUNT(*) FROM chunk_embeddings").fetchone()[0]
+        if (
+            conn.execute("PRAGMA user_version").fetchone()[0] != VECTOR_SIDECAR_SCHEMA_VERSION
+            or not metadata
+            or metadata[0] != source_fingerprint[0]
+            or metadata[1] <= 0
+            or chunk_count != metadata[1]
+            or embedding_count != metadata[1]
+        ):
+            raise HarnessError(
+                f"Harness fixture vector sidecar is empty or inconsistent for {site['name']!r}: "
+                f"{sidecar_path}"
+            )
+    except (OSError, sqlite3.Error, VectorIndexError, ValueError) as exc:
+        if isinstance(exc, HarnessError):
+            raise
+        raise HarnessError(
+            f"Harness fixture vector sidecar is invalid for {site['name']!r}: {sidecar_path}: {exc}"
+        ) from exc
+    finally:
+        if conn is not None:
+            conn.close()
 
 
 def load_config(
@@ -88,6 +206,9 @@ def load_config(
     if not env_path.is_file():
         raise HarnessError(f"Harness configuration file not found: {env_path}")
     values = {key: value for key, value in dotenv_values(env_path).items() if value is not None}
+    project_env = {
+        key: value for key, value in dotenv_values(root / ".env").items() if value is not None
+    }
     # Shell-provided HARNESS_* values intentionally override the local file.
     values.update(
         {
@@ -132,15 +253,10 @@ def load_config(
             os.environ.pop("CONFIG_FILE", None)
         else:
             os.environ["CONFIG_FILE"] = original_config
-    missing_indexes = [
-        site["index_file"]
-        for site in fixture_config["sites"]
-        if not Path(site["index_file"]).is_file()
-    ]
-    if missing_indexes:
-        raise HarnessError(
-            "Harness fixture is missing configured index files: " + ", ".join(missing_indexes)
-        )
+    for site in fixture_config["sites"]:
+        source_fingerprint = _validate_source_index(site)
+        if site["search_engine"] in {"hybrid", "vector"}:
+            _validate_vector_sidecar(site, source_fingerprint)
 
     requirements_file_value = values.get("HARNESS_REQUIREMENTS_FILE")
     requirements_file = (
@@ -155,7 +271,12 @@ def load_config(
             )
         requirements_file = None
 
-    runtime = os.environ.get("CONTAINER_BIN", values.get("CONTAINER_BIN", "podman"))
+    runtime = (
+        os.environ.get("CONTAINER_BIN")
+        or project_env.get("CONTAINER_BIN")
+        or values.get("CONTAINER_BIN")
+        or "podman"
+    )
     if not shutil.which(runtime):
         raise HarnessError(
             f"Container runtime '{runtime}' is unavailable. Install Podman or Docker, or set CONTAINER_BIN=docker."

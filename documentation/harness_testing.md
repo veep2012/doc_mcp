@@ -5,11 +5,12 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-08-15
-- Last Updated: 2026-08-15
-- Version: v1.9
+- Last Updated: 2026-08-16
+- Version: v2.8
 - Related Tickets: veep2012/doc_mcp#14, veep2012/doc_mcp#2
 
 ## Change Log
+- 2026-08-16 | v2.8 | Documented the required `notifications/initialized` handshake, notification no-response behavior, redacted nonblocking stderr artifact handling, deadline-bound partial-response handling, source/vector fixture integrity preflight, container-runtime precedence, deterministic fixture index/sidecar regeneration, actual checked-in corpus coverage, end-to-end MCP-only wheel rewrite verification, and collision-resistant artifact directories.
 - 2026-08-15 | v1.9 | Documented recursive credential redaction, corrected direct source-tree invocation and optional requirements configuration, and synchronized harness scenario coverage.
 
 ## Purpose
@@ -38,13 +39,13 @@ Explain how to run the packaged-version harness that sends one stable MCP reques
 - **Allowlist**: Dot-separated response paths removed before comparison because their differences are expected. Paths may traverse object keys, list indexes, and JSON-encoded tool text.
 
 ## Background / Context
-The harness validates installed wheels rather than importing the working tree. It starts one isolated container for each wheel, installs the wheel into that container, sends the same newline-delimited MCP JSON-RPC requests to both servers, and compares the parsed responses in request order. The fixture is mounted read-only, and no production configuration or credentials are needed.
+The harness validates installed wheels rather than importing the working tree. It starts one isolated container for each wheel, installs the wheel into that container, sends the same newline-delimited MCP JSON-RPC requests to both servers, and compares the parsed responses in request order. The corpus sends `initialize`, then the MCP-required `notifications/initialized` notification without an `id`; the runner does not wait for or compare a response for that notification. The fixture is mounted read-only, and no production configuration or credentials are needed.
 
 ## Requirements
 ### Functional Requirements
 - FR-1: The baseline and current wheel paths must point to existing `.whl` files.
-- FR-2: The fixture must contain valid `config/sites.yaml`, every configured index file, and a local `mcp_requests.json` copied from the tracked example.
-- FR-3: The request corpus must include `initialize`, `get_version`, and at least three `search_docs` calls; the fixture's hybrid/vector configuration must exercise the vector backend.
+- FR-2: The fixture must contain valid `config/sites.yaml`, non-empty readable SQLite indexes containing pages, valid vector sidecars for hybrid/vector sites, and a local `mcp_requests.json` copied from the tracked example.
+- FR-3: The request corpus must include `initialize`, a response-free `notifications/initialized` notification immediately afterward, `get_version`, and at least three `search_docs` calls; the fixture's hybrid/vector configuration must exercise the vector backend.
 - FR-4: The harness must fail on malformed responses, startup failures, timeouts, unavailable runtimes, and non-allowlisted response differences.
 - FR-4a: Each run must remove containers labeled `docmcp.harness=true` before starting new comparison containers.
 - FR-5: Only explicitly configured response paths may be ignored during comparison.
@@ -82,7 +83,7 @@ The runner mounts the fixture at `/fixture` read-only and the wheel directory at
 - `tests/fixtures/harness/config/sites.yaml` - sanitized site configuration.
 - `tests/fixtures/harness/mcp_requests.json.example` - tracked example MCP request corpus.
 - `tests/fixtures/harness/mcp_requests.json` - local request corpus copied from the example; ignored by Git.
-- `tests/fixtures/harness/index/ld_docs.db` - local SQLite index required by the fixture; the `index/` path is ignored by Git and must be created locally.
+  - `tests/fixtures/harness/index/example.db` - local SQLite index required by the fixture; the `index/` path is ignored by Git and must be created locally.
 - `src/docmcp/harness/config.py` - settings and fixture validation.
 - `src/docmcp/harness/runner.py` - container execution and artifact creation.
 - `tests/test_harness.py` - unit coverage for validation, comparison, command quoting, failure boundaries, artifact redaction, and preserved failure diagnostics.
@@ -133,17 +134,24 @@ The repository stores the fixture configuration and corpus, but not the SQLite d
 
 ```bash
 mkdir -p tests/fixtures/harness/index
+rm -f tests/fixtures/harness/index/example.db tests/fixtures/harness/index/example.vec.db
 .venv/bin/python - <<'PY'
 from docmcp.index_store import init_db, upsert_page
 
-index = "tests/fixtures/harness/index/ld_docs.db"
+index = "tests/fixtures/harness/index/example.db"
 init_db(index)
 upsert_page(index, "https://example.test/alpha", "Alpha", "Alpha documentation content.")
 upsert_page(index, "https://example.test/beta", "Beta", "Beta documentation content.")
 PY
+
+PYTHONPATH=src .venv/bin/python -m docmcp.vectorize_cli --site "Harness Docs"
+test -s tests/fixtures/harness/index/example.db
+test -s tests/fixtures/harness/index/example.vec.db
 ```
 
-The checked-in corpus queries `Harness Docs`, searches for `alpha`, exercises a missing phrase, and requests a missing site. Keep the configured site name and index path aligned with `tests/fixtures/harness/config/sites.yaml`.
+The reset makes regeneration deterministic from the two fixture pages. The vectorizer reads the configured `index/example.db` and replaces the derived `index/example.vec.db` sidecar using the checked-in embedding model and vectorizer settings.
+
+The checked-in corpus initializes the MCP session, sends `notifications/initialized`, requests `get_version`, searches `Harness Docs` for `alpha`, exercises a missing phrase, and requests a missing site. The guide does not promise domain-specific semantic queries or a particular `mode` in this corpus; those behaviors require separate fixture data and assertions. Keep the configured site name and index path aligned with `tests/fixtures/harness/config/sites.yaml`.
 
 Create the local request corpus from the visible example:
 
@@ -187,13 +195,13 @@ The required settings are:
 | `HARNESS_FIXTURE_DIR` | Fixture root containing `config/sites.yaml`, indexes, and the corpus. |
 | `HARNESS_ARTIFACT_DIR` | Root directory for timestamped run diagnostics. |
 
-Optional settings are `HARNESS_IMAGE`, `HARNESS_ALLOWLIST`, `HARNESS_VERBOSE`, and `HARNESS_REQUIREMENTS_FILE`. `HARNESS_IMAGE` is the generated image repository prefix; the harness builds `<prefix>:baseline` and `<prefix>:current` from `python:3.11-slim`. Image-build stdout and stderr are shown live in the terminal, while only server stderr is written to the per-version artifacts. `HARNESS_REQUIREMENTS_FILE` defaults to `requirements-mcp.txt` when that file exists. Set `HARNESS_VERBOSE=true` to retain pip dependency-resolution output and enable `MCP_LOG_LEVEL=DEBUG` in the container. The harness uses fixed internal safety limits: 15 minutes per image build and 180 seconds per MCP request/process shutdown. Container stderr streams directly into each version's `stderr.log` artifact while MCP stdout is processed, preventing verbose diagnostics from filling a subprocess pipe and blocking JSON-RPC responses. Pip diagnostics never share stdout with the MCP JSON-RPC stream. Relative paths resolve from the repository root passed to the harness.
+Optional settings are `HARNESS_IMAGE`, `HARNESS_ALLOWLIST`, `HARNESS_VERBOSE`, and `HARNESS_REQUIREMENTS_FILE`. `HARNESS_IMAGE` is the generated image repository prefix; the harness builds `<prefix>:baseline` and `<prefix>:current` from `python:3.11-slim`. Image-build stdout and stderr are shown live in the terminal, while only server stderr is written to the per-version artifacts. `HARNESS_REQUIREMENTS_FILE` defaults to `requirements-mcp.txt` when that file exists. Set `HARNESS_VERBOSE=true` to retain pip dependency-resolution output and enable `MCP_LOG_LEVEL=DEBUG` in the container. The harness uses fixed internal safety limits: 15 minutes per image build and 180 seconds per MCP request/process shutdown. Container stderr is drained on a dedicated path while MCP stdout is processed, preventing verbose diagnostics from filling a subprocess pipe and blocking JSON-RPC responses; chunks are redacted before writing and the completed `stderr.log` is sanitized again on success and failure cleanup. MCP stdout is buffered until a complete newline-delimited response arrives, and the same request deadline covers partial fragments and the wait for that newline. Pip diagnostics never share stdout with the MCP JSON-RPC stream. Relative paths resolve from the repository root passed to the harness.
 
 Do not put secrets, tokens, passwords, certificates, private keys, connection strings, or production data in `.env-harness`. The loader rejects settings whose names look secret-bearing.
 
 ### 5. Select Podman or Docker
 
-The default runtime is Podman:
+The runtime precedence is explicit process/Make override, then `CONTAINER_BIN` in the repository `.env`, then `.env-harness`, and finally Podman:
 
 ```bash
 make harness
@@ -205,7 +213,7 @@ Use Docker when it is the available runtime or Podman networking is unavailable:
 make CONTAINER_BIN=docker harness
 ```
 
-The process environment takes precedence over `CONTAINER_BIN` in `.env-harness`. For a direct Python invocation:
+For a direct Python invocation, the process environment overrides the repository `.env`:
 
 ```bash
 CONTAINER_BIN=docker PYTHONPATH=src .venv/bin/python -m docmcp.harness
@@ -229,10 +237,10 @@ Or invoke the module directly:
 PYTHONPATH=src .venv/bin/python -m docmcp.harness
 ```
 
-A successful run prints the timestamped artifact directory:
+A successful run prints the UTC-timestamped, collision-resistant artifact directory:
 
 ```text
-MCP comparison passed. Artifacts: artifacts/harness/20260815T120000Z
+MCP comparison passed. Artifacts: artifacts/harness/20260815T120000Z-5e2f4a9c3d1b4f7a8c6d2e1f9a0b3c4d
 ```
 
 The command exits with status `0` only when all normalized responses match.
@@ -249,30 +257,31 @@ Do not allowlist an entire response, tool result, or error object to make a fail
 
 ## Request corpus and fixture rules
 
-Each request in the local `mcp_requests.json` must be a JSON object containing `jsonrpc: "2.0"`, an `id`, and a `method`. Start from the tracked `mcp_requests.json.example` when creating or updating the local corpus. The validator requires:
+Each request in the local `mcp_requests.json` must be a JSON object containing `jsonrpc: "2.0"` and a `method`; normal requests contain an `id`, while notifications do not. Start from the tracked `mcp_requests.json.example` when creating or updating the local corpus. The validator requires:
 
 - one `initialize` request;
+- one `notifications/initialized` notification immediately after `initialize`, without an ID;
 - one `tools/call` request for `get_version`;
 - at least three `tools/call` requests for `search_docs`;
-- valid request IDs and methods on every entry.
+- valid request IDs on every non-notification entry and valid methods on every entry.
 
-The fixture configuration must resolve successfully, and every configured `index_file` must already exist. The fixture should include success, empty-result, and error behavior so a version change cannot silently break only one response class.
+The fixture configuration must resolve successfully. Every configured `index_file` must be a non-empty readable SQLite database containing pages. Each hybrid/vector site must also have its resolved `.vec.db` sidecar with matching source metadata, the supported sidecar schema, and non-empty vector records; otherwise preflight fails instead of allowing an always-fallback comparison. The fixture should include success, empty-result, and error behavior so a version change cannot silently break only one response class.
 
 When extending the corpus:
 
 1. Add the request to `tests/fixtures/harness/mcp_requests.json.example`.
 2. Copy the example to `tests/fixtures/harness/mcp_requests.json` locally.
-2. Keep IDs unique and stable.
-3. Use the same fixture data for both wheel runs.
-4. Update TS-TF-013 in [the test scenario catalog](test_scenarios/testing_framework_test_scenarios.md) if the acceptance behavior or coverage changes.
-5. Run `tests/test_harness.py` and a real harness comparison.
+3. Keep IDs unique and stable on request entries.
+4. Use the same fixture data for both wheel runs.
+5. Update TS-TF-013 in [the test scenario catalog](test_scenarios/testing_framework_test_scenarios.md) if the acceptance behavior or coverage changes.
+6. Run `tests/test_harness.py` and a real harness comparison.
 
 ## Artifacts and expected results
 
-Each successful run creates a timestamped directory under `HARNESS_ARTIFACT_DIR`:
+Each successful run creates a unique UTC-timestamped directory with a UUID suffix under `HARNESS_ARTIFACT_DIR`:
 
 ```text
-artifacts/harness/<timestamp>/
+artifacts/harness/<timestamp>-<uuid>/
 ├── baseline/
 │   ├── command.log
 │   ├── responses.json
@@ -332,16 +341,17 @@ The repository’s general CI test command uses Docker for smoke tests. The harn
 - Store generated artifacts under a local or CI artifact directory, not in the committed source tree.
 
 ## Edge Cases
-- A fresh checkout has no `tests/fixtures/harness/index/ld_docs.db` because `index/` is ignored; create the index before running.
-- A process-level `CONTAINER_BIN` can override the runtime named in `.env-harness`.
+- A fresh checkout has no `tests/fixtures/harness/index/example.db` or its vector sidecar because `index/` is ignored; create both before running.
+- A process-level or Make `CONTAINER_BIN` overrides the repository `.env`, `.env-harness`, and the Podman default.
 - A missing index is not created by read-only search operations; fixture validation fails first.
-- A configuration error occurs before the timestamped run directory is created, so there may be no `failure.log` for configuration-only failures.
+- A configuration error occurs before the unique run directory is created, so there may be no `failure.log` for configuration-only failures.
+- Run directories use a UTC timestamp plus UUID suffix; parallel and same-second runs therefore retain separate diagnostics.
 - Version strings and other nondeterministic fields must be allowlisted by their exact response path, not by broad structural paths.
 - A changed response caused by a real product behavior change should be reviewed as a compatibility decision, not hidden with an allowlist entry.
 
 ## Testing Strategy
 - Unit tests: `tests/test_harness.py` validates safe settings, fixture and corpus rules, response comparison, and shell-command quoting.
-- Scenario coverage: TS-TF-013 through TS-TF-016 in `documentation/test_scenarios/testing_framework_test_scenarios.md` define packaged comparison, artifact-redaction, invalid-option, and failure-boundary acceptance criteria.
+- Scenario coverage: TS-TF-013 through TS-TF-023 in `documentation/test_scenarios/testing_framework_test_scenarios.md` define packaged comparison, artifact-redaction, invalid-option, failure-boundary, protocol-notification, stderr-redaction, partial-response timeout, fixture-integrity, runtime-precedence, wheel-rewrite, and unique-artifact-directory acceptance criteria.
 - Manual verification: run a real comparison with two available wheels and inspect `summary.md`, `diff.json`, and the baseline/current responses.
 
 ## Rollout / Migration

@@ -9,7 +9,11 @@ else
 PYTHON_BIN ?= python3
 VENV_PY := .venv/bin/python
 endif
-CONTAINER_BIN ?= podman
+ifneq ($(strip $(CONTAINER_BIN)),)
+CONTAINER_ENV := CONTAINER_BIN=$(CONTAINER_BIN)
+else
+CONTAINER_ENV :=
+endif
 
 .PHONY: help
 help: ## Show available make targets
@@ -60,11 +64,11 @@ test-smoke: ## Run smoke tests with the selected container runtime
 		echo "Create .venv first with 'make local-venv'"; \
 		exit 1; \
 	fi
-	CONTAINER_BIN=$(CONTAINER_BIN) $(VENV_PY) -m pytest -o addopts= -m smoke
+	$(CONTAINER_ENV) $(VENV_PY) -m pytest -o addopts= -m smoke
 
 .PHONY: test
 test: test-unit test-smoke ## Run unit tests first, then smoke tests
 
 .PHONY: harness
 harness: ## Compare baseline and current MCP wheels
-	CONTAINER_BIN=$(CONTAINER_BIN) PYTHONPATH=src $(VENV_PY) -m docmcp.harness
+	$(CONTAINER_ENV) PYTHONPATH=src $(VENV_PY) -m docmcp.harness

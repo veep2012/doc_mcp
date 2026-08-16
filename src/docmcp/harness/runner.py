@@ -3,21 +3,56 @@
 from __future__ import annotations
 
 import json
+import os
 import selectors
 import shlex
 import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 from pathlib import Path
 
-from .artifacts import create_run_dir, write_json, write_text
+from .artifacts import create_run_dir, redact, write_json, write_text
 from .comparison import compare_responses, normalize_response
-from .config import HarnessConfig, HarnessError, load_config
+from .config import HarnessConfig, HarnessError, _is_notification, load_config
 
 _HARNESS_LABEL = "docmcp.harness=true"
 _BUILD_TIMEOUT_SECONDS = 900
 _REQUEST_TIMEOUT_SECONDS = 180
+
+
+def _drain_stderr(stderr_stream, stderr_path: Path) -> None:
+    """Drain child stderr without blocking MCP stdout and redact each chunk."""
+    with stderr_path.open("w", encoding="utf-8") as artifact:
+        while chunk := stderr_stream.read(8192):
+            if isinstance(chunk, bytes):
+                chunk = chunk.decode("utf-8", errors="replace")
+            artifact.write(redact(chunk))
+            artifact.flush()
+
+
+def _read_response_line(
+    stdout_stream, stdout_buffer: bytearray, deadline: float, wheel_name: str, method: str
+) -> bytes:
+    """Read one newline-delimited response without exceeding its deadline."""
+    with selectors.DefaultSelector() as selector:
+        selector.register(stdout_stream, selectors.EVENT_READ)
+        while b"\n" not in stdout_buffer:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 or not selector.select(remaining):
+                raise HarnessError(
+                    f"{wheel_name} timed out after {_REQUEST_TIMEOUT_SECONDS} seconds "
+                    f"waiting for {method}."
+                )
+            chunk = os.read(stdout_stream.fileno(), 8192)
+            if not chunk:
+                raise HarnessError(f"{wheel_name} closed MCP stdout before responding to {method}.")
+            stdout_buffer.extend(chunk)
+    line, _, remainder = stdout_buffer.partition(b"\n")
+    stdout_buffer[:] = remainder
+    return line
 
 
 def _cleanup_stale_containers(config: HarnessConfig) -> None:
@@ -164,57 +199,59 @@ def _run_version(
 ) -> list[dict]:
     command = _server_command(config, wheel, image)
     write_text(output / "command.log", "$ " + " ".join(command) + "\n")
-    process: subprocess.Popen[str] | None = None
+    process: subprocess.Popen[bytes] | None = None
+    stderr_thread: threading.Thread | None = None
     stderr_path = output / "stderr.log"
     try:
-        with stderr_path.open("w", encoding="utf-8") as stderr_stream:
-            process = subprocess.Popen(
-                command,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=stderr_stream,
-                text=True,
+        process = subprocess.Popen(
+            command,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        assert process.stdin and process.stdout and process.stderr
+        stderr_thread = threading.Thread(
+            target=_drain_stderr,
+            args=(process.stderr, stderr_path),
+            name=f"{wheel.stem}-stderr-drain",
+            daemon=True,
+        )
+        stderr_thread.start()
+        responses = []
+        stdout_buffer = bytearray()
+        for request in requests:
+            process.stdin.write((json.dumps(request, separators=(",", ":")) + "\n").encode())
+            process.stdin.flush()
+            if _is_notification(request):
+                continue
+            line = _read_response_line(
+                process.stdout,
+                stdout_buffer,
+                time.monotonic() + _REQUEST_TIMEOUT_SECONDS,
+                wheel.name,
+                request["method"],
             )
-            assert process.stdin and process.stdout
-            responses = []
-            for request in requests:
-                process.stdin.write(json.dumps(request, separators=(",", ":")) + "\n")
-                process.stdin.flush()
-                with selectors.DefaultSelector() as selector:
-                    selector.register(process.stdout, selectors.EVENT_READ)
-                    if not selector.select(_REQUEST_TIMEOUT_SECONDS):
-                        raise HarnessError(
-                            f"{wheel.name} timed out after {_REQUEST_TIMEOUT_SECONDS} seconds "
-                            f"waiting for {request['method']}."
-                        )
-                line = process.stdout.readline()
-                if not line:
-                    raise HarnessError(
-                        f"{wheel.name} closed MCP stdout before responding to {request['method']}."
-                    )
-                try:
-                    response = json.loads(line)
-                except json.JSONDecodeError as exc:
-                    raise HarnessError(
-                        f"{wheel.name} returned malformed MCP JSON: {line!r}"
-                    ) from exc
-                if (
-                    not isinstance(response, dict)
-                    or response.get("jsonrpc") != "2.0"
-                    or response.get("id") != request["id"]
-                    or (("result" in response) == ("error" in response))
-                ):
-                    raise HarnessError(
-                        f"{wheel.name} returned an invalid response for request id {request['id']!r}."
-                    )
-                responses.append(response)
-            process.stdin.close()
-            process.stdin = None
-            return_code = process.wait(timeout=_REQUEST_TIMEOUT_SECONDS)
-            if return_code != 0:
-                raise HarnessError(f"{wheel.name} exited with status {return_code}.")
-            write_json(output / "responses.json", responses)
-            return responses
+            try:
+                response = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise HarnessError(f"{wheel.name} returned malformed MCP JSON: {line!r}") from exc
+            if (
+                not isinstance(response, dict)
+                or response.get("jsonrpc") != "2.0"
+                or response.get("id") != request["id"]
+                or (("result" in response) == ("error" in response))
+            ):
+                raise HarnessError(
+                    f"{wheel.name} returned an invalid response for request id {request['id']!r}."
+                )
+            responses.append(response)
+        process.stdin.close()
+        process.stdin = None
+        return_code = process.wait(timeout=_REQUEST_TIMEOUT_SECONDS)
+        if return_code != 0:
+            raise HarnessError(f"{wheel.name} exited with status {return_code}.")
+        write_json(output / "responses.json", responses)
+        return responses
     except subprocess.TimeoutExpired as exc:
         assert process is not None
         process.kill()
@@ -240,6 +277,10 @@ def _run_version(
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait()
+        if stderr_thread is not None:
+            stderr_thread.join()
+        if stderr_path.is_file():
+            write_text(stderr_path, stderr_path.read_text(encoding="utf-8"))
 
 
 def run_harness(env_file: Path | str = ".env-harness") -> Path:
