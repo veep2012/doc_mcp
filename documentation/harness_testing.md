@@ -7,7 +7,7 @@
 - Created: 2026-08-15
 - Last Updated: 2026-08-15
 - Version: v1.9
-- Related Tickets: veep2012/doc_mcp#2
+- Related Tickets: veep2012/doc_mcp#14, veep2012/doc_mcp#2
 
 ## Change Log
 - 2026-08-15 | v1.9 | Documented recursive credential redaction, corrected direct source-tree invocation and optional requirements configuration, and synchronized harness scenario coverage.
