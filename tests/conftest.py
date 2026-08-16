@@ -1,13 +1,9 @@
 import hashlib
 import re
-from pathlib import Path
 
 import pytest
 
 import docmcp.vector_index as vector_index
-
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 class _FakeTextEmbedding:

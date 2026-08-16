@@ -4,8 +4,7 @@ import sys
 import pytest
 
 from docmcp.index_store import count_pages, list_pages
-from tests.conftest import REPO_ROOT
-from tests.smoke.support import (
+from smoke_support import (
     print_smoke_context,
     run_checked,
     running_static_site,
@@ -13,6 +12,7 @@ from tests.smoke.support import (
     smoke_env,
     smoke_log_file,
 )
+from test_support import REPO_ROOT
 
 
 @pytest.mark.smoke

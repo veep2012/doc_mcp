@@ -9,10 +9,13 @@ build/
 
 # Environment variables (contains sensitive proxy/credentials)
 .env
+.env-harness.local
 
 # Storage and index (runtime data)
 storage/
 index/
+tests/fixtures/harness/index/
+tests/fixtures/harness/mcp_requests.json
 
 # Site config contains real URLs and credentials — use sites.yaml.example as template
 config/sites.yaml
@@ -31,3 +34,4 @@ __pycache__/
 
 # Local smoke-test and scratch artifacts
 .local/
+artifacts/harness/

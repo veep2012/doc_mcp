@@ -1,0 +1,9 @@
+sites:
+  - name: "Harness Docs"
+    url: "https://example.test"
+    auth_required: false
+    session_file: null
+    index_file: "index/example.db"
+    search_engine: hybrid
+    vectorizer:
+      embedding_model: "BAAI/bge-small-en-v1.5"

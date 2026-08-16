@@ -100,6 +100,7 @@ The repository includes smoke tests that exercise crawl and MCP behavior end to 
 
 - Podman or Docker must be installed and reachable as a container runtime.
 - The Playwright browser selected by each site's `playwright.browser` setting must be installed in the active Python environment. Chromium is the default.
+- MCP must be installed for the MCP stdio smoke test; install it with the repository development dependencies using `python -m pip install -r requirements-dev.txt`.
 - The environment must allow container networking and bind/mapped ports.
 
 Common limitations:
@@ -111,6 +112,27 @@ Common limitations:
 - If the configured Playwright browser is missing, auth and crawl commands stop before the first site run and print the matching `python -m playwright install <browser>` command.
 
 When a container runtime is available, smoke failures should include a helpful message that points to `CONTAINER_BIN=docker` as an alternative when Podman is the default and rootless networking is the problem.
+
+Default `pytest` collection remains usable without Playwright or MCP. Tests that need an unavailable optional runtime dependency are skipped with an installation command; install the project dependencies to run them.
+
+## MCP Version Comparison Harness
+
+Compare two packaged wheels against the checked-in sanitized fixture without using
+production configuration or credentials:
+
+```bash
+cp .env-harness .env-harness.local
+# Edit the two wheel paths in .env-harness.local, then:
+cp .env-harness.local .env-harness
+make harness
+```
+
+The harness runs `python -m docmcp.harness` through the project virtual
+environment. It uses `CONTAINER_BIN` with the same precedence as smoke tests;
+for example, run `make CONTAINER_BIN=docker harness` when Docker is preferred.
+See the [dedicated harness testing guide](documentation/harness_testing.md) for
+fixture setup, examples, artifacts, CI, and troubleshooting details, and the
+[MCP server reference](documentation/mcp-server.md) for the runtime contract.
 
 ## Install On Another Environment
 

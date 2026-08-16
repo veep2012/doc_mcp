@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-06-21
-- Version: v1.7
+- Last Updated: 2026-08-15
+- Version: v1.8
 
 ## Change Log
+- 2026-08-15 | v1.8 | Added the dedicated harness testing guide.
 - 2026-06-21 | v1.7 | Grouped the documentation index into getting started, runtime behavior, reference, and support sections and removed the obsolete semantic search planning page from the documentation index.
 - 2026-05-24 | v1.5 | Added the sqlite vector query reference to the documentation index and moved the manual test scenarios link under `test_scenarios/`.
 - 2026-05-09 | v1.3 | Added the story template to the documentation index.
@@ -43,8 +44,10 @@ Provide a single entry point for all files in `documentation/` and make it easy 
 - `sqlite_vector_queries.md` - sqlite3 shell commands and SQL examples for inspecting the local vector index.
 
 ### Testing And Support
+- `harness_testing.md` - Detailed setup, execution, fixture, CI, artifact, and troubleshooting guide for packaged-version harness comparisons.
 - `test_scenarios/manual-test-scenarios.md` - Manual QA checklist for setup, authentication, crawling, indexing, and MCP client smoke tests.
 - `test_scenarios/testing_framework_test_scenarios.md` - Automated pytest and smoke scenario catalog for the repository test framework.
+- `test_scenarios/testing_framework_guide.md` - External-QA instructions for running, diagnosing, and extending the pytest and smoke framework.
 - `troubleshooting.md` - Common failure modes and recovery steps.
 
 ### Standards And Templates

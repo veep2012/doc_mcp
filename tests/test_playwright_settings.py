@@ -1,11 +1,11 @@
 import asyncio
 
-import docmcp.auth.session as session
 from docmcp.config.playwright import (
     BrowserUnavailableError,
     launch_browser,
     resolve_playwright_settings,
 )
+from test_support import require_test_dependency
 
 
 class _Page:
@@ -60,6 +60,9 @@ class _Playwright:
 
 
 def test_authentication_and_session_validation_use_site_playwright_settings(monkeypatch):
+    require_test_dependency("playwright.async_api", "Playwright", "authentication settings tests")
+    import docmcp.auth.session as session
+
     calls = {}
     site = {
         "name": "Docs",

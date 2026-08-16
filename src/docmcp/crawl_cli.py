@@ -66,6 +66,7 @@ try:
 
     HAS_PYPDF = True
 except ImportError:
+    PdfReader = None
     HAS_PYPDF = False
 
 

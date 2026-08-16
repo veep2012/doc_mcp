@@ -1,6 +1,6 @@
 ---
 name: monthly-doc-actualizer
-description: Run daily documentation freshness checks and trigger full code-first documentation actualization when due. Use when repository docs must be revalidated against the current implementation in `api/`, `ci/init/`, `tests/`, and related source files.
+description: Run daily documentation freshness checks and trigger full code-first documentation actualization when due. Use when repository docs must be revalidated against the current implementation in `src/`, `config/`, `scripts/`, `tests/`, and related source files.
 ---
 
 # Monthly Doc Actualizer
@@ -18,13 +18,13 @@ State is tracked in:
 - `documentation/_documentation_actualization_state.md`
 
 Helper script:
-- `skills/monthly-doc-actualizer/scripts/check_due.py`
+- `.agents/skills/monthly-doc-actualizer/scripts/check_due.py`
 
 ## Workflow (Required)
 
 ### Step 1: Run daily due check
 - Run:
-  - `python3 skills/monthly-doc-actualizer/scripts/check_due.py --state-file documentation/_documentation_actualization_state.md --mark-check`
+  - `python3 .agents/skills/monthly-doc-actualizer/scripts/check_due.py --state-file documentation/_documentation_actualization_state.md --mark-check`
 - Read output fields:
   - `DUE=true|false`
   - `LAST_FULL_ACTUALIZATION`
@@ -39,11 +39,10 @@ Helper script:
 - Run full documentation actualization for `documentation/*.md` as a code-first review:
   - read `documentation/_documentation-index.md` to identify canonical docs by domain
   - inspect current implementation before editing docs:
-    - `api/routers`
-    - `api/schemas`
-    - `api/db`
-    - `ci/init/*.sql`
-    - `tests/api`
+    - `src/`
+    - `config/`
+    - `scripts/`
+    - `tests/`
     - any feature-specific source files touched by recent work
   - compare implementation to documentation and classify each mismatch:
     - stale doc text
@@ -77,7 +76,7 @@ Helper script:
 
 ### Step 6: Mark completion
 - After successful actualization and validation, mark completion:
-  - `python3 skills/monthly-doc-actualizer/scripts/check_due.py --state-file documentation/_documentation_actualization_state.md --mark-full`
+  - `python3 .agents/skills/monthly-doc-actualizer/scripts/check_due.py --state-file documentation/_documentation_actualization_state.md --mark-full`
 
 ## Output Requirements
 

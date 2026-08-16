@@ -1,6 +1,6 @@
 ---
 name: tech-debt
-description: Capture deferred technical debt items into dated markdown files under tech-debt/. Use when an issue is real, relevant, and intentionally not fixed in the current task.
+description: Capture deferred technical debt discovered during development in dated markdown files under tech-debt/. Use when an issue is real, relevant, and intentionally not fixed in the current task.
 ---
 
 # Tech Debt
