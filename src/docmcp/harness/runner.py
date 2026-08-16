@@ -198,10 +198,15 @@ def _run_version(
                     raise HarnessError(
                         f"{wheel.name} returned malformed MCP JSON: {line!r}"
                     ) from exc
-                if not isinstance(response, dict) or response.get("id") != request["id"]:
-                    raise HarnessError(
-                        f"{wheel.name} returned an invalid response for request id {request['id']!r}."
-                    )
+if (
+    not isinstance(response, dict)
+    or response.get("jsonrpc") != "2.0"
+    or response.get("id") != request["id"]
+    or (("result" in response) == ("error" in response))
+):
+    raise HarnessError(
+        f"{wheel.name} returned an invalid response for request id {request['id']!r}."
+    )
                 responses.append(response)
             process.stdin.close()
             process.stdin = None
