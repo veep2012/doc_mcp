@@ -1,0 +1,6 @@
+# Minimal dependencies for the packaged MCP server and keyword/vector search.
+mcp==1.28.1
+PyYAML==6.0.3
+python-dotenv==1.2.2
+fastembed==0.8.0
+sqlite-vec==0.1.9

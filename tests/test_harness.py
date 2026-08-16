@@ -1,0 +1,750 @@
+"""TS-TF-013 harness configuration and comparison verification.
+
+Scenario document: documentation/test_scenarios/testing_framework_test_scenarios.md
+"""
+
+import json
+import os
+import subprocess
+import sys
+import uuid
+from pathlib import Path
+
+import pytest
+
+from docmcp.harness.artifacts import create_run_dir, write_json
+from docmcp.harness.comparison import compare_responses
+from docmcp.harness.config import (
+    HarnessConfig,
+    HarnessError,
+    _validate_vector_sidecar,
+    load_config,
+)
+from docmcp.harness.runner import _run_version, _server_command
+from docmcp.harness import runner
+from docmcp.index_store import init_db, upsert_page
+from scripts.build_mcp_wheel import _read_mcp_requirements
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_create_run_dir_uses_unique_timestamped_names(tmp_path: Path):
+    """TS-TF-023: Rapid run-directory creation cannot collide."""
+    first = create_run_dir(tmp_path)
+    second = create_run_dir(tmp_path)
+
+    assert first != second
+    assert first.is_dir() and second.is_dir()
+    for path in (first, second):
+        timestamp, suffix = path.name.rsplit("-", maxsplit=1)
+        assert timestamp.endswith("Z")
+        assert len(timestamp) == 16
+        assert uuid.UUID(suffix).hex == suffix
+
+
+def test_create_run_dir_is_safe_for_parallel_processes(tmp_path: Path):
+    """TS-TF-023: Parallel harness runs receive distinct artifact directories."""
+    script = (
+        "from pathlib import Path; "
+        "from docmcp.harness.artifacts import create_run_dir; "
+        f"print(create_run_dir(Path({str(tmp_path)!r})))"
+    )
+    environment = {**os.environ, "PYTHONPATH": str(REPO_ROOT / "src")}
+    processes = [
+        subprocess.Popen(
+            [sys.executable, "-c", script],
+            cwd=REPO_ROOT,
+            env=environment,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        for _ in range(8)
+    ]
+    results = [process.communicate() for process in processes]
+    assert all(process.returncode == 0 for process in processes), results
+    paths = [Path(stdout.strip()) for stdout, _ in results]
+
+    assert len({path.name for path in paths}) == len(paths)
+    assert all(path.is_dir() for path in paths)
+
+
+def test_make_harness_is_thin_python_launcher():
+    """TS-TF-013: Make delegates comparison work to the Python module."""
+    makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
+    harness_target = makefile.split(".PHONY: harness", maxsplit=1)[1]
+
+    assert "harness: ## Compare baseline and current MCP wheels" in makefile
+    assert "-m docmcp.harness" in harness_target
+    assert "container run" not in harness_target
+
+
+def _write_env(tmp_path: Path, **values: str) -> Path:
+    defaults = {
+        "HARNESS_BASELINE_WHEEL": "baseline.whl",
+        "HARNESS_CURRENT_WHEEL": "current.whl",
+        "HARNESS_FIXTURE_DIR": "fixture",
+        "HARNESS_ARTIFACT_DIR": "artifacts",
+    }
+    defaults.update(values)
+    path = tmp_path / ".env-harness"
+    path.write_text(
+        "\n".join(f"{key}={value}" for key, value in defaults.items()), encoding="utf-8"
+    )
+    return path
+
+
+def _fixture(tmp_path: Path) -> None:
+    fixture = tmp_path / "fixture"
+    (fixture / "config").mkdir(parents=True)
+    (fixture / "index").mkdir()
+    init_db(str(fixture / "index" / "harness.db"))
+    upsert_page(
+        str(fixture / "index" / "harness.db"),
+        "https://example.test/harness",
+        "Harness",
+        "Harness fixture content.",
+    )
+    (fixture / "config" / "sites.yaml").write_text(
+        "sites:\n- name: Harness\n  url: https://example.test\n  auth_required: false\n  search_engine: keyword\n"
+        "  session_file: null\n  index_file: index/harness.db\n",
+        encoding="utf-8",
+    )
+    (fixture / "mcp_requests.json").write_text(
+        json.dumps(
+            [
+                {"jsonrpc": "2.0", "id": 1, "method": "initialize"},
+                {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {"name": "get_version"},
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 3,
+                    "method": "tools/call",
+                    "params": {"name": "search_docs"},
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 4,
+                    "method": "tools/call",
+                    "params": {"name": "search_docs"},
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 5,
+                    "method": "tools/call",
+                    "params": {"name": "search_docs"},
+                },
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_load_config_rejects_secret_setting(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    _fixture(tmp_path)
+    (tmp_path / "baseline.whl").touch()
+    (tmp_path / "current.whl").touch()
+    monkeypatch.setattr("docmcp.harness.config.shutil.which", lambda _: "/usr/bin/podman")
+
+    with pytest.raises(HarnessError, match="secret settings"):
+        load_config(_write_env(tmp_path, API_TOKEN="not-allowed"), root=tmp_path)
+
+
+def test_load_config_validates_fixture_and_corpus(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    _fixture(tmp_path)
+    (tmp_path / "baseline.whl").touch()
+    (tmp_path / "current.whl").touch()
+    monkeypatch.delenv("CONTAINER_BIN", raising=False)
+    monkeypatch.setattr("docmcp.harness.config.shutil.which", lambda _: "/usr/bin/docker")
+
+    config, corpus = load_config(_write_env(tmp_path), root=tmp_path)
+
+    assert config.container_bin == "podman"
+    assert len(corpus) == 6
+    assert corpus[1]["method"] == "notifications/initialized"
+    assert "id" not in corpus[1]
+
+
+def test_load_config_uses_project_env_container_runtime(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """TS-TF-021: Project .env supplies the runtime when process env is unset."""
+    _fixture(tmp_path)
+    (tmp_path / ".env").write_text("CONTAINER_BIN=docker\n", encoding="utf-8")
+    (tmp_path / "baseline.whl").touch()
+    (tmp_path / "current.whl").touch()
+    monkeypatch.delenv("CONTAINER_BIN", raising=False)
+    monkeypatch.setattr("docmcp.harness.config.shutil.which", lambda _: "/usr/bin/docker")
+
+    config, _ = load_config(_write_env(tmp_path), root=tmp_path)
+
+    assert config.container_bin == "docker"
+
+
+def test_load_config_process_runtime_overrides_project_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """TS-TF-021: Process/Make runtime overrides project .env."""
+    _fixture(tmp_path)
+    (tmp_path / ".env").write_text("CONTAINER_BIN=docker\n", encoding="utf-8")
+    (tmp_path / "baseline.whl").touch()
+    (tmp_path / "current.whl").touch()
+    monkeypatch.setenv("CONTAINER_BIN", "podman")
+    monkeypatch.setattr("docmcp.harness.config.shutil.which", lambda _: "/usr/bin/podman")
+
+    config, _ = load_config(_write_env(tmp_path), root=tmp_path)
+
+    assert config.container_bin == "podman"
+
+
+def test_load_config_rejects_empty_index(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """TS-TF-020: Empty source indexes fail harness preflight."""
+    _fixture(tmp_path)
+    (tmp_path / "fixture" / "index" / "harness.db").write_bytes(b"")
+    (tmp_path / "baseline.whl").touch()
+    (tmp_path / "current.whl").touch()
+    monkeypatch.setattr("docmcp.harness.config.shutil.which", lambda _: "/usr/bin/podman")
+
+    with pytest.raises(HarnessError, match="index is empty"):
+        load_config(_write_env(tmp_path), root=tmp_path)
+
+
+def test_load_config_rejects_missing_hybrid_vector_sidecar(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """TS-TF-020: Hybrid fixtures require a vector sidecar during preflight."""
+    _fixture(tmp_path)
+    sites = tmp_path / "fixture" / "config" / "sites.yaml"
+    sites.write_text(
+        sites.read_text(encoding="utf-8").replace(
+            "search_engine: keyword", "search_engine: hybrid"
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "baseline.whl").touch()
+    (tmp_path / "current.whl").touch()
+    monkeypatch.setattr("docmcp.harness.config.shutil.which", lambda _: "/usr/bin/podman")
+
+    with pytest.raises(HarnessError, match="vector sidecar is missing"):
+        load_config(_write_env(tmp_path), root=tmp_path)
+
+
+def test_load_config_rejects_empty_hybrid_vector_sidecar(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """TS-TF-020: Empty hybrid sidecars fail harness preflight."""
+    _fixture(tmp_path)
+    sites = tmp_path / "fixture" / "config" / "sites.yaml"
+    sites.write_text(
+        sites.read_text(encoding="utf-8").replace(
+            "search_engine: keyword", "search_engine: hybrid"
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "fixture" / "index" / "harness.vec.db").touch()
+    (tmp_path / "baseline.whl").touch()
+    (tmp_path / "current.whl").touch()
+    monkeypatch.setattr("docmcp.harness.config.shutil.which", lambda _: "/usr/bin/podman")
+
+    with pytest.raises(HarnessError, match="vector sidecar is empty"):
+        load_config(_write_env(tmp_path), root=tmp_path)
+
+
+def test_validate_vector_sidecar_reports_embedding_model_mismatch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """TS-TF-020: A sidecar built with another embedding model fails clearly."""
+    sidecar = tmp_path / "harness.vec.db"
+    sidecar.write_bytes(b"sidecar")
+    site = {
+        "name": "Harness",
+        "index_file": str(tmp_path / "harness.db"),
+        "vector_index_file": str(sidecar),
+        "vectorizer": {"embedding_model": "configured-model"},
+    }
+
+    class _FakeConnection:
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        "docmcp.harness.config._connect_ro_vector_index",
+        lambda _: _FakeConnection(),
+    )
+    monkeypatch.setattr(
+        "docmcp.harness.config._read_vector_sidecar_meta",
+        lambda _, __: (None, "sidecar-model", 3, "hash", None),
+    )
+
+    with pytest.raises(
+        HarnessError, match="embedding model mismatch.*sidecar-model.*configured-model"
+    ):
+        _validate_vector_sidecar(site, (1, None, "hash"))
+
+
+def test_load_config_rejects_invalid_verbose_value(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """TS-TF-015: Invalid verbosity settings fail before container execution."""
+    _fixture(tmp_path)
+    (tmp_path / "baseline.whl").touch()
+    (tmp_path / "current.whl").touch()
+    monkeypatch.setattr("docmcp.harness.config.shutil.which", lambda _: "/usr/bin/podman")
+
+    with pytest.raises(HarnessError, match="HARNESS_VERBOSE must be true or false"):
+        load_config(_write_env(tmp_path, HARNESS_VERBOSE="sometimes"), root=tmp_path)
+
+
+def test_load_config_rejects_invalid_image_value(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """TS-TF-015: Invalid image names fail before container execution."""
+    _fixture(tmp_path)
+    (tmp_path / "baseline.whl").touch()
+    (tmp_path / "current.whl").touch()
+    monkeypatch.setattr("docmcp.harness.config.shutil.which", lambda _: "/usr/bin/podman")
+
+    with pytest.raises(HarnessError, match="HARNESS_IMAGE must contain only image-repository"):
+        load_config(_write_env(tmp_path, HARNESS_IMAGE="docmcp harness"), root=tmp_path)
+
+
+def test_comparison_allows_only_explicit_version_difference():
+    baseline = [{"result": {"serverInfo": {"name": "doc-mcp", "version": "1.0"}}}]
+    current = [{"result": {"serverInfo": {"name": "doc-mcp", "version": "2.0"}}}]
+
+    assert compare_responses(baseline, current, ("result.serverInfo.version",)) == []
+    assert compare_responses(baseline, current, ()) != []
+
+
+def test_comparison_allowlists_version_in_get_version_tool_payload():
+    """TS-TF-013: Allowlist the version without hiding another tool-result change."""
+    baseline_payload = json.dumps(
+        {"package_name": "doc-mcp", "server_name": "docs-mcp", "version": "1.1.1"}, indent=2
+    )
+    current_payload = json.dumps(
+        {"package_name": "doc-mcp", "server_name": "docs-mcp", "version": "1.1.2"}, indent=2
+    )
+    baseline = [
+        {
+            "result": {
+                "content": [{"type": "text", "text": baseline_payload}],
+                "structuredContent": {"result": baseline_payload},
+            }
+        }
+    ]
+    current = [
+        {
+            "result": {
+                "content": [{"type": "text", "text": current_payload}],
+                "structuredContent": {"result": current_payload},
+            }
+        }
+    ]
+    allowlist = ("result.content.0.text.version", "result.structuredContent.result.version")
+
+    assert compare_responses(baseline, current, allowlist) == []
+
+    current[0]["result"]["content"][0]["text"] = json.dumps(
+        {"package_name": "doc-mcp", "server_name": "other-server", "version": "1.1.2"},
+        indent=2,
+    )
+    assert compare_responses(baseline, current, allowlist) != []
+
+
+def test_server_command_quotes_wheel_filename(tmp_path: Path):
+    """TS-TF-013: configured wheel names cannot alter the container shell command."""
+    config = HarnessConfig(
+        tmp_path / "baseline.whl",
+        tmp_path / "current;echo unexpected.whl",
+        tmp_path / "fixture",
+        tmp_path / "artifacts",
+        "podman",
+        "python:3.11-slim",
+        (),
+    )
+
+    assert (
+        "'/wheels/current;echo unexpected.whl'" in _server_command(config, config.current_wheel)[-1]
+    )
+
+    assert "--label" in _server_command(config, config.current_wheel)
+    assert "docmcp.harness=true" in _server_command(config, config.current_wheel)
+
+
+def test_server_command_verbose_mode_exposes_install_and_server_logs(tmp_path: Path):
+    """TS-TF-013: Verbose harness runs expose pip and server diagnostics."""
+    config = HarnessConfig(
+        tmp_path / "baseline.whl",
+        tmp_path / "current.whl",
+        tmp_path / "fixture",
+        tmp_path / "artifacts",
+        "podman",
+        "python:3.11-slim",
+        (),
+        None,
+        True,
+    )
+
+    command = _server_command(config, config.current_wheel)
+
+    assert "MCP_LOG_LEVEL=DEBUG" in command
+    assert "pip install -v --no-cache-dir" in command[-1]
+    assert "1>&2" in command[-1]
+
+
+def test_server_command_uses_prebuilt_harness_image(tmp_path: Path):
+    """TS-TF-013: Tagged harness images start without reinstalling dependencies."""
+    config = HarnessConfig(
+        tmp_path / "baseline.whl",
+        tmp_path / "current.whl",
+        tmp_path / "fixture",
+        tmp_path / "artifacts",
+        "podman",
+        "python:3.11-slim",
+        (),
+    )
+
+    command = _server_command(config, config.current_wheel, "docmcp-harness:current")
+
+    assert "docmcp-harness:current" in command
+    assert "exec docmcp-server" == command[-1]
+    assert "pip install" not in " ".join(command)
+    assert "/wheels" not in " ".join(command)
+
+
+def test_run_version_streams_large_stderr_without_blocking_stdout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """TS-TF-013: Verbose stderr cannot deadlock MCP response processing."""
+    child = (
+        "import json,sys\n"
+        "for line in sys.stdin:\n"
+        " request=json.loads(line)\n"
+        " sys.stderr.write('x' * 262144)\n"
+        " sys.stderr.flush()\n"
+        " print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{}}), flush=True)\n"
+    )
+    monkeypatch.setattr(
+        "docmcp.harness.runner._server_command",
+        lambda _config, _wheel, _image=None: [sys.executable, "-c", child],
+    )
+    config = HarnessConfig(
+        tmp_path / "baseline.whl",
+        tmp_path / "current.whl",
+        tmp_path / "fixture",
+        tmp_path / "artifacts",
+        "podman",
+        "python:3.11-slim",
+        (),
+    )
+    output = tmp_path / "run"
+    requests = [
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize"},
+        {"jsonrpc": "2.0", "id": 2, "method": "tools/call"},
+    ]
+
+    responses = _run_version(config, config.current_wheel, requests, output)
+
+    assert [response["id"] for response in responses] == [1, 2]
+    assert (output / "stderr.log").stat().st_size == 524288
+
+
+def test_run_version_skips_notification_responses(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """TS-TF-017: Notifications are sent without waiting for a response."""
+    child = (
+        "import json,sys\n"
+        "for line in sys.stdin:\n"
+        " request=json.loads(line)\n"
+        " if request['method'].startswith('notifications/'):\n"
+        "  continue\n"
+        " print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{}}), flush=True)\n"
+    )
+    monkeypatch.setattr(
+        "docmcp.harness.runner._server_command",
+        lambda _config, _wheel, _image=None: [sys.executable, "-c", child],
+    )
+    config = HarnessConfig(
+        tmp_path / "baseline.whl",
+        tmp_path / "current.whl",
+        tmp_path / "fixture",
+        tmp_path / "artifacts",
+        "podman",
+        "python:3.11-slim",
+        (),
+    )
+    requests = [
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize"},
+        {"jsonrpc": "2.0", "method": "notifications/initialized"},
+        {"jsonrpc": "2.0", "id": 2, "method": "tools/call"},
+    ]
+
+    responses = _run_version(config, config.current_wheel, requests, tmp_path / "run")
+
+    assert [response["id"] for response in responses] == [1, 2]
+
+
+def test_run_version_redacts_stderr_artifact(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """TS-TF-018: Successful stderr artifacts redact credential-like values."""
+    child = (
+        "import json,sys\n"
+        "for line in sys.stdin:\n"
+        " request=json.loads(line)\n"
+        " sys.stderr.write(\"token=success-secret password='password-secret'\\n\")\n"
+        " sys.stderr.flush()\n"
+        " print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{}}), flush=True)\n"
+    )
+    monkeypatch.setattr(
+        "docmcp.harness.runner._server_command",
+        lambda _config, _wheel, _image=None: [sys.executable, "-c", child],
+    )
+    config = HarnessConfig(
+        tmp_path / "baseline.whl",
+        tmp_path / "current.whl",
+        tmp_path / "fixture",
+        tmp_path / "artifacts",
+        "podman",
+        "python:3.11-slim",
+        (),
+    )
+
+    _run_version(
+        config,
+        config.current_wheel,
+        [{"jsonrpc": "2.0", "id": 1, "method": "initialize"}],
+        tmp_path / "run",
+    )
+
+    content = (tmp_path / "run" / "stderr.log").read_text(encoding="utf-8")
+    assert "success-secret" not in content
+    assert "password-secret" not in content
+    assert content.count("[REDACTED]") == 2
+
+
+def test_run_version_redacts_stderr_on_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """TS-TF-018: Failed stderr artifacts are redacted before retention."""
+    child = (
+        "import sys\n"
+        "next(sys.stdin)\n"
+        "sys.stderr.write('api_key=failure-secret\\n')\n"
+        "sys.stderr.flush()\n"
+        "print('not-json', flush=True)\n"
+    )
+    monkeypatch.setattr(
+        "docmcp.harness.runner._server_command",
+        lambda _config, _wheel, _image=None: [sys.executable, "-c", child],
+    )
+    config = HarnessConfig(
+        tmp_path / "baseline.whl",
+        tmp_path / "current.whl",
+        tmp_path / "fixture",
+        tmp_path / "artifacts",
+        "podman",
+        "python:3.11-slim",
+        (),
+    )
+
+    with pytest.raises(HarnessError):
+        _run_version(
+            config,
+            config.current_wheel,
+            [{"jsonrpc": "2.0", "id": 1, "method": "initialize"}],
+            tmp_path / "run",
+        )
+
+    content = (tmp_path / "run" / "stderr.log").read_text(encoding="utf-8")
+    assert "failure-secret" not in content
+    assert "[REDACTED]" in content
+
+
+def test_run_version_times_out_on_partial_response(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """TS-TF-019: Partial stdout fragments cannot bypass the response deadline."""
+    child = (
+        "import sys,time\n"
+        "next(sys.stdin)\n"
+        "sys.stdout.write('{\\\"jsonrpc\\\":')\n"
+        "sys.stdout.flush()\n"
+        "time.sleep(1)\n"
+    )
+    monkeypatch.setattr(
+        "docmcp.harness.runner._server_command",
+        lambda _config, _wheel, _image=None: [sys.executable, "-c", child],
+    )
+    monkeypatch.setattr("docmcp.harness.runner._REQUEST_TIMEOUT_SECONDS", 0.05)
+    config = HarnessConfig(
+        tmp_path / "baseline.whl",
+        tmp_path / "current.whl",
+        tmp_path / "fixture",
+        tmp_path / "artifacts",
+        "podman",
+        "python:3.11-slim",
+        (),
+    )
+
+    with pytest.raises(HarnessError, match="timed out"):
+        _run_version(
+            config,
+            config.current_wheel,
+            [{"jsonrpc": "2.0", "id": 1, "method": "initialize"}],
+            tmp_path / "run",
+        )
+
+
+def _run_version_with_child(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, child: str) -> None:
+    monkeypatch.setattr(
+        "docmcp.harness.runner._server_command",
+        lambda _config, _wheel, _image=None: [sys.executable, "-c", child],
+    )
+    config = HarnessConfig(
+        tmp_path / "baseline.whl",
+        tmp_path / "current.whl",
+        tmp_path / "fixture",
+        tmp_path / "artifacts",
+        "podman",
+        "python:3.11-slim",
+        (),
+    )
+    with pytest.raises(HarnessError):
+        _run_version(
+            config,
+            config.current_wheel,
+            [{"jsonrpc": "2.0", "id": 1, "method": "initialize"}],
+            tmp_path / "run",
+        )
+    assert (tmp_path / "run" / "stderr.log").is_file()
+
+
+def test_run_version_rejects_malformed_response(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """TS-TF-016: Malformed MCP output fails the version run."""
+    _run_version_with_child(
+        tmp_path,
+        monkeypatch,
+        "import sys; next(sys.stdin); print('not-json', flush=True)",
+    )
+
+
+def test_run_version_rejects_mismatched_response_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """TS-TF-016: A response for the wrong request ID fails the version run."""
+    _run_version_with_child(
+        tmp_path,
+        monkeypatch,
+        "import json,sys; request=json.loads(next(sys.stdin)); print(json.dumps({'id': 99}), flush=True)",
+    )
+
+
+def test_run_version_rejects_early_server_exit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """TS-TF-016: A server that closes stdout before responding fails the version run."""
+    _run_version_with_child(tmp_path, monkeypatch, "import sys; next(sys.stdin)")
+
+
+def test_run_harness_preserves_comparison_failure_artifact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """TS-TF-016: Unexpected differences retain a failure log and diff artifact."""
+    config = HarnessConfig(
+        tmp_path / "baseline.whl",
+        tmp_path / "current.whl",
+        tmp_path / "fixture",
+        tmp_path / "artifacts",
+        "podman",
+        "python:3.11-slim",
+        (),
+    )
+    monkeypatch.setattr(runner, "load_config", lambda _env: (config, [{"id": 1}]))
+    monkeypatch.setattr(runner, "_cleanup_stale_containers", lambda _config: None)
+    monkeypatch.setattr(
+        runner, "_build_harness_image", lambda _config, _wheel, role: f"image:{role}"
+    )
+
+    def fake_run_version(_config, _wheel, _requests, output, _image):
+        value = "baseline" if output.name == "baseline" else "current"
+        return [{"id": 1, "result": value}]
+
+    monkeypatch.setattr(runner, "_run_version", fake_run_version)
+
+    with pytest.raises(HarnessError, match="unexpected difference"):
+        runner.run_harness(tmp_path / ".env-harness")
+
+    run_dirs = list((tmp_path / "artifacts").iterdir())
+    assert len(run_dirs) == 1
+    assert (run_dirs[0] / "diff.json").is_file()
+    assert (run_dirs[0] / "failure.log").is_file()
+
+
+def test_server_command_uses_minimal_requirements_profile(tmp_path: Path):
+    """TS-TF-013: Harness installs MCP dependencies without crawler extras."""
+    requirements = tmp_path / "requirements-mcp.txt"
+    requirements.write_text("mcp==1.28.1\n", encoding="utf-8")
+    config = HarnessConfig(
+        tmp_path / "baseline.whl",
+        tmp_path / "current.whl",
+        tmp_path / "fixture",
+        tmp_path / "artifacts",
+        "podman",
+        "python:3.11-slim",
+        (),
+        requirements,
+    )
+
+    command = _server_command(config, config.current_wheel)
+
+    assert "/requirements/requirements-mcp.txt" in command[-1]
+    assert "pip install --no-cache-dir --no-deps /wheels/current.whl" in command[-1]
+
+
+def test_mcp_profile_includes_vector_runtime_without_crawler_extras():
+    """TS-TF-013: MCP-only harness installs vector lookup dependencies."""
+    requirements = (REPO_ROOT / "requirements-mcp.txt").read_text(encoding="utf-8")
+
+    assert "fastembed==0.8.0" in requirements
+    assert "sqlite-vec==0.1.9" in requirements
+    assert "playwright" not in requirements
+    assert "markdownify" not in requirements
+    assert "pypdf" not in requirements
+
+
+def test_mcp_wheel_metadata_reads_the_shared_requirements_profile(tmp_path: Path):
+    """TS-TF-013: MCP wheel metadata has no independently duplicated versions."""
+    requirements_file = tmp_path / "requirements-mcp.txt"
+    requirements_file.write_text(
+        "# comment\nmcp==9.9.9\nfastembed==8.8.8  # pinned vector runtime\n", encoding="utf-8"
+    )
+
+    assert _read_mcp_requirements(requirements_file) == (
+        "Requires-Dist: mcp==9.9.9",
+        "Requires-Dist: fastembed==8.8.8",
+    )
+
+
+def test_project_metadata_reads_full_runtime_requirements_file():
+    """TS-TF-013: Full wheel dependencies are not duplicated in pyproject.toml."""
+    pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+
+    assert 'dynamic = ["dependencies"]' in pyproject
+    assert 'dependencies = {file = ["requirements.txt"]}' in pyproject
+    assert "playwright==" not in pyproject
+    assert "fastembed==" not in pyproject
+
+
+def test_json_artifacts_redact_nested_credentials(tmp_path: Path):
+    """TS-TF-014: Structured diagnostics redact nested and JSON-encoded credentials."""
+    artifact = tmp_path / "artifact.json"
+    write_json(
+        artifact,
+        {
+            "token": "top-secret",
+            "nested": [{"api_key": "nested-secret"}],
+            "tool_text": json.dumps({"password": "encoded-secret", "ok": True}),
+        },
+    )
+
+    content = artifact.read_text(encoding="utf-8")
+    payload = json.loads(content)
+    assert payload["token"] == "[REDACTED]"
+    assert payload["nested"][0]["api_key"] == "[REDACTED]"
+    assert json.loads(payload["tool_text"])["password"] == "[REDACTED]"
+    assert "top-secret" not in content
+    assert "nested-secret" not in content
+    assert "encoded-secret" not in content

@@ -16,6 +16,8 @@ For any test creation, update, or review involving scenario documentation, apply
 - monthly-doc-actualizer: Run documentation freshness checks and actualization. Invoke as `$monthly-doc-actualizer`. (file: `.agents/skills/monthly-doc-actualizer/SKILL.md`)
 - release-note-writer: Draft user-facing release notes. Invoke as `$release-note-writer`. (file: `.agents/skills/release-note-writer/SKILL.md`)
 - story-guardian: Standardize and review stories. Invoke as `$story-guardian`. (file: `.agents/skills/story-guardian/SKILL.md`)
+- story-check: Compare GitHub stories with the current implementation. Invoke as `$story-check`. (file: `.agents/skills/story-check/SKILL.md`)
+- story-update: Refresh implementation stories from the current repository solution. Invoke as `$story-update`. (file: `.agents/skills/story-update/SKILL.md`)
 - test-scenario-guardian: Keep scenario documentation synchronized with automated verification. Invoke as `$test-scenario-guardian`. (file: `.agents/skills/test-scenario-guardian/SKILL.md`)
 - tech-debt: Capture deferred technical debt items into dated markdown files under `tech-debt/`. (file: `.agents/skills/tech-debt/SKILL.md`)
 - commiter: Create commit/push flow with standardized commit message format on explicit commit requests. (file: `.agents/skills/commiter/SKILL.md`)

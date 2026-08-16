@@ -5,10 +5,12 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-06-21
-- Version: v2.2
+- Last Updated: 2026-08-15
+- Version: v3.0
 
 ## Change Log
+- 2026-08-15 | v3.0 | Consolidated packaged-version harness instructions in the dedicated harness testing guide and kept this reference as a cross-link.
+- 2026-08-02 | v2.3 | Added the packaged-wheel MCP version comparison harness, its safe configuration, fixtures, diagnostics, and CI usage.
 - 2026-06-21 | v2.2 | Defined the vector sidecar compatibility contract with strict schema-version checks, deterministic keyword fallback reasons, rebuild-based migration guidance, crawl-fingerprint stale detection based on source content hashes and crawl timestamps, and release-facing search contract wording.
 - 2026-06-14 | v1.9 | Documented vector-search fallback to keyword for missing, stale, incompatible, unreadable, and empty sidecars.
 - 2026-06-13 | v1.8 | Clarified hybrid degradation logging and same-page keyword preservation semantics.
@@ -264,6 +266,11 @@ If `get_sites` fails with a path under `.venv/lib/.../site-packages/config/sites
 ### Server Name
 - The server name defaults to `docs-mcp`.
 - It can be overridden with `MCP_SERVER_NAME`.
+
+### Packaged Version Comparison
+
+See the [Harness Testing Guide](harness_testing.md) for setup, execution,
+configuration, fixture requirements, artifacts, CI usage, and troubleshooting.
 
 ## Edge Cases
 - If the client launches an old wheel, `docmcp-server` may still reference `src.main`; rebuild and reinstall the wheel.

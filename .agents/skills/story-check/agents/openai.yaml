@@ -1,0 +1,4 @@
+interface:
+  display_name: "Story Check"
+  short_description: "Compare GitHub stories with implementation"
+  default_prompt: "Use $story-check to compare this GitHub issue with the current implementation and report any scope discrepancies."
