@@ -154,7 +154,15 @@ def _validate_vector_sidecar(site: dict, source_fingerprint: tuple[int, str | No
             source_content_hash,
             source_max_last_crawled,
         ) = _read_vector_sidecar_meta(conn, site["name"])
-        if embedding_model != _site_embedding_model(site) or embedding_dimensions <= 0:
+        configured_embedding_model = _site_embedding_model(site)
+        if embedding_model != configured_embedding_model:
+            raise HarnessError(
+                f"Harness fixture vector sidecar embedding model mismatch for {site['name']!r}: "
+                f"sidecar uses {embedding_model!r}, but sites.yaml configures "
+                f"{configured_embedding_model!r}; rebuild the sidecar with the configured model: "
+                f"{sidecar_path}"
+            )
+        if embedding_dimensions <= 0:
             raise HarnessError(
                 f"Harness fixture vector sidecar metadata is incompatible for {site['name']!r}: "
                 f"{sidecar_path}"

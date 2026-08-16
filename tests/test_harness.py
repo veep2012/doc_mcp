@@ -4,6 +4,8 @@ Scenario document: documentation/test_scenarios/testing_framework_test_scenarios
 """
 
 import json
+import os
+import subprocess
 import sys
 import uuid
 from pathlib import Path
@@ -12,7 +14,12 @@ import pytest
 
 from docmcp.harness.artifacts import create_run_dir, write_json
 from docmcp.harness.comparison import compare_responses
-from docmcp.harness.config import HarnessConfig, HarnessError, load_config
+from docmcp.harness.config import (
+    HarnessConfig,
+    HarnessError,
+    _validate_vector_sidecar,
+    load_config,
+)
 from docmcp.harness.runner import _run_version, _server_command
 from docmcp.harness import runner
 from docmcp.index_store import init_db, upsert_page
@@ -33,6 +40,33 @@ def test_create_run_dir_uses_unique_timestamped_names(tmp_path: Path):
         assert timestamp.endswith("Z")
         assert len(timestamp) == 16
         assert uuid.UUID(suffix).hex == suffix
+
+
+def test_create_run_dir_is_safe_for_parallel_processes(tmp_path: Path):
+    """TS-TF-023: Parallel harness runs receive distinct artifact directories."""
+    script = (
+        "from pathlib import Path; "
+        "from docmcp.harness.artifacts import create_run_dir; "
+        f"print(create_run_dir(Path({str(tmp_path)!r})))"
+    )
+    environment = {**os.environ, "PYTHONPATH": str(REPO_ROOT / "src")}
+    processes = [
+        subprocess.Popen(
+            [sys.executable, "-c", script],
+            cwd=REPO_ROOT,
+            env=environment,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        for _ in range(8)
+    ]
+    results = [process.communicate() for process in processes]
+    assert all(process.returncode == 0 for process in processes), results
+    paths = [Path(stdout.strip()) for stdout, _ in results]
+
+    assert len({path.name for path in paths}) == len(paths)
+    assert all(path.is_dir() for path in paths)
 
 
 def test_make_harness_is_thin_python_launcher():
@@ -219,6 +253,38 @@ def test_load_config_rejects_empty_hybrid_vector_sidecar(
 
     with pytest.raises(HarnessError, match="vector sidecar is empty"):
         load_config(_write_env(tmp_path), root=tmp_path)
+
+
+def test_validate_vector_sidecar_reports_embedding_model_mismatch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """TS-TF-020: A sidecar built with another embedding model fails clearly."""
+    sidecar = tmp_path / "harness.vec.db"
+    sidecar.write_bytes(b"sidecar")
+    site = {
+        "name": "Harness",
+        "index_file": str(tmp_path / "harness.db"),
+        "vector_index_file": str(sidecar),
+        "vectorizer": {"embedding_model": "configured-model"},
+    }
+
+    class _FakeConnection:
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        "docmcp.harness.config._connect_ro_vector_index",
+        lambda _: _FakeConnection(),
+    )
+    monkeypatch.setattr(
+        "docmcp.harness.config._read_vector_sidecar_meta",
+        lambda _, __: (None, "sidecar-model", 3, "hash", None),
+    )
+
+    with pytest.raises(
+        HarnessError, match="embedding model mismatch.*sidecar-model.*configured-model"
+    ):
+        _validate_vector_sidecar(site, (1, None, "hash"))
 
 
 def test_load_config_rejects_invalid_verbose_value(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

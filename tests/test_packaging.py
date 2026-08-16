@@ -108,3 +108,75 @@ def test_build_mcp_wheel_rewrites_and_installs_minimal_wheel(tmp_path: Path):
         env={"PATH": str(Path(sys.executable).parent), "PYTHONPATH": str(install_dir)},
     )
     assert result.stdout.strip() == "installed"
+
+
+def test_build_mcp_wheel_rewrites_real_repository_wheel(tmp_path: Path):
+    """TS-TF-022: Rewrite and install a wheel produced by the repository build backend."""
+    source_dir = tmp_path / "source-dist"
+    output_dir = tmp_path / "mcp-dist"
+    install_dir = tmp_path / "install"
+    repository = Path(__file__).resolve().parents[1]
+    requirements = repository / "requirements-mcp.txt"
+    version = tomllib.loads((repository / "pyproject.toml").read_text(encoding="utf-8"))["project"][
+        "version"
+    ]
+
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "build",
+            "--wheel",
+            "--no-isolation",
+            "--outdir",
+            str(source_dir),
+        ],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    source_wheels = sorted(source_dir.glob("doc_mcp-*.whl"))
+    assert len(source_wheels) == 1
+
+    output = build_mcp_wheel(source_wheels[0], output_dir, requirements)
+
+    assert output.name.startswith("doc_mcp_no_crawler-")
+    with zipfile.ZipFile(output) as archive:
+        names = set(archive.namelist())
+        metadata_name = f"doc_mcp_no_crawler-{version}.dist-info/METADATA"
+        assert metadata_name in names
+        assert f"doc_mcp_no_crawler-{version}.dist-info/RECORD" in names
+        metadata = archive.read(metadata_name).decode()
+    assert "Name: doc-mcp-no-crawler\n" in metadata
+    assert "Requires-Dist: mcp==1.28.1\n" in metadata
+    assert "Requires-Dist: playwright" not in metadata
+
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--no-deps",
+            "--target",
+            str(install_dir),
+            str(output),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from importlib.metadata import version; import docmcp.main; "
+            "print(version('doc-mcp-no-crawler'))",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        env={"PATH": str(Path(sys.executable).parent), "PYTHONPATH": str(install_dir)},
+    )
+    assert result.stdout.strip() == version

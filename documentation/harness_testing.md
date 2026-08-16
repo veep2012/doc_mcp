@@ -10,7 +10,7 @@
 - Related Tickets: veep2012/doc_mcp#14, veep2012/doc_mcp#2
 
 ## Change Log
-- 2026-08-16 | v2.8 | Documented the required `notifications/initialized` handshake, notification no-response behavior, redacted nonblocking stderr artifact handling, deadline-bound partial-response handling, source/vector fixture integrity preflight, container-runtime precedence, deterministic fixture index/sidecar regeneration, actual checked-in corpus coverage, end-to-end MCP-only wheel rewrite verification, and collision-resistant artifact directories.
+- 2026-08-16 | v3.0 | Documented the required `notifications/initialized` handshake, notification no-response behavior, redacted nonblocking stderr artifact handling, deadline-bound partial-response handling, source/vector fixture integrity preflight, container-runtime precedence, deterministic fixture index/sidecar regeneration, actual checked-in corpus coverage, end-to-end MCP-only wheel rewrite verification, collision-resistant artifact directories, explicit vector embedding-model mismatch diagnostics, and CI validation of the real MCP-only wheel metadata.
 - 2026-08-15 | v1.9 | Documented recursive credential redaction, corrected direct source-tree invocation and optional requirements configuration, and synchronized harness scenario coverage.
 
 ## Purpose
@@ -265,7 +265,7 @@ Each request in the local `mcp_requests.json` must be a JSON object containing `
 - at least three `tools/call` requests for `search_docs`;
 - valid request IDs on every non-notification entry and valid methods on every entry.
 
-The fixture configuration must resolve successfully. Every configured `index_file` must be a non-empty readable SQLite database containing pages. Each hybrid/vector site must also have its resolved `.vec.db` sidecar with matching source metadata, the supported sidecar schema, and non-empty vector records; otherwise preflight fails instead of allowing an always-fallback comparison. The fixture should include success, empty-result, and error behavior so a version change cannot silently break only one response class.
+The fixture configuration must resolve successfully. Every configured `index_file` must be a non-empty readable SQLite database containing pages. Each hybrid/vector site must also have its resolved `.vec.db` sidecar with matching source metadata, the supported sidecar schema, the configured embedding model, and non-empty vector records; otherwise preflight fails instead of allowing an always-fallback comparison. If the sidecar was built with a different embedding model, the preflight error identifies both the sidecar and configured models and instructs the operator to rebuild it. The fixture should include success, empty-result, and error behavior so a version change cannot silently break only one response class.
 
 When extending the corpus:
 
@@ -331,6 +331,8 @@ CONTAINER_BIN=docker make harness
 ```
 
 The repository’s general CI test command uses Docker for smoke tests. The harness should use the same runtime unless the CI job explicitly provisions another supported runtime. Do not upload `.env-harness` when it contains machine-specific paths; upload only the redacted artifact directory when diagnostics are needed.
+
+CI also runs `make wheel` and inspects the generated `doc_mcp_no_crawler-*.whl` before tests. The check requires the MCP distribution name and pinned MCP dependency, and rejects Playwright or crawler dependencies. This complements the pytest-level synthetic and repository-built wheel installation tests.
 
 ## Security / Permissions
 

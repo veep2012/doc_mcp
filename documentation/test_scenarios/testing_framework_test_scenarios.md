@@ -6,11 +6,11 @@
 - Reviewers: Repository maintainers
 - Created: 2026-05-03
 - Last Updated: 2026-08-16
-- Version: v2.1
+- Version: v2.3
 - Related Tickets: veep2012/doc_mcp#2
 
 ## Change Log
-- 2026-08-16 | v2.1 | Added MCP initialization notification sequencing, no-response notification coverage, redacted nonblocking stderr artifact coverage, deadline-bound partial-response handling, hybrid/vector fixture integrity preflight, container-runtime precedence coverage, aligned TS-TF-013 with the actual harness corpus and assertions, added end-to-end MCP-only wheel rewrite verification, and covered collision-resistant artifact run IDs.
+- 2026-08-16 | v2.4 | Extended TS-TF-022 with a real repository-built wheel rewrite and installation check, extended TS-TF-023 with concurrent-process artifact creation coverage so parallel harness runs receive distinct directories, and added diagnostics for vector sidecars built with a different embedding model than configured in sites.yaml.
 - 2026-08-15 | v1.3 | Added failure-boundary coverage for invalid harness options, malformed or mismatched MCP responses, early server exit, and preserved comparison-failure artifacts.
 - 2026-08-14 | v1.0 | Added the lightweight MCP dependency profile and dual full/MCP-only wheel output, including cached baseline/current harness images, live image-build progress, vector-search runtime coverage, shell timeout overrides, concurrent stderr artifact streaming for verbose runs, and fixed internal safety limits after removing the configurable harness timeout.
 - 2026-08-02 | v0.3 | Added packaged MCP version-comparison harness scenarios and automated mapping.
@@ -176,7 +176,7 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - Purpose: Prevent invalid fixtures from passing preflight and silently forcing hybrid/vector searches onto fallback paths.
 - Preconditions: A fixture contains configured source indexes and a hybrid/vector site.
 - Action: Run harness configuration validation with an empty/corrupt source index, a missing sidecar, stale sidecar metadata, or an empty sidecar.
-- Expected Result: Validation raises an actionable `HarnessError` before container startup; a valid source index and matching non-empty vector sidecar pass preflight.
+- Expected Result: Validation raises an actionable `HarnessError` before container startup; a valid source index and matching non-empty vector sidecar pass preflight. If the sidecar embedding model differs from the model configured in `sites.yaml`, the error identifies both model values and tells the operator to rebuild the sidecar with the configured model.
 
 #### TS-TF-021
 - Purpose: Keep direct and Make-based harness invocation aligned on container-runtime selection.
@@ -188,13 +188,13 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - Purpose: Protect the packaged MCP-only wheel transformation from metadata, archive-integrity, naming, and installation regressions.
 - Preconditions: A minimal valid source wheel and pinned MCP requirements file are available in temporary paths.
 - Action: Run `build_mcp_wheel` on the source wheel, inspect the generated archive and RECORD entries, then install it with pip without dependencies and import the packaged module.
-- Expected Result: The output uses the `doc_mcp_no_crawler` filename and dist-info directory, metadata contains only the pinned MCP requirements, entry points expose only `docmcp-server`, every non-RECORD archive member has a matching hash/size, and pip installs/imports the resulting wheel successfully.
+- Expected Result: The output uses the `doc_mcp_no_crawler` filename and dist-info directory, metadata contains only the pinned MCP requirements, entry points expose only `docmcp-server`, every non-RECORD archive member has a matching hash/size, and pip installs/imports the resulting wheel successfully. Coverage must include both a deterministic synthetic source wheel for focused rewrite assertions and a wheel produced from the repository by its configured build backend, so build-generated metadata and package layout are exercised in CI.
 
 #### TS-TF-023
 - Purpose: Prevent parallel or same-second harness runs from colliding before diagnostics are created.
 - Preconditions: A writable artifact root is available.
-- Action: Create two run directories in rapid succession.
-- Expected Result: Both directories exist, share the UTC timestamp format, and have distinct UUID suffixes.
+- Action: Create multiple run directories concurrently from separate processes under the same writable artifact root.
+- Expected Result: Every directory exists, uses the UTC timestamp plus UUID format, and has a distinct name; no process fails because another process created a run directory at the same time.
 
 ### Automated Test Mapping
 - `TS-TF-001` -> `tests/test_smoke_support.py::test_make_test_dry_run_lists_unit_before_smoke`
@@ -216,10 +216,10 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - `TS-TF-017` -> `tests/test_harness.py::{test_load_config_validates_initialized_notification,test_run_version_skips_notification_responses}`
 - `TS-TF-018` -> `tests/test_harness.py::{test_run_version_redacts_stderr_artifact,test_run_version_redacts_stderr_on_failure}`
 - `TS-TF-019` -> `tests/test_harness.py::test_run_version_times_out_on_partial_response`
-- `TS-TF-020` -> `tests/test_harness.py::{test_load_config_rejects_empty_index,test_load_config_rejects_missing_hybrid_vector_sidecar,test_load_config_rejects_empty_hybrid_vector_sidecar}`
+- `TS-TF-020` -> `tests/test_harness.py::{test_load_config_rejects_empty_index,test_load_config_rejects_missing_hybrid_vector_sidecar,test_load_config_rejects_empty_hybrid_vector_sidecar,test_validate_vector_sidecar_reports_embedding_model_mismatch}`
 - `TS-TF-021` -> `tests/test_harness.py::{test_load_config_uses_project_env_container_runtime,test_load_config_process_runtime_overrides_project_env}`
-- `TS-TF-022` -> `tests/test_packaging.py::test_build_mcp_wheel_rewrites_and_installs_minimal_wheel`
-- `TS-TF-023` -> `tests/test_harness.py::test_create_run_dir_uses_unique_timestamped_names`
+- `TS-TF-022` -> `tests/test_packaging.py::{test_build_mcp_wheel_rewrites_and_installs_minimal_wheel,test_build_mcp_wheel_rewrites_real_repository_wheel}`
+- `TS-TF-023` -> `tests/test_harness.py::{test_create_run_dir_uses_unique_timestamped_names,test_create_run_dir_is_safe_for_parallel_processes}`
 
 ## Edge Cases
 - If Podman is installed but not usable in the current environment, rerun smoke tests with `CONTAINER_BIN=docker`.
