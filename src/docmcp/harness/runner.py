@@ -127,8 +127,8 @@ def _build_harness_image(config: HarnessConfig, wheel: Path, role: str) -> str:
             "RUN pip install --no-cache-dir -r /tmp/requirements-mcp.txt\n"
             'RUN python -c "from fastembed import TextEmbedding; '
             "TextEmbedding(model_name='BAAI/bge-small-en-v1.5')\"\n"
-f"COPY {json.dumps([wheel.name, f'/tmp/{wheel.name}'])}\n"
-f"RUN pip install --no-cache-dir --no-deps {shlex.quote(f'/tmp/{wheel.name}')}\n"
+            f"COPY {json.dumps([wheel.name, f'/tmp/{wheel.name}'])}\n"
+            f"RUN pip install --no-cache-dir --no-deps {shlex.quote(f'/tmp/{wheel.name}')}\n"
         )
         (context / "Dockerfile").write_text(dockerfile, encoding="utf-8")
         command = [
@@ -198,21 +198,21 @@ def _run_version(
                     raise HarnessError(
                         f"{wheel.name} returned malformed MCP JSON: {line!r}"
                     ) from exc
-if (
-    not isinstance(response, dict)
-    or response.get("jsonrpc") != "2.0"
-    or response.get("id") != request["id"]
-    or (("result" in response) == ("error" in response))
-):
-    raise HarnessError(
-        f"{wheel.name} returned an invalid response for request id {request['id']!r}."
-    )
+                if (
+                    not isinstance(response, dict)
+                    or response.get("jsonrpc") != "2.0"
+                    or response.get("id") != request["id"]
+                    or (("result" in response) == ("error" in response))
+                ):
+                    raise HarnessError(
+                        f"{wheel.name} returned an invalid response for request id {request['id']!r}."
+                    )
                 responses.append(response)
             process.stdin.close()
             process.stdin = None
-return_code = process.wait(timeout=_REQUEST_TIMEOUT_SECONDS)
-if return_code != 0:
-    raise HarnessError(f"{wheel.name} exited with status {return_code}.")
+            return_code = process.wait(timeout=_REQUEST_TIMEOUT_SECONDS)
+            if return_code != 0:
+                raise HarnessError(f"{wheel.name} exited with status {return_code}.")
             write_json(output / "responses.json", responses)
             return responses
     except subprocess.TimeoutExpired as exc:
@@ -248,11 +248,11 @@ def run_harness(env_file: Path | str = ".env-harness") -> Path:
     _cleanup_stale_containers(config)
     run_dir = create_run_dir(config.artifact_dir)
     try:
-if config.requirements_file is None:
-    baseline_image = current_image = None
-else:
-    baseline_image = _build_harness_image(config, config.baseline_wheel, "baseline")
-    current_image = _build_harness_image(config, config.current_wheel, "current")
+        if config.requirements_file is None:
+            baseline_image = current_image = None
+        else:
+            baseline_image = _build_harness_image(config, config.baseline_wheel, "baseline")
+            current_image = _build_harness_image(config, config.current_wheel, "current")
         baseline = _run_version(
             config, config.baseline_wheel, requests, run_dir / "baseline", baseline_image
         )

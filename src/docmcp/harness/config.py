@@ -60,13 +60,13 @@ def _validate_corpus(path: Path) -> list[dict]:
     methods = {request.get("method") for request in corpus}
     if "initialize" not in methods:
         raise HarnessError("MCP request corpus must include an initialize request.")
-tools = []
-for request in corpus:
-    params = request.get("params", {})
-    if not isinstance(params, dict):
-        raise HarnessError("Each MCP request params value must be an object.")
-    if request.get("method") == "tools/call":
-        tools.append(params.get("name"))
+    tools = []
+    for request in corpus:
+        params = request.get("params", {})
+        if not isinstance(params, dict):
+            raise HarnessError("Each MCP request params value must be an object.")
+        if request.get("method") == "tools/call":
+            tools.append(params.get("name"))
     if "get_version" not in tools or tools.count("search_docs") < 3:
         raise HarnessError(
             "MCP request corpus must include get_version and at least three search_docs requests."
@@ -181,7 +181,9 @@ def load_config(
                 None,
                 (
                     item.strip()
-for item in values.get("HARNESS_ALLOWLIST", "result.serverInfo.version").split(",")
+                    for item in values.get("HARNESS_ALLOWLIST", "result.serverInfo.version").split(
+                        ","
+                    )
                 ),
             )
         ),
