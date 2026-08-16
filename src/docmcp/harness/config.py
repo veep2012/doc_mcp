@@ -179,7 +179,7 @@ def load_config(
                 None,
                 (
                     item.strip()
-                    for item in values.get("HARNESS_ALLOWLIST", "serverInfo.version").split(",")
+for item in values.get("HARNESS_ALLOWLIST", "result.serverInfo.version").split(",")
                 ),
             )
         ),
