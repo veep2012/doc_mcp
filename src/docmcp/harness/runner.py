@@ -248,8 +248,11 @@ def run_harness(env_file: Path | str = ".env-harness") -> Path:
     _cleanup_stale_containers(config)
     run_dir = create_run_dir(config.artifact_dir)
     try:
-        baseline_image = _build_harness_image(config, config.baseline_wheel, "baseline")
-        current_image = _build_harness_image(config, config.current_wheel, "current")
+if config.requirements_file is None:
+    baseline_image = current_image = None
+else:
+    baseline_image = _build_harness_image(config, config.baseline_wheel, "baseline")
+    current_image = _build_harness_image(config, config.current_wheel, "current")
         baseline = _run_version(
             config, config.baseline_wheel, requests, run_dir / "baseline", baseline_image
         )
