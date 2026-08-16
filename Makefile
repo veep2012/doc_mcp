@@ -42,7 +42,8 @@ wheel: ## Build a distributable wheel into dist/
 	$(VENV_PY) -c "import shutil; shutil.rmtree('build', ignore_errors=True)"
 	$(VENV_PY) -c "import shutil; shutil.rmtree('.local/wheel-build', ignore_errors=True)"
 	$(VENV_PY) -m build --wheel --no-isolation --outdir .local/wheel-build
-	cp .local/wheel-build/doc_mcp-*.whl dist/
+mkdir -p dist
+cp .local/wheel-build/doc_mcp-*.whl dist/
 	$(VENV_PY) scripts/build_mcp_wheel.py --wheel "$$(find .local/wheel-build -name 'doc_mcp-*.whl' -print -quit)" --output-dir dist --requirements-file requirements-mcp.txt
 
 .PHONY: test-unit
