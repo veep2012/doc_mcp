@@ -127,8 +127,8 @@ def _build_harness_image(config: HarnessConfig, wheel: Path, role: str) -> str:
             "RUN pip install --no-cache-dir -r /tmp/requirements-mcp.txt\n"
             'RUN python -c "from fastembed import TextEmbedding; '
             "TextEmbedding(model_name='BAAI/bge-small-en-v1.5')\"\n"
-            f"COPY {wheel.name} /tmp/{wheel.name}\n"
-            f"RUN pip install --no-cache-dir --no-deps /tmp/{wheel.name}\n"
+f"COPY {json.dumps([wheel.name, f'/tmp/{wheel.name}'])}\n"
+f"RUN pip install --no-cache-dir --no-deps {shlex.quote(f'/tmp/{wheel.name}')}\n"
         )
         (context / "Dockerfile").write_text(dockerfile, encoding="utf-8")
         command = [
