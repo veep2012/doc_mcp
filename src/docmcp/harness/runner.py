@@ -210,7 +210,9 @@ if (
                 responses.append(response)
             process.stdin.close()
             process.stdin = None
-            process.wait(timeout=_REQUEST_TIMEOUT_SECONDS)
+return_code = process.wait(timeout=_REQUEST_TIMEOUT_SECONDS)
+if return_code != 0:
+    raise HarnessError(f"{wheel.name} exited with status {return_code}.")
             write_json(output / "responses.json", responses)
             return responses
     except subprocess.TimeoutExpired as exc:
