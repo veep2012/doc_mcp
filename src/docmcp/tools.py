@@ -456,6 +456,12 @@ def _limit_error_mode(search_engine: str) -> str:
     return "vector" if search_engine == "vector" else "keyword"
 
 
+def _degraded_search_response(site: dict) -> dict:
+    """Preserve search semantics when a site's source index cannot be read."""
+    logger.warning("Could not search unavailable index for site %r", site["name"])
+    return _empty_search_response()
+
+
 @mcp.tool()
 def get_sites() -> str:
     """List configured sites as a JSON contract with their index status."""
@@ -570,13 +576,7 @@ def search_docs(site_name: str, query: str, limit: int = 10) -> str:
     if not site:
         return _serialize(_site_not_found_search_response(site_name))
     if not Path(site["index_file"]).is_file():
-        return _serialize(
-            _search_error_response(
-                _limit_error_mode(_site_search_engine(site)),
-                "index_unavailable",
-                f"The index for '{site['name']}' is unavailable.",
-            )
-        )
+        return _serialize(_degraded_search_response(site))
     search_engine = _site_search_engine(site)
     normalized_limit = _normalize_search_limit(limit)
     if normalized_limit is None:
@@ -590,18 +590,15 @@ def search_docs(site_name: str, query: str, limit: int = 10) -> str:
     if search_engine == "keyword":
         return _serialize(_keyword_search_response(site, query, normalized_limit))
     if search_engine == "vector":
-        return _serialize(_vector_search_response(site, query, normalized_limit))
+        try:
+            return _serialize(_vector_search_response(site, query, normalized_limit))
+        except sqlite3.Error:
+            return _serialize(_degraded_search_response(site))
 
     try:
         keyword_results = _keyword_lookup(site, query, normalized_limit)
     except sqlite3.Error:
-        return _serialize(
-            _search_error_response(
-                _limit_error_mode(search_engine),
-                "index_unavailable",
-                f"The index for '{site['name']}' is unavailable.",
-            )
-        )
+        return _serialize(_degraded_search_response(site))
     vector_results, error = _vector_lookup(site, query, normalized_limit)
     response = _search_response(keyword_results, vector_results, normalized_limit, error)
     _log_vector_path_decision(
@@ -648,7 +645,7 @@ def fetch_page(site_name: str, url: str) -> str:
     if not page:
         response = _tool_error(
             "page_not_found",
-            f"Page '{url}' was not found for '{site['name']}'.",
+            f"Page not found in index: {url}",
             site_name=site["name"],
             url=url,
             page=None,

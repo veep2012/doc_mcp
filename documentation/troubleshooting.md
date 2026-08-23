@@ -60,6 +60,7 @@ List the most common failure modes for `doc-mcp` and the first corrective step f
 - Confirm the crawler indexed pages into the correct `index_file`.
 - Check whether the site was crawled from the right `start_url`.
 - Make sure the query terms actually exist in the indexed Markdown.
+- If the source index is missing or unreadable, `search_docs` intentionally returns a successful empty result; repair the index before expecting matches.
 
 ### Search Falls Back From Vector To Keyword
 - `search_docs` now treats vector lookup as best-effort and keeps returning valid JSON when the vector sidecar is missing, unreadable, stale, incompatible, or empty.

@@ -226,7 +226,7 @@ def test_tool_contract_reports_empty_invalid_and_unavailable_states(monkeypatch,
         "error": {
             "code": "page_not_found",
             "type": "page_not_found",
-            "message": "Page 'https://example.test/missing' was not found for 'Empty Docs'.",
+            "message": "Page not found in index: https://example.test/missing",
         },
     }
 
@@ -239,10 +239,13 @@ def test_tool_contract_reports_empty_invalid_and_unavailable_states(monkeypatch,
 
 
 def test_search_docs_returns_empty_json_for_empty_or_missing_indexes(monkeypatch, tmp_path):
+    """TS-TF-006: Search keeps a successful empty contract for degraded indexes."""
     empty_index_file = tmp_path / "empty.db"
     init_db(str(empty_index_file))
 
     missing_index_file = tmp_path / "missing" / "docs.db"
+    unreadable_index_file = tmp_path / "unreadable.db"
+    unreadable_index_file.write_bytes(b"not a sqlite database")
 
     monkeypatch.setattr(
         tools,
@@ -260,11 +263,18 @@ def test_search_docs_returns_empty_json_for_empty_or_missing_indexes(monkeypatch
                 "auth_required": False,
                 "index_file": str(missing_index_file),
             },
+            {
+                "name": "Unreadable Docs",
+                "url": "https://unreadable.example.test",
+                "auth_required": False,
+                "index_file": str(unreadable_index_file),
+            },
         ],
     )
 
     empty_response = json.loads(tools.search_docs("Empty Docs", "Alpha"))
     missing_response = json.loads(tools.search_docs("Missing Docs", "Alpha"))
+    unreadable_response = json.loads(tools.search_docs("Unreadable Docs", "Alpha"))
 
     assert empty_response["mode"] == "keyword"
     assert empty_response["vector_hits"] == 0
@@ -279,8 +289,15 @@ def test_search_docs_returns_empty_json_for_empty_or_missing_indexes(monkeypatch
     assert missing_response["vector_hits"] == 0
     assert missing_response["keyword_hits"] == 0
     assert missing_response["results"] == []
-    assert missing_response["error"]["type"] == "index_unavailable"
-    assert missing_response["error"]["message"] == ("The index for 'Missing Docs' is unavailable.")
+    assert missing_response["ok"] is True
+    assert "error" not in missing_response
+
+    assert unreadable_response["mode"] == "keyword"
+    assert unreadable_response["vector_hits"] == 0
+    assert unreadable_response["keyword_hits"] == 0
+    assert unreadable_response["results"] == []
+    assert unreadable_response["ok"] is True
+    assert "error" not in unreadable_response
 
 
 def test_search_docs_returns_empty_json_for_zero_match_query(monkeypatch, tmp_path):
@@ -681,6 +698,7 @@ def test_search_docs_vector_mode_falls_back_when_sidecar_model_is_incompatible(
 
 
 def test_search_docs_returns_empty_json_on_sqlite_query_error(monkeypatch, tmp_path):
+    """TS-TF-006: Query-time source-index failures remain successful empty searches."""
     index_file = tmp_path / "docs.db"
     index_file.write_bytes(b"not a sqlite database")
 
@@ -711,8 +729,8 @@ def test_search_docs_returns_empty_json_on_sqlite_query_error(monkeypatch, tmp_p
     assert response["vector_hits"] == 0
     assert response["keyword_hits"] == 0
     assert response["results"] == []
-    assert response["error"]["type"] == "index_unavailable"
-    assert response["error"]["message"] == ("The index for 'Broken Docs' is unavailable.")
+    assert response["ok"] is True
+    assert "error" not in response
 
 
 def test_search_docs_logs_hybrid_vector_degradation(monkeypatch, tmp_path, caplog):
@@ -1475,7 +1493,8 @@ def test_search_docs_reports_unsupported_vector_sidecar_header_version(monkeypat
     )
 
 
-def test_search_docs_reports_missing_site_index_file_as_incompatible(monkeypatch, tmp_path):
+def test_search_docs_returns_empty_for_missing_site_index_file(monkeypatch, tmp_path):
+    """TS-TF-006: A missing source index preserves the successful search contract."""
     _require_vector_backend()
 
     source_index = tmp_path / "docs.db"
@@ -1505,8 +1524,8 @@ def test_search_docs_reports_missing_site_index_file_as_incompatible(monkeypatch
     assert response["vector_hits"] == 0
     assert response["keyword_hits"] == 0
     assert response["results"] == []
-    assert response["error"]["type"] == "index_unavailable"
-    assert response["error"]["message"] == "The index for 'Example Docs' is unavailable."
+    assert response["ok"] is True
+    assert "error" not in response
 
 
 def test_search_docs_returns_keyword_results_when_vector_lookup_returns_no_hits(
