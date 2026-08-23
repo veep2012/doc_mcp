@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-04-24
-- Version: v1.0
+- Last Updated: 2026-08-23
+- Version: v1.1
 
 ## Change Log
+- 2026-08-23 | v1.1 | Recorded the completed full documentation actualization and synchronized the document control metadata with the cadence state.
 - 2026-04-24 | v1.0 | Seeded documentation actualization state for this repository.
 
 ## Purpose
