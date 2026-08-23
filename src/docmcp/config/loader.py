@@ -52,16 +52,14 @@ def find_site(sites: list[dict], name: str) -> dict | None:
     """Find a site using the repository's case-insensitive canonical name policy."""
     if not isinstance(name, str):
         return None
-    canonical_name = _canonical_site_name(name)
-    return next(
-        (
-            site
-            for site in sites
-            if _canonical_site_name(site.get("canonical_name", site.get("name", ""))).casefold()
-            == canonical_name.casefold()
-        ),
-        None,
-    )
+    canonical_name_key = _canonical_site_name(name).casefold()
+    for site in sites:
+        configured_name = site.get("canonical_name")
+        if not isinstance(configured_name, str):
+            configured_name = _canonical_site_name(site.get("name", ""))
+        if configured_name.casefold() == canonical_name_key:
+            return site
+    return None
 
 
 def _resolve_runtime_path(value: Any, root: Path) -> Any:
