@@ -103,3 +103,13 @@ async def test_mcp_stdio_search_docs_uses_prepared_index():
     )
     assert invalid_payload["ok"] is False
     assert invalid_payload["error"]["code"] == "invalid_argument"
+
+    missing_site_payload = json.loads(
+        await call_mcp_tool(
+            runtime_root,
+            "search_docs",
+            {"site_name": "Missing Docs", "query": "Alpha"},
+        )
+    )
+    assert missing_site_payload["ok"] is False
+    assert missing_site_payload["error"]["code"] == "site_not_found"
