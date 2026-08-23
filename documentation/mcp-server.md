@@ -9,8 +9,7 @@
 - Version: v4.1
 
 ## Change Log
-- 2026-08-23 | v4.1 | Added catalog, site, and indexed-page MCP resources with normalized URI identities and search-result resource links.
-- 2026-08-23 | v4.0 | Standardized all MCP tool contracts on JSON, added the contract matrix and structured error convention, documented the Markdown-to-JSON migration for site, page-list, and page-fetch tools, fixed vector fallback messages so raw exception diagnostics remain server-side only, documented corrupt keyword indexes as `index_unavailable` failures, specified the full `page_not_found` response shape and preserved its legacy message, clarified per-site index degradation in `get_sites`, and added the safe `configuration_unavailable` contract.
+- 2026-08-23 | v4.1 | Standardized MCP tool contracts on JSON with structured errors, safe configuration/index degradation, and complete missing-page behavior; added catalog, site, and indexed-page resources with normalized URI identities and search-result resource links.
 - 2026-08-15 | v3.0 | Consolidated packaged-version harness instructions in the dedicated harness testing guide and kept this reference as a cross-link.
 - 2026-08-02 | v2.3 | Added the packaged-wheel MCP version comparison harness, its safe configuration, fixtures, diagnostics, and CI usage.
 - 2026-06-21 | v2.2 | Defined the vector sidecar compatibility contract with strict schema-version checks, deterministic keyword fallback reasons, rebuild-based migration guidance, crawl-fingerprint stale detection based on source content hashes and crawl timestamps, and release-facing search contract wording.
