@@ -10,6 +10,7 @@ Assess what the code currently does, what the tests actually prove, and what rem
 ## Inputs
 
 - Repository or workspace in scope.
+- Optional GitHub issue/story URL. If provided, read it through GitHub tools first, then use the story as an additional requirement source.
 - Optional feature, module, command, MCP tool, or commit scope. If omitted, infer the smallest relevant scope from the request and recent implementation changes.
 - Optional mode: `fix`. Without it, make no repository changes.
 
@@ -18,7 +19,7 @@ Assess what the code currently does, what the tests actually prove, and what rem
 1. Establish scope.
    - Inspect the working tree and recent relevant diffs without reverting user changes.
    - Locate implementation entry points under `src/`, CLI wrappers, configuration, documentation, and `tests/`.
-   - Separate explicit requirements from examples, test suggestions, and incidental narrative.
+   - If a GitHub story is supplied, separate explicit acceptance criteria from examples, test suggestions, and incidental narrative. Do not merely replay the story's test list.
 
 2. Build a behavior inventory from the implementation.
    Cover, when applicable:
@@ -37,7 +38,7 @@ Assess what the code currently does, what the tests actually prove, and what rem
 
 4. Exercise the smallest useful verification set.
    - Run targeted existing tests first.
-   - Follow repository-required validation commands for the affected area.
+   - Follow repository-required validation skills and commands for the affected area.
    - If a test cannot run, report the exact blocker and do not convert an unexecuted check into a pass.
 
 5. Identify and rank gaps.
@@ -58,12 +59,13 @@ Assess what the code currently does, what the tests actually prove, and what rem
 
 ## Fresh-opinion rules
 
-- Do not assume proposed tests are complete or correct.
+- Do not assume the story's proposed tests are complete or correct.
 - Do not call a feature covered merely because a test has the right name.
 - Prefer a small number of high-value runtime scenarios over broad shallow assertions.
 - Verify allowed and denied behavior separately where access control exists.
 - Verify empty, missing, and invalid cases separately.
-- Separate implementation defects from test gaps and mark recommendations beyond supplied requirements as hardening.
+- Separate implementation defects from test gaps. If behavior is wrong, say so even when a test exists.
+- Do not invent requirements from style preferences. Mark recommendations beyond the supplied story as hardening.
 
 ## Output
 

@@ -5,11 +5,12 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-05-03
-- Last Updated: 2026-08-16
-- Version: v2.3
+- Last Updated: 2026-08-23
+- Version: v2.5
 - Related Tickets: veep2012/doc_mcp#2
 
 ## Change Log
+- 2026-08-23 | v2.5 | Expanded MCP tool and stdio scenarios for the JSON contract, structured errors, empty states, preserved search semantics for degraded source indexes, fixed safe vector error messages with server-side raw exception logging, complete missing-page response assertions, and safe configuration-failure coverage.
 - 2026-08-16 | v2.4 | Extended TS-TF-022 with a real repository-built wheel rewrite and installation check, extended TS-TF-023 with concurrent-process artifact creation coverage so parallel harness runs receive distinct directories, and added diagnostics for vector sidecars built with a different embedding model than configured in sites.yaml.
 - 2026-08-15 | v1.3 | Added failure-boundary coverage for invalid harness options, malformed or mismatched MCP responses, early server exit, and preserved comparison-failure artifacts.
 - 2026-08-14 | v1.0 | Added the lightweight MCP dependency profile and dual full/MCP-only wheel output, including cached baseline/current harness images, live image-build progress, vector-search runtime coverage, shell timeout overrides, concurrent stderr artifact streaming for verbose runs, and fixed internal safety limits after removing the configurable harness timeout.
@@ -43,6 +44,7 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - FR-5: Missing smoke prerequisites must fail with actionable messages instead of tracebacks.
 - FR-6: Default test collection must remain usable when Playwright or MCP is unavailable, and affected tests must report installation guidance.
 - FR-7: The packaged-version harness must validate safe settings, exercise vector search through the MCP-only dependency profile, and fail on response differences other than explicitly allowlisted fields.
+- FR-8: Expected vector failures must return fixed safe messages for their public error codes, while raw exception details are retained only in server-side logs.
 
 ### Non-Functional Requirements
 - NFR-1: Test commands should use the active virtual-environment Python.
@@ -56,9 +58,9 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - `TS-TF-003` - Index store persists, updates, searches, fetches, lists, and counts pages correctly.
 - `TS-TF-004` - Config loader resolves runtime-relative files and fails clearly for missing or invalid config.
 - `TS-TF-005` - Crawler helpers normalize URLs, reject static assets, enforce allow/deny rules, handle anchors, and convert HTML to Markdown.
-- `TS-TF-006` - MCP tools return configured sites, pages, search results, fetched page content, and clear unknown-site messages.
+- `TS-TF-006` - MCP tools return standardized JSON contracts for configured sites, pages, search results, fetched page content, empty states, invalid arguments, unavailable indexes, and unknown sites; vector error messages are fixed per public error code and raw exception details are server-side only.
 - `TS-TF-007` - Crawl smoke indexes a temporary static site through Podman or Docker.
-- `TS-TF-008` - MCP smoke starts an isolated stdio server and verifies `search_docs` against a prepared index.
+- `TS-TF-008` - MCP smoke starts an isolated stdio server and verifies all five tool contracts, including representative success and failure calls.
 - `TS-TF-009` - Missing smoke prerequisites fail with actionable messages.
 - `TS-TF-010` - Default collection remains usable and reports actionable skips for unavailable optional runtime dependencies.
 - `TS-TF-011` - Test files do not import shared helpers through the `tests.*` package path.
@@ -100,7 +102,9 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 
 #### TS-TF-006
 - Purpose: Validate the MCP tool layer on top of configured site indexes.
-- Expected Result: Site listing, page listing, search, fetch, and unknown-site responses are stable and readable.
+- Preconditions: A configured temporary index contains pages and can be replaced with an empty or unavailable index.
+- Action: Call all five MCP tools with successful, empty, unknown-site, missing-page, invalid-argument, and recoverable index-failure inputs.
+- Expected Result: Every tool returns its documented JSON contract. Configuration failures return `configuration_unavailable` with a fixed safe message; missing or corrupt source indexes are reported as `index_unavailable` by page retrieval/listing tools, while `search_docs` preserves its successful empty-result semantics; missing pages retain `site_name`, the requested `url`, and `page: null`, use the legacy `Page not found in index: {url}` message, site listings return `ok: true` while marking each unavailable index in its nested status, and vector failures return a fixed safe message for each stable public error code. Raw exception text, credentials, URLs, SQL details, and absolute, relative, spaced, or UNC paths are available only in server-side logs. Non-search successes include `ok: true` and `contract_version`; expected failures include stable `error.code` values and no internal diagnostics. `search_docs` preserves its `mode`, hit counters, ordering, source labels, fallback error details, and default limit of 10.
 
 #### TS-TF-007
 - Purpose: Verify the end-to-end crawl smoke path.
@@ -110,7 +114,8 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 #### TS-TF-008
 - Purpose: Verify the end-to-end MCP stdio path.
 - Preconditions: A prepared local SQLite index exists for the temporary runtime workspace.
-- Expected Result: An isolated stdio server responds to `search_docs` with content from the prepared index.
+- Action: Start the isolated stdio server and call `get_sites`, `get_version`, `list_pages`, `search_docs`, and `fetch_page`, including an unknown-site and invalid-argument call.
+- Expected Result: Every response is valid JSON with the documented contract metadata and result/error fields; search content and page content are preserved, expected failures are structured, and MCP stdout contains no diagnostic output.
 
 #### TS-TF-009
 - Purpose: Make missing smoke prerequisites actionable.

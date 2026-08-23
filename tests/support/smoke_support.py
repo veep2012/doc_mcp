@@ -214,10 +214,10 @@ def running_static_site(site_root: Path):
         )
 
 
-async def call_search_docs(
+async def call_mcp_tool(
     runtime_root: Path,
-    site_name: str,
-    query: str,
+    tool_name: str,
+    arguments: dict,
     *,
     errlog: TextIO | None = None,
 ) -> str:
@@ -232,9 +232,7 @@ async def call_search_docs(
         async with stdio_client(server, errlog=errlog or sys.stderr) as streams:
             async with ClientSession(*streams) as session:
                 await session.initialize()
-                result = await session.call_tool(
-                    "search_docs", {"site_name": site_name, "query": query}
-                )
+                result = await session.call_tool(tool_name, arguments)
                 return result.content[0].text
     except Exception as exc:
         # MCP wraps a server startup failure as "Connection closed". Include the
@@ -258,3 +256,18 @@ async def call_search_docs(
             f"Original error: {exc}\n"
             f"Server stderr:\n{detail}"
         ) from exc
+
+
+async def call_search_docs(
+    runtime_root: Path,
+    site_name: str,
+    query: str,
+    *,
+    errlog: TextIO | None = None,
+) -> str:
+    return await call_mcp_tool(
+        runtime_root,
+        "search_docs",
+        {"site_name": site_name, "query": query},
+        errlog=errlog,
+    )

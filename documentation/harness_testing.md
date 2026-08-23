@@ -5,11 +5,12 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-08-15
-- Last Updated: 2026-08-16
-- Version: v2.8
+- Last Updated: 2026-08-23
+- Version: v3.1
 - Related Tickets: veep2012/doc_mcp#14, veep2012/doc_mcp#2
 
 ## Change Log
+- 2026-08-23 | v3.1 | Clarified that `contract_version` differences are semantic incompatibilities that must fail comparison, and documented the exact package-version paths that may be allowlisted while retaining all other response fields.
 - 2026-08-16 | v3.0 | Documented the required `notifications/initialized` handshake, notification no-response behavior, redacted nonblocking stderr artifact handling, deadline-bound partial-response handling, source/vector fixture integrity preflight, container-runtime precedence, deterministic fixture index/sidecar regeneration, actual checked-in corpus coverage, end-to-end MCP-only wheel rewrite verification, collision-resistant artifact directories, explicit vector embedding-model mismatch diagnostics, and CI validation of the real MCP-only wheel metadata.
 - 2026-08-15 | v1.9 | Documented recursive credential redaction, corrected direct source-tree invocation and optional requirements configuration, and synchronized harness scenario coverage.
 
@@ -247,7 +248,7 @@ The command exits with status `0` only when all normalized responses match.
 
 ### Comparing a deliberate behavior change
 
-If a response difference is intentional, first decide whether it is a semantic contract change or nondeterministic metadata. Only nondeterministic, non-semantic fields belong in `HARNESS_ALLOWLIST`. `initialize` exposes the version at `result.serverInfo.version`; `get_version` returns a JSON-encoded payload in both `result.content.0.text` and `result.structuredContent.result`. To ignore only the version key in all three locations while retaining every other tool field:
+If a response difference is intentional, first decide whether it is a semantic contract change or nondeterministic metadata. A `contract_version` difference is a semantic incompatibility and must fail comparison; it must never be added to `HARNESS_ALLOWLIST`. Only nondeterministic, non-semantic fields belong in the allowlist. `initialize` exposes the package version at `result.serverInfo.version`; `get_version` returns a JSON-encoded payload in both `result.content.0.text` and `result.structuredContent.result`. To ignore only the package version key in all three locations while retaining every other tool field:
 
 ```dotenv
 HARNESS_ALLOWLIST=result.serverInfo.version,result.content.0.text.version,result.structuredContent.result.version

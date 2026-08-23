@@ -317,13 +317,41 @@ def test_comparison_allows_only_explicit_version_difference():
     assert compare_responses(baseline, current, ()) != []
 
 
+def test_comparison_rejects_contract_version_difference():
+    """TS-TF-013: Contract-version changes are semantic, not metadata drift."""
+    baseline_payload = json.dumps(
+        {"contract_version": "1.0", "ok": True, "version": "1.1.1"}, indent=2
+    )
+    current_payload = json.dumps(
+        {"contract_version": "2.0", "ok": True, "version": "1.1.2"}, indent=2
+    )
+    baseline = [{"result": {"content": [{"type": "text", "text": baseline_payload}]}}]
+    current = [{"result": {"content": [{"type": "text", "text": current_payload}]}}]
+
+    assert compare_responses(baseline, current, ("result.content.0.text.version",)) != []
+
+
 def test_comparison_allowlists_version_in_get_version_tool_payload():
     """TS-TF-013: Allowlist the version without hiding another tool-result change."""
     baseline_payload = json.dumps(
-        {"package_name": "doc-mcp", "server_name": "docs-mcp", "version": "1.1.1"}, indent=2
+        {
+            "contract_version": "1.0",
+            "ok": True,
+            "package_name": "doc-mcp",
+            "server_name": "docs-mcp",
+            "version": "1.1.1",
+        },
+        indent=2,
     )
     current_payload = json.dumps(
-        {"package_name": "doc-mcp", "server_name": "docs-mcp", "version": "1.1.2"}, indent=2
+        {
+            "contract_version": "1.0",
+            "ok": True,
+            "package_name": "doc-mcp",
+            "server_name": "docs-mcp",
+            "version": "1.1.2",
+        },
+        indent=2,
     )
     baseline = [
         {
@@ -346,7 +374,13 @@ def test_comparison_allowlists_version_in_get_version_tool_payload():
     assert compare_responses(baseline, current, allowlist) == []
 
     current[0]["result"]["content"][0]["text"] = json.dumps(
-        {"package_name": "doc-mcp", "server_name": "other-server", "version": "1.1.2"},
+        {
+            "contract_version": "1.0",
+            "ok": True,
+            "package_name": "doc-mcp",
+            "server_name": "other-server",
+            "version": "1.1.2",
+        },
         indent=2,
     )
     assert compare_responses(baseline, current, allowlist) != []

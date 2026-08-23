@@ -35,7 +35,7 @@ except ModuleNotFoundError:  # pragma: no cover - only used in minimal test envi
 
 
 from . import __version__
-from .config.loader import get_sites as _get_sites, _normalize_search_engine
+from .config.loader import ConfigError, get_sites as _get_sites, _normalize_search_engine
 from .index_store import (
     _normalize_search_limit,
     count_pages,
@@ -60,11 +60,33 @@ logger = logging.getLogger("docmcp.tools")
 obs_logger = logging.getLogger("docmcp.observability")
 
 
+class _ConfigurationUnavailableError(RuntimeError):
+    """Internal marker for configuration failures crossing the MCP tool boundary."""
+
+
+def _load_sites() -> list[dict]:
+    try:
+        return _get_sites()
+    except ConfigError as exc:
+        logger.warning("Could not load site configuration: %s", exc, exc_info=True)
+        raise _ConfigurationUnavailableError from exc
+
+
 def _find_site(name: str) -> dict | None:
-    for site in _get_sites():
+    for site in _load_sites():
         if site["name"].lower() == name.lower():
             return site
     return None
+
+
+def _configuration_error_response() -> dict:
+    return _tool_error("configuration_unavailable", "Server configuration is unavailable.")
+
+
+def _configuration_search_error_response() -> dict:
+    return _search_error_response(
+        "keyword", "configuration_unavailable", "Server configuration is unavailable."
+    )
 
 
 def _site_search_engine(site: dict) -> str:
@@ -76,23 +98,59 @@ def _emit_observation(event: str, **fields) -> None:
     obs_logger.info(json.dumps(payload, sort_keys=True, default=str))
 
 
+CONTRACT_VERSION = "1.0"
+
+_VECTOR_ERROR_MESSAGES = {
+    "vector_index_missing": "Vector search index is missing.",
+    "vector_index_unreadable": "Vector search index could not be read.",
+    "vector_index_stale": "Vector search index is stale.",
+    "vector_index_schema_mismatch": "Vector search index schema is incompatible.",
+    "vector_index_incompatible": "Vector search index is incompatible.",
+    "vector_backend_unavailable": "Vector search backend is unavailable.",
+}
+
+
+def _tool_success(**fields) -> dict:
+    """Return the shared public MCP success envelope."""
+    return {"ok": True, "contract_version": CONTRACT_VERSION, **fields}
+
+
+def _tool_error(code: str, message: str, **fields) -> dict:
+    """Return a safe, actionable error without implementation details."""
+    error = {"code": code, "message": message}
+    return {"ok": False, "contract_version": CONTRACT_VERSION, **fields, "error": error}
+
+
+def _serialize(payload: dict) -> str:
+    return json.dumps(payload, indent=2, sort_keys=True)
+
+
+def _valid_nonempty_text(value: object) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
 def _empty_search_response(mode: str = "keyword") -> dict:
-    return {"mode": mode, "vector_hits": 0, "keyword_hits": 0, "results": []}
+    return {
+        "ok": True,
+        "contract_version": CONTRACT_VERSION,
+        "mode": mode,
+        "vector_hits": 0,
+        "keyword_hits": 0,
+        "results": [],
+    }
 
 
 def _search_error_response(mode: str, error_type: str, message: str) -> dict:
     response = _empty_search_response(mode)
-    response["error"] = {"type": error_type, "message": message}
+    response["ok"] = False
+    response["contract_version"] = CONTRACT_VERSION
+    # ``type`` is retained for the pre-contract search clients.
+    response["error"] = {"code": error_type, "type": error_type, "message": message}
     return response
 
 
 def _site_not_found_search_response(site_name: str) -> dict:
-    response = _empty_search_response()
-    response["error"] = {
-        "type": "site_not_found",
-        "message": f"Site '{site_name}' not found.",
-    }
-    return response
+    return _search_error_response("keyword", "site_not_found", f"Site '{site_name}' not found.")
 
 
 def _keyword_score(rank: float | None, position: int) -> float:
@@ -122,10 +180,7 @@ def _dedupe_keys(result: dict) -> tuple[str, ...]:
 
 
 def _keyword_lookup(site: dict, query: str, limit: int) -> list[dict]:
-    try:
-        return search_pages(site["index_file"], query, limit)
-    except sqlite3.Error:
-        return []
+    return search_pages(site["index_file"], query, limit)
 
 
 def _vector_index_observation(site: dict) -> dict[str, int | float | None]:
@@ -173,28 +228,28 @@ def _vector_lookup_error(site: dict, vector_index_file: str, exc: Exception | No
     if exc is None:
         return {
             "type": "vector_index_missing",
-            "message": (
-                f"Vector search is enabled for '{site['name']}' but the sidecar is missing: "
-                f"{vector_index_file}"
-            ),
+            "message": _VECTOR_ERROR_MESSAGES["vector_index_missing"],
         }
     if isinstance(exc, VectorBackendUnavailableError):
-        return {
-            "type": "vector_backend_unavailable",
-            "message": str(exc) or "Vector search backend is unavailable.",
-        }
-    if isinstance(exc, VectorSidecarStaleError):
-        return {"type": "vector_index_stale", "message": str(exc)}
-    if isinstance(exc, VectorSidecarSchemaMismatchError):
-        return {"type": "vector_index_schema_mismatch", "message": str(exc)}
-    if isinstance(exc, VectorSidecarIncompatibleError):
-        return {"type": "vector_index_incompatible", "message": str(exc)}
-    exc_text = str(exc).rstrip(".")
-    exc_detail = f" ({exc_text})" if exc_text else ""
-    return {
-        "type": "vector_index_unreadable",
-        "message": f"Vector sidecar for '{site['name']}' is unreadable{exc_detail}: {vector_index_file}",
-    }
+        error_type = "vector_backend_unavailable"
+    elif isinstance(exc, VectorSidecarStaleError):
+        error_type = "vector_index_stale"
+    elif isinstance(exc, VectorSidecarSchemaMismatchError):
+        error_type = "vector_index_schema_mismatch"
+    elif isinstance(exc, VectorSidecarIncompatibleError):
+        error_type = "vector_index_incompatible"
+    else:
+        error_type = "vector_index_unreadable"
+
+    # Keep the complete exception, including sensitive diagnostics, in server logs only.
+    logger.warning(
+        "Vector lookup failed for site %r at %r: %s",
+        site.get("name"),
+        vector_index_file,
+        exc,
+        exc_info=(type(exc), exc, exc.__traceback__),
+    )
+    return {"type": error_type, "message": _VECTOR_ERROR_MESSAGES[error_type]}
 
 
 def _vector_lookup(site: dict, query: str, limit: int) -> tuple[list[dict], dict | None]:
@@ -330,12 +385,21 @@ def _search_response(
     response["keyword_hits"] = len(keyword_results)
     response["results"] = merged_results
     if error:
-        response["error"] = error
+        response["ok"] = False
+        response["contract_version"] = CONTRACT_VERSION
+        response["error"] = {"code": error["type"], **error}
     return response
 
 
 def _keyword_search_response(site: dict, query: str, limit: int) -> dict:
-    keyword_results = _keyword_lookup(site, query, limit)
+    try:
+        keyword_results = _keyword_lookup(site, query, limit)
+    except sqlite3.Error:
+        return _search_error_response(
+            "keyword",
+            "index_unavailable",
+            f"The index for '{site['name']}' is unavailable.",
+        )
     response = _empty_search_response("keyword")
     response["keyword_hits"] = len(keyword_results)
     response["results"] = _public_search_results(_normalize_keyword_results(keyword_results))
@@ -373,7 +437,9 @@ def _vector_search_response(site: dict, query: str, limit: int) -> dict:
     response["keyword_hits"] = len(keyword_results)
     response["results"] = _public_search_results(_normalize_keyword_results(keyword_results))
     if error:
-        response["error"] = error
+        response["ok"] = False
+        response["contract_version"] = CONTRACT_VERSION
+        response["error"] = {"code": error["type"], **error}
     _log_vector_path_decision(
         site=site,
         search_engine=_site_search_engine(site),
@@ -390,32 +456,57 @@ def _limit_error_mode(search_engine: str) -> str:
     return "vector" if search_engine == "vector" else "keyword"
 
 
+def _degraded_search_response(site: dict) -> dict:
+    """Preserve search semantics when a site's source index cannot be read."""
+    logger.warning("Could not search unavailable index for site %r", site["name"])
+    return _empty_search_response()
+
+
 @mcp.tool()
 def get_sites() -> str:
-    """List all configured documentation sites and their index status."""
-    sites = _get_sites()
-    lines = ["## Configured Documentation Sites\n"]
+    """List configured sites as a JSON contract with their index status."""
+    try:
+        sites = _load_sites()
+    except _ConfigurationUnavailableError:
+        return _serialize(_configuration_error_response())
+    result = []
     for site in sites:
+        if not Path(site["index_file"]).is_file():
+            result.append(
+                {
+                    "name": site["name"],
+                    "url": site["url"],
+                    "auth_required": bool(site.get("auth_required")),
+                    "index": {"status": "unavailable", "page_count": None},
+                }
+            )
+            continue
         try:
             n = count_pages(site["index_file"])
-            status = f"{n} pages indexed"
-        except Exception as exc:
-            status = f"ERROR: {type(exc).__name__}: {exc}"
-        auth = "🔒 Auth required" if site.get("auth_required") else "🌐 Public"
-        lines.append(f"- **{site['name']}** ({auth}) — {status}")
-        lines.append(f"  URL: {site['url']}")
-    return "\n".join(lines)
+            index = {"status": "ready", "page_count": n}
+        except (OSError, sqlite3.Error):
+            logger.warning("Could not read index status for site %r", site["name"], exc_info=True)
+            index = {"status": "unavailable", "page_count": None}
+        result.append(
+            {
+                "name": site["name"],
+                "url": site["url"],
+                "auth_required": bool(site.get("auth_required")),
+                "index": index,
+            }
+        )
+    return _serialize(_tool_success(sites=result))
 
 
 @mcp.tool()
 def get_version() -> str:
     """Return the MCP server name and version."""
-    payload = {
-        "server_name": os.getenv("MCP_SERVER_NAME", "docs-mcp"),
-        "package_name": "doc-mcp",
-        "version": __version__,
-    }
-    return json.dumps(payload, indent=2, sort_keys=True)
+    payload = _tool_success(
+        server_name=os.getenv("MCP_SERVER_NAME", "docs-mcp"),
+        package_name="doc-mcp",
+        version=__version__,
+    )
+    return _serialize(payload)
 
 
 @mcp.tool()
@@ -425,17 +516,36 @@ def list_pages(site_name: str) -> str:
     Args:
         site_name: Name of the site as configured in sites.yaml
     """
-    site = _find_site(site_name)
+    if not _valid_nonempty_text(site_name):
+        return _serialize(_tool_error("invalid_argument", "site_name must be a non-empty string."))
+    try:
+        site = _find_site(site_name)
+    except _ConfigurationUnavailableError:
+        return _serialize(_configuration_error_response())
     if not site:
-        return f"Site '{site_name}' not found."
-    pages = _list_pages(site["index_file"])
+        return _serialize(_tool_error("site_not_found", f"Site '{site_name}' not found."))
+    if not Path(site["index_file"]).is_file():
+        return _serialize(
+            _tool_error("index_unavailable", f"The index for '{site['name']}' is unavailable.")
+        )
+    try:
+        pages = _list_pages(site["index_file"])
+    except (OSError, sqlite3.Error):
+        logger.warning("Could not list pages for site %r", site["name"], exc_info=True)
+        return _serialize(
+            _tool_error("index_unavailable", f"The index for '{site['name']}' is unavailable.")
+        )
     if not pages:
-        return f"No pages indexed for '{site_name}'. Run docmcp-crawl first."
-    lines = [f"## Pages in '{site_name}' ({len(pages)} total)"]
-    lines.append(f"Index: {site['index_file']}\n")
-    for p in pages:
-        lines.append(f"- [{p['title']}]({p['url']})  _(last crawled: {p['last_crawled']})_")
-    return "\n".join(lines)
+        return _serialize(_tool_success(site_name=site["name"], pages=[]))
+    return _serialize(
+        _tool_success(
+            site_name=site["name"],
+            pages=[
+                {"title": page["title"], "url": page["url"], "last_crawled": page["last_crawled"]}
+                for page in pages
+            ],
+        )
+    )
 
 
 @mcp.tool()
@@ -447,19 +557,48 @@ def search_docs(site_name: str, query: str, limit: int = 10) -> str:
         query: Search query string
         limit: Maximum number of results (default: 10)
     """
-    site = _find_site(site_name)
+    if not _valid_nonempty_text(site_name):
+        return _serialize(
+            _search_error_response(
+                "keyword", "invalid_argument", "site_name must be a non-empty string."
+            )
+        )
+    if not _valid_nonempty_text(query):
+        return _serialize(
+            _search_error_response(
+                "keyword", "invalid_argument", "query must be a non-empty string."
+            )
+        )
+    try:
+        site = _find_site(site_name)
+    except _ConfigurationUnavailableError:
+        return _serialize(_configuration_search_error_response())
     if not site:
-        return json.dumps(_site_not_found_search_response(site_name), indent=2)
+        return _serialize(_site_not_found_search_response(site_name))
+    if not Path(site["index_file"]).is_file():
+        return _serialize(_degraded_search_response(site))
     search_engine = _site_search_engine(site)
     normalized_limit = _normalize_search_limit(limit)
     if normalized_limit is None:
-        return json.dumps(_empty_search_response(_limit_error_mode(search_engine)), indent=2)
+        return _serialize(
+            _search_error_response(
+                _limit_error_mode(search_engine),
+                "invalid_argument",
+                "limit must be a positive integer.",
+            )
+        )
     if search_engine == "keyword":
-        return json.dumps(_keyword_search_response(site, query, normalized_limit), indent=2)
+        return _serialize(_keyword_search_response(site, query, normalized_limit))
     if search_engine == "vector":
-        return json.dumps(_vector_search_response(site, query, normalized_limit), indent=2)
+        try:
+            return _serialize(_vector_search_response(site, query, normalized_limit))
+        except sqlite3.Error:
+            return _serialize(_degraded_search_response(site))
 
-    keyword_results = _keyword_lookup(site, query, normalized_limit)
+    try:
+        keyword_results = _keyword_lookup(site, query, normalized_limit)
+    except sqlite3.Error:
+        return _serialize(_degraded_search_response(site))
     vector_results, error = _vector_lookup(site, query, normalized_limit)
     response = _search_response(keyword_results, vector_results, normalized_limit, error)
     _log_vector_path_decision(
@@ -471,7 +610,7 @@ def search_docs(site_name: str, query: str, limit: int = 10) -> str:
         vector_hits=response["vector_hits"],
         keyword_hits=response["keyword_hits"],
     )
-    return json.dumps(response, indent=2)
+    return _serialize(response)
 
 
 @mcp.tool()
@@ -482,10 +621,40 @@ def fetch_page(site_name: str, url: str) -> str:
         site_name: Name of the site
         url: Full URL of the page to fetch
     """
-    site = _find_site(site_name)
+    if not _valid_nonempty_text(site_name):
+        return _serialize(_tool_error("invalid_argument", "site_name must be a non-empty string."))
+    if not _valid_nonempty_text(url):
+        return _serialize(_tool_error("invalid_argument", "url must be a non-empty string."))
+    try:
+        site = _find_site(site_name)
+    except _ConfigurationUnavailableError:
+        return _serialize(_configuration_error_response())
     if not site:
-        return f"Site '{site_name}' not found."
-    page = get_page(site["index_file"], url)
+        return _serialize(_tool_error("site_not_found", f"Site '{site_name}' not found."))
+    if not Path(site["index_file"]).is_file():
+        return _serialize(
+            _tool_error("index_unavailable", f"The index for '{site['name']}' is unavailable.")
+        )
+    try:
+        page = get_page(site["index_file"], url)
+    except (OSError, sqlite3.Error):
+        logger.warning("Could not fetch page for site %r", site["name"], exc_info=True)
+        return _serialize(
+            _tool_error("index_unavailable", f"The index for '{site['name']}' is unavailable.")
+        )
     if not page:
-        return f"Page not found in index: {url}"
-    return f"# {page['title']}\n\n{page['content_md']}"
+        response = _tool_error(
+            "page_not_found",
+            f"Page not found in index: {url}",
+            site_name=site["name"],
+            url=url,
+            page=None,
+        )
+        response["error"]["type"] = "page_not_found"
+        return _serialize(response)
+    return _serialize(
+        _tool_success(
+            site_name=site["name"],
+            page={"title": page["title"], "url": url, "content_md": page["content_md"]},
+        )
+    )
