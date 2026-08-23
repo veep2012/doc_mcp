@@ -9,7 +9,7 @@
 - Version: v4.0
 
 ## Change Log
-- 2026-08-23 | v4.0 | Standardized all MCP tool contracts on JSON, added the contract matrix and structured error convention, and documented the Markdown-to-JSON migration for site, page-list, and page-fetch tools.
+- 2026-08-23 | v4.0 | Standardized all MCP tool contracts on JSON, added the contract matrix and structured error convention, documented the Markdown-to-JSON migration for site, page-list, and page-fetch tools, fixed vector fallback messages so raw exception diagnostics remain server-side only, documented corrupt keyword indexes as `index_unavailable` failures, specified the full `page_not_found` response shape, and added the safe `configuration_unavailable` contract.
 - 2026-08-15 | v3.0 | Consolidated packaged-version harness instructions in the dedicated harness testing guide and kept this reference as a cross-link.
 - 2026-08-02 | v2.3 | Added the packaged-wheel MCP version comparison harness, its safe configuration, fixtures, diagnostics, and CI usage.
 - 2026-06-21 | v2.2 | Defined the vector sidecar compatibility contract with strict schema-version checks, deterministic keyword fallback reasons, rebuild-based migration guidance, crawl-fingerprint stale detection based on source content hashes and crawl timestamps, and release-facing search contract wording.
@@ -64,7 +64,9 @@ python -m src.main
 All tools return a JSON string. Successful responses include `ok: true` and
 `contract_version: "1.0"`; expected failures include `ok: false`, the same
 contract version, and an `error` object with a stable `code` and a safe,
-human-readable `message`. Search retains its established result fields and adds
+human-readable `message`. Error messages are fixed per public error code; raw
+exception text, credentials, URLs, SQL details, and filesystem paths are logged
+server-side only. Search retains its established result fields and adds
 the shared envelope metadata; search failures use the same envelope.
 `error.type` remains a compatibility alias for existing search clients and equals
 `error.code`.
@@ -73,11 +75,11 @@ the shared envelope metadata; search failures use the same envelope.
 
 | Tool | Arguments and defaults | Success / empty response | Expected errors | Compatibility |
 | --- | --- | --- | --- | --- |
-| `get_sites` | None | `{"ok": true, "contract_version": "1.0", "sites": [...]}`; empty configuration has `sites: []`. Site entries contain `name`, `url`, `auth_required`, and index `status`/`page_count`. | An unreadable index has `index.status: "unavailable"`; configuration failures use MCP transport errors. | Replaces the former Markdown listing. Parse JSON. |
+| `get_sites` | None | `{"ok": true, "contract_version": "1.0", "sites": [...]}`; empty configuration has `sites: []`. Site entries contain `name`, `url`, `auth_required`, and index `status`/`page_count`. | An unreadable index has `index.status: "unavailable"`; configuration failures return `configuration_unavailable` with a fixed safe message. | Replaces the former Markdown listing. Parse JSON. |
 | `get_version` | None | `{"ok": true, "contract_version": "1.0", "server_name", "package_name", "version"}`. | None expected. | Preserves prior version fields; version values vary between packages. |
-| `list_pages` | `site_name`: non-empty string | `{"ok": true, "contract_version": "1.0", "site_name", "pages": [...]}`; empty index has `pages: []`. Pages have `title`, `url`, `last_crawled`. | `invalid_argument`, `site_not_found`, `index_unavailable`. | Replaces the former Markdown listing. |
-| `search_docs` | `site_name`, `query`: non-empty strings; `limit=10`, positive integer | `ok`, `contract_version`, plus existing `mode`, counters, and ordered `results`; zero matches use `results: []`. | `invalid_argument`, `site_not_found`, `index_unavailable`, and vector fallback codes below. | Existing result fields and schema are unchanged; envelope metadata is additive. |
-| `fetch_page` | `site_name`, `url`: non-empty strings | `{"ok": true, "contract_version": "1.0", "site_name", "page": {"title", "url", "content_md"}}`. | `invalid_argument`, `site_not_found`, `page_not_found`, `index_unavailable`. | Replaces the former Markdown page document. Render `page.content_md` when needed. |
+| `list_pages` | `site_name`: non-empty string | `{"ok": true, "contract_version": "1.0", "site_name", "pages": [...]}`; empty index has `pages: []`. Pages have `title`, `url`, `last_crawled`. | `invalid_argument`, `site_not_found`, `index_unavailable`, `configuration_unavailable`. | Replaces the former Markdown listing. |
+| `search_docs` | `site_name`, `query`: non-empty strings; `limit=10`, positive integer | `ok`, `contract_version`, plus existing `mode`, counters, and ordered `results`; zero matches use `results: []`. | `invalid_argument`, `site_not_found`, `index_unavailable`, `configuration_unavailable`, and vector fallback codes below. | Existing result fields and schema are unchanged; envelope metadata is additive. |
+| `fetch_page` | `site_name`, `url`: non-empty strings | `{"ok": true, "contract_version": "1.0", "site_name", "page": {"title", "url", "content_md"}}`. | `invalid_argument`, `site_not_found`, `page_not_found`, `index_unavailable`, `configuration_unavailable`. A `page_not_found` response retains `site_name`, the requested `url`, and `page: null`; its error includes both `code` and compatibility alias `type`. | Replaces the former Markdown page document. Render `page.content_md` when needed. |
 
 Example error:
 
@@ -166,9 +168,19 @@ Successful search calls and empty-index search calls still return the base JSON 
 
 Invalid `site_name`, `query`, and non-positive or non-integer `limit` values
 return this empty search shape with `ok: false` and
-`error.code: "invalid_argument"`. No expected failure includes stack traces, filesystem paths,
-or configuration secrets. Vector fallback messages retain their stable error code
-and diagnostic category but never expose the sidecar path.
+`error.code: "invalid_argument"`. Missing or corrupt keyword indexes return
+`error.code: "index_unavailable"` with `ok: false`. No expected failure includes stack traces, filesystem paths,
+or configuration secrets. Vector fallback messages use these fixed safe messages:
+
+- `vector_index_missing`: `Vector search index is missing.`
+- `vector_index_unreadable`: `Vector search index could not be read.`
+- `vector_index_stale`: `Vector search index is stale.`
+- `vector_index_schema_mismatch`: `Vector search index schema is incompatible.`
+- `vector_index_incompatible`: `Vector search index is incompatible.`
+- `vector_backend_unavailable`: `Vector search backend is unavailable.`
+
+The raw exception and traceback are retained in server logs for diagnosis; they are
+never included in the client response.
 
 When vector fallback is explicit, the response may also include:
 
@@ -178,7 +190,7 @@ When vector fallback is explicit, the response may also include:
   "error": {
     "code": "vector_index_missing | vector_index_unreadable | vector_index_stale | vector_index_schema_mismatch | vector_index_incompatible | vector_backend_unavailable",
     "type": "vector_index_missing | vector_index_unreadable | vector_index_stale | vector_index_schema_mismatch | vector_index_incompatible | vector_backend_unavailable",
-    "message": "Human-readable fallback reason without internal paths"
+    "message": "One of the fixed safe messages listed above"
   }
 }
 ```

@@ -13,7 +13,6 @@ Tools:
 import json
 import logging
 import os
-import re
 import sqlite3
 from pathlib import Path
 
@@ -36,7 +35,7 @@ except ModuleNotFoundError:  # pragma: no cover - only used in minimal test envi
 
 
 from . import __version__
-from .config.loader import get_sites as _get_sites, _normalize_search_engine
+from .config.loader import ConfigError, get_sites as _get_sites, _normalize_search_engine
 from .index_store import (
     _normalize_search_limit,
     count_pages,
@@ -61,11 +60,33 @@ logger = logging.getLogger("docmcp.tools")
 obs_logger = logging.getLogger("docmcp.observability")
 
 
+class _ConfigurationUnavailableError(RuntimeError):
+    """Internal marker for configuration failures crossing the MCP tool boundary."""
+
+
+def _load_sites() -> list[dict]:
+    try:
+        return _get_sites()
+    except ConfigError as exc:
+        logger.warning("Could not load site configuration: %s", exc, exc_info=True)
+        raise _ConfigurationUnavailableError from exc
+
+
 def _find_site(name: str) -> dict | None:
-    for site in _get_sites():
+    for site in _load_sites():
         if site["name"].lower() == name.lower():
             return site
     return None
+
+
+def _configuration_error_response() -> dict:
+    return _tool_error("configuration_unavailable", "Server configuration is unavailable.")
+
+
+def _configuration_search_error_response() -> dict:
+    return _search_error_response(
+        "keyword", "configuration_unavailable", "Server configuration is unavailable."
+    )
 
 
 def _site_search_engine(site: dict) -> str:
@@ -78,6 +99,15 @@ def _emit_observation(event: str, **fields) -> None:
 
 
 CONTRACT_VERSION = "1.0"
+
+_VECTOR_ERROR_MESSAGES = {
+    "vector_index_missing": "Vector search index is missing.",
+    "vector_index_unreadable": "Vector search index could not be read.",
+    "vector_index_stale": "Vector search index is stale.",
+    "vector_index_schema_mismatch": "Vector search index schema is incompatible.",
+    "vector_index_incompatible": "Vector search index is incompatible.",
+    "vector_backend_unavailable": "Vector search backend is unavailable.",
+}
 
 
 def _tool_success(**fields) -> dict:
@@ -150,10 +180,7 @@ def _dedupe_keys(result: dict) -> tuple[str, ...]:
 
 
 def _keyword_lookup(site: dict, query: str, limit: int) -> list[dict]:
-    try:
-        return search_pages(site["index_file"], query, limit)
-    except sqlite3.Error:
-        return []
+    return search_pages(site["index_file"], query, limit)
 
 
 def _vector_index_observation(site: dict) -> dict[str, int | float | None]:
@@ -198,42 +225,31 @@ def _log_vector_path_decision(
 
 
 def _vector_lookup_error(site: dict, vector_index_file: str, exc: Exception | None = None) -> dict:
-    def safe_detail(default: str) -> str:
-        detail = str(exc).rstrip(".") if exc else ""
-        if not detail:
-            return default
-        return re.sub(r"(?<![A-Za-z0-9])(?:/|[A-Za-z]:[\\/])[^\s)]+", "<path>", detail)
-
     if exc is None:
         return {
             "type": "vector_index_missing",
-            "message": f"Vector search is enabled for '{site['name']}' but the sidecar is missing.",
+            "message": _VECTOR_ERROR_MESSAGES["vector_index_missing"],
         }
     if isinstance(exc, VectorBackendUnavailableError):
-        return {
-            "type": "vector_backend_unavailable",
-            "message": safe_detail("Vector search backend is unavailable."),
-        }
-    if isinstance(exc, VectorSidecarStaleError):
-        return {"type": "vector_index_stale", "message": safe_detail("Vector sidecar is stale.")}
-    if isinstance(exc, VectorSidecarSchemaMismatchError):
-        return {
-            "type": "vector_index_schema_mismatch",
-            "message": safe_detail("Vector sidecar schema is incompatible."),
-        }
-    if isinstance(exc, VectorSidecarIncompatibleError):
-        return {
-            "type": "vector_index_incompatible",
-            "message": safe_detail("Vector sidecar is incompatible."),
-        }
-    # Preserve useful diagnostic wording while removing filesystem paths and other
-    # implementation details from the client-facing contract.
-    exc_text = safe_detail("")
-    exc_detail = f" ({exc_text})" if exc_text else ""
-    return {
-        "type": "vector_index_unreadable",
-        "message": f"Vector sidecar for '{site['name']}' is unreadable{exc_detail}.",
-    }
+        error_type = "vector_backend_unavailable"
+    elif isinstance(exc, VectorSidecarStaleError):
+        error_type = "vector_index_stale"
+    elif isinstance(exc, VectorSidecarSchemaMismatchError):
+        error_type = "vector_index_schema_mismatch"
+    elif isinstance(exc, VectorSidecarIncompatibleError):
+        error_type = "vector_index_incompatible"
+    else:
+        error_type = "vector_index_unreadable"
+
+    # Keep the complete exception, including sensitive diagnostics, in server logs only.
+    logger.warning(
+        "Vector lookup failed for site %r at %r: %s",
+        site.get("name"),
+        vector_index_file,
+        exc,
+        exc_info=(type(exc), exc, exc.__traceback__),
+    )
+    return {"type": error_type, "message": _VECTOR_ERROR_MESSAGES[error_type]}
 
 
 def _vector_lookup(site: dict, query: str, limit: int) -> tuple[list[dict], dict | None]:
@@ -376,7 +392,14 @@ def _search_response(
 
 
 def _keyword_search_response(site: dict, query: str, limit: int) -> dict:
-    keyword_results = _keyword_lookup(site, query, limit)
+    try:
+        keyword_results = _keyword_lookup(site, query, limit)
+    except sqlite3.Error:
+        return _search_error_response(
+            "keyword",
+            "index_unavailable",
+            f"The index for '{site['name']}' is unavailable.",
+        )
     response = _empty_search_response("keyword")
     response["keyword_hits"] = len(keyword_results)
     response["results"] = _public_search_results(_normalize_keyword_results(keyword_results))
@@ -436,7 +459,10 @@ def _limit_error_mode(search_engine: str) -> str:
 @mcp.tool()
 def get_sites() -> str:
     """List configured sites as a JSON contract with their index status."""
-    sites = _get_sites()
+    try:
+        sites = _load_sites()
+    except _ConfigurationUnavailableError:
+        return _serialize(_configuration_error_response())
     result = []
     for site in sites:
         if not Path(site["index_file"]).is_file():
@@ -486,7 +512,10 @@ def list_pages(site_name: str) -> str:
     """
     if not _valid_nonempty_text(site_name):
         return _serialize(_tool_error("invalid_argument", "site_name must be a non-empty string."))
-    site = _find_site(site_name)
+    try:
+        site = _find_site(site_name)
+    except _ConfigurationUnavailableError:
+        return _serialize(_configuration_error_response())
     if not site:
         return _serialize(_tool_error("site_not_found", f"Site '{site_name}' not found."))
     if not Path(site["index_file"]).is_file():
@@ -534,7 +563,10 @@ def search_docs(site_name: str, query: str, limit: int = 10) -> str:
                 "keyword", "invalid_argument", "query must be a non-empty string."
             )
         )
-    site = _find_site(site_name)
+    try:
+        site = _find_site(site_name)
+    except _ConfigurationUnavailableError:
+        return _serialize(_configuration_search_error_response())
     if not site:
         return _serialize(_site_not_found_search_response(site_name))
     if not Path(site["index_file"]).is_file():
@@ -560,7 +592,16 @@ def search_docs(site_name: str, query: str, limit: int = 10) -> str:
     if search_engine == "vector":
         return _serialize(_vector_search_response(site, query, normalized_limit))
 
-    keyword_results = _keyword_lookup(site, query, normalized_limit)
+    try:
+        keyword_results = _keyword_lookup(site, query, normalized_limit)
+    except sqlite3.Error:
+        return _serialize(
+            _search_error_response(
+                _limit_error_mode(search_engine),
+                "index_unavailable",
+                f"The index for '{site['name']}' is unavailable.",
+            )
+        )
     vector_results, error = _vector_lookup(site, query, normalized_limit)
     response = _search_response(keyword_results, vector_results, normalized_limit, error)
     _log_vector_path_decision(
@@ -587,7 +628,10 @@ def fetch_page(site_name: str, url: str) -> str:
         return _serialize(_tool_error("invalid_argument", "site_name must be a non-empty string."))
     if not _valid_nonempty_text(url):
         return _serialize(_tool_error("invalid_argument", "url must be a non-empty string."))
-    site = _find_site(site_name)
+    try:
+        site = _find_site(site_name)
+    except _ConfigurationUnavailableError:
+        return _serialize(_configuration_error_response())
     if not site:
         return _serialize(_tool_error("site_not_found", f"Site '{site_name}' not found."))
     if not Path(site["index_file"]).is_file():
@@ -602,9 +646,15 @@ def fetch_page(site_name: str, url: str) -> str:
             _tool_error("index_unavailable", f"The index for '{site['name']}' is unavailable.")
         )
     if not page:
-        return _serialize(
-            _tool_error("page_not_found", f"Page '{url}' was not found for '{site['name']}'.")
+        response = _tool_error(
+            "page_not_found",
+            f"Page '{url}' was not found for '{site['name']}'.",
+            site_name=site["name"],
+            url=url,
+            page=None,
         )
+        response["error"]["type"] = "page_not_found"
+        return _serialize(response)
     return _serialize(
         _tool_success(
             site_name=site["name"],

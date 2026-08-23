@@ -106,6 +106,35 @@ def test_mcp_tools_report_unknown_site(monkeypatch):
     )
 
 
+def test_mcp_tools_return_safe_configuration_error_contract(monkeypatch, caplog):
+    """TS-TF-006: Configuration failures are safe across site-loading tools."""
+    raw_detail = "Configuration file not found: /private/secrets/sites.yaml\npassword=secret"
+    monkeypatch.setattr(
+        tools,
+        "_get_sites",
+        lambda: (_ for _ in ()).throw(tools.ConfigError(raw_detail)),
+    )
+
+    responses = (
+        json.loads(tools.get_sites()),
+        json.loads(tools.list_pages("Example Docs")),
+        json.loads(tools.search_docs("Example Docs", "Alpha")),
+        json.loads(tools.fetch_page("Example Docs", "https://example.test/guide")),
+    )
+
+    assert responses[0] == {
+        "ok": False,
+        "contract_version": "1.0",
+        "error": {
+            "code": "configuration_unavailable",
+            "message": "Server configuration is unavailable.",
+        },
+    }
+    assert all(response["error"]["code"] == "configuration_unavailable" for response in responses)
+    assert all(raw_detail not in json.dumps(response) for response in responses)
+    assert any(raw_detail in record.getMessage() for record in caplog.records)
+
+
 def test_get_sites_marks_missing_index_unavailable(monkeypatch, tmp_path):
     """TS-TF-006: Site status exposes degradation without leaking a path."""
     missing_index = tmp_path / "not-present.db"
@@ -135,21 +164,31 @@ def test_get_sites_marks_missing_index_unavailable(monkeypatch, tmp_path):
     ]
 
 
-def test_vector_error_diagnostics_redact_paths():
-    """TS-TF-006: Recoverable vector errors cannot expose internal paths."""
+def test_vector_error_diagnostics_are_fixed_and_raw_details_are_server_side(caplog):
+    """TS-TF-006: Public vector errors are fixed while raw diagnostics stay server-side."""
     site = {"name": "Example Docs"}
-    internal_path = "/private/runtime/docs.vec.db"
+    raw_detail = (
+        r"password=super-secret https://internal.example.test/query?token=abc "
+        r"SELECT * FROM users path with spaces relative/secret.txt \\\\server\share\docs.vec.db"
+    )
 
-    for error in (
-        tools.VectorBackendUnavailableError(f"backend failed at {internal_path}"),
-        tools.VectorSidecarStaleError(f"stale sidecar at {internal_path}"),
-        tools.VectorSidecarSchemaMismatchError(f"schema at {internal_path}"),
-        tools.VectorSidecarIncompatibleError(f"incompatible sidecar at {internal_path}"),
-        RuntimeError(f"unreadable sidecar at {internal_path}"),
-    ):
-        payload = tools._vector_lookup_error(site, internal_path, error)
-        assert internal_path not in payload["message"]
-        assert "/" not in payload["message"]
+    cases = (
+        (tools.VectorBackendUnavailableError, "vector_backend_unavailable"),
+        (tools.VectorSidecarStaleError, "vector_index_stale"),
+        (tools.VectorSidecarSchemaMismatchError, "vector_index_schema_mismatch"),
+        (tools.VectorSidecarIncompatibleError, "vector_index_incompatible"),
+        (RuntimeError, "vector_index_unreadable"),
+    )
+    for error_class, error_type in cases:
+        error = error_class(raw_detail)
+        payload = tools._vector_lookup_error(site, r"C:\runtime\docs vec.db", error)
+        assert payload == {
+            "type": error_type,
+            "message": tools._VECTOR_ERROR_MESSAGES[error_type],
+        }
+        assert raw_detail not in payload["message"]
+
+    assert any(raw_detail in record.getMessage() for record in caplog.records)
 
 
 def test_tool_contract_reports_empty_invalid_and_unavailable_states(monkeypatch, tmp_path):
@@ -178,10 +217,18 @@ def test_tool_contract_reports_empty_invalid_and_unavailable_states(monkeypatch,
 
     assert json.loads(tools.list_pages("Empty Docs"))["pages"] == []
     assert json.loads(tools.list_pages("Unavailable Docs"))["error"]["code"] == "index_unavailable"
-    assert (
-        json.loads(tools.fetch_page("Empty Docs", "https://example.test/missing"))["error"]["code"]
-        == "page_not_found"
-    )
+    assert json.loads(tools.fetch_page("Empty Docs", "https://example.test/missing")) == {
+        "ok": False,
+        "contract_version": "1.0",
+        "site_name": "Empty Docs",
+        "url": "https://example.test/missing",
+        "page": None,
+        "error": {
+            "code": "page_not_found",
+            "type": "page_not_found",
+            "message": "Page 'https://example.test/missing' was not found for 'Empty Docs'.",
+        },
+    }
 
     for response in (
         tools.list_pages(" "),
@@ -224,8 +271,8 @@ def test_search_docs_returns_empty_json_for_empty_or_missing_indexes(monkeypatch
     assert empty_response["keyword_hits"] == 0
     assert empty_response["results"] == []
     assert empty_response["error"]["type"] == "vector_index_missing"
-    assert empty_response["error"]["message"] == (
-        "Vector search is enabled for 'Empty Docs' but the sidecar is missing."
+    assert (
+        empty_response["error"]["message"] == tools._VECTOR_ERROR_MESSAGES["vector_index_missing"]
     )
 
     assert missing_response["mode"] == "keyword"
@@ -261,9 +308,7 @@ def test_search_docs_returns_empty_json_for_zero_match_query(monkeypatch, tmp_pa
     assert response["keyword_hits"] == 0
     assert response["results"] == []
     assert response["error"]["type"] == "vector_index_missing"
-    assert response["error"]["message"] == (
-        "Vector search is enabled for 'Example Docs' but the sidecar is missing."
-    )
+    assert response["error"]["message"] == tools._VECTOR_ERROR_MESSAGES["vector_index_missing"]
 
 
 def test_search_docs_keyword_mode_skips_vector_lookup(monkeypatch, tmp_path):
@@ -453,7 +498,7 @@ def test_search_docs_vector_mode_reports_missing_sidecar(monkeypatch, tmp_path, 
     assert response["keyword_hits"] == 0
     assert response["results"] == []
     assert response["error"]["type"] == "vector_index_missing"
-    assert "sidecar is missing" in response["error"]["message"]
+    assert response["error"]["message"] == tools._VECTOR_ERROR_MESSAGES["vector_index_missing"]
     observation = next(
         json.loads(record.message)
         for record in caplog.records
@@ -497,7 +542,7 @@ def test_search_docs_vector_mode_reports_unreadable_sidecar(monkeypatch, tmp_pat
     assert response["keyword_hits"] == 0
     assert response["results"] == []
     assert response["error"]["type"] == "vector_index_unreadable"
-    assert "unreadable" in response["error"]["message"]
+    assert response["error"]["message"] == tools._VECTOR_ERROR_MESSAGES["vector_index_unreadable"]
 
 
 def test_search_docs_vector_mode_reports_stale_sidecar_when_source_content_changes(
@@ -535,7 +580,7 @@ def test_search_docs_vector_mode_reports_stale_sidecar_when_source_content_chang
     assert response["vector_hits"] == 0
     assert response["keyword_hits"] == 1
     assert response["error"]["type"] == "vector_index_stale"
-    assert "content hash" in response["error"]["message"]
+    assert response["error"]["message"] == tools._VECTOR_ERROR_MESSAGES["vector_index_stale"]
 
 
 def test_search_docs_vector_mode_reports_missing_fastembed_backend(monkeypatch, tmp_path):
@@ -584,7 +629,9 @@ def test_search_docs_vector_mode_reports_missing_fastembed_backend(monkeypatch, 
         }
     ]
     assert response["error"]["type"] == "vector_backend_unavailable"
-    assert "fastembed is not installed" in response["error"]["message"]
+    assert (
+        response["error"]["message"] == tools._VECTOR_ERROR_MESSAGES["vector_backend_unavailable"]
+    )
     assert isinstance(response["results"][0]["score"], float)
 
 
@@ -629,12 +676,13 @@ def test_search_docs_vector_mode_falls_back_when_sidecar_model_is_incompatible(
         }
     ]
     assert response["error"]["type"] == "vector_index_incompatible"
-    assert "embedding model mismatch" in response["error"]["message"]
+    assert response["error"]["message"] == tools._VECTOR_ERROR_MESSAGES["vector_index_incompatible"]
     assert isinstance(response["results"][0]["score"], float)
 
 
 def test_search_docs_returns_empty_json_on_sqlite_query_error(monkeypatch, tmp_path):
     index_file = tmp_path / "docs.db"
+    index_file.write_bytes(b"not a sqlite database")
 
     def raise_sqlite_error(index_file: str, query: str, limit: int) -> list[dict]:
         raise sqlite3.OperationalError("broken")
@@ -737,9 +785,7 @@ def test_search_docs_normalizes_unreadable_vector_error_message(monkeypatch, tmp
     response = json.loads(tools.search_docs("Example Docs", "Alpha"))
 
     assert response["error"]["type"] == "vector_index_unreadable"
-    assert (
-        response["error"]["message"] == "Vector sidecar for 'Example Docs' is unreadable (broken)."
-    )
+    assert response["error"]["message"] == tools._VECTOR_ERROR_MESSAGES["vector_index_unreadable"]
 
 
 def test_search_docs_logs_missing_hybrid_vector_sidecar(monkeypatch, tmp_path, caplog):
@@ -1203,9 +1249,7 @@ def test_search_docs_falls_back_to_keyword_when_vector_lookup_fails(monkeypatch,
         }
     ]
     assert response["error"]["type"] == "vector_index_missing"
-    assert response["error"]["message"] == (
-        "Vector search is enabled for 'Example Docs' but the sidecar is missing."
-    )
+    assert response["error"]["message"] == tools._VECTOR_ERROR_MESSAGES["vector_index_missing"]
     assert isinstance(response["results"][0]["score"], float)
 
 
@@ -1337,7 +1381,9 @@ def test_search_docs_reports_legacy_vector_meta_schema_as_incompatible(monkeypat
         }
     ]
     assert response["error"]["type"] == "vector_index_schema_mismatch"
-    assert "schema_version" in response["error"]["message"]
+    assert (
+        response["error"]["message"] == tools._VECTOR_ERROR_MESSAGES["vector_index_schema_mismatch"]
+    )
 
 
 def test_search_docs_reports_unsupported_vector_sidecar_header_version(monkeypatch, tmp_path):
@@ -1424,7 +1470,9 @@ def test_search_docs_reports_unsupported_vector_sidecar_header_version(monkeypat
     assert response["vector_hits"] == 0
     assert response["keyword_hits"] == 1
     assert response["error"]["type"] == "vector_index_schema_mismatch"
-    assert "unsupported header version" in response["error"]["message"]
+    assert (
+        response["error"]["message"] == tools._VECTOR_ERROR_MESSAGES["vector_index_schema_mismatch"]
+    )
 
 
 def test_search_docs_reports_missing_site_index_file_as_incompatible(monkeypatch, tmp_path):
