@@ -165,8 +165,8 @@ If the site name is unknown, the tool returns structured JSON with an `error` ob
 Successful search calls and empty-index search calls still return the base JSON search contract.
 
 Invalid `site_name`, `query`, and non-positive or non-integer `limit` values
-return this empty search shape with `ok: false` and `error.code:
-"invalid_argument"`. No expected failure includes stack traces, filesystem paths,
+return this empty search shape with `ok: false` and
+`error.code: "invalid_argument"`. No expected failure includes stack traces, filesystem paths,
 or configuration secrets. Vector fallback messages retain their stable error code
 and diagnostic category but never expose the sidecar path.
 
