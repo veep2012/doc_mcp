@@ -35,15 +35,23 @@ def test_mcp_tools_return_site_pages_search_and_fetch(monkeypatch, tmp_path):
         ],
     )
 
-    sites_output = tools.get_sites()
-    assert "Example Docs" in sites_output
-    assert "2 pages indexed" in sites_output
-    assert "Index:" not in sites_output
-    assert "Session:" not in sites_output
+    sites_output = json.loads(tools.get_sites())
+    assert sites_output == {
+        "contract_version": "1.0",
+        "ok": True,
+        "sites": [
+            {
+                "auth_required": False,
+                "index": {"page_count": 2, "status": "ready"},
+                "name": "Example Docs",
+                "url": "https://example.test",
+            }
+        ],
+    }
 
-    list_output = tools.list_pages("Example Docs")
-    assert "Guide" in list_output
-    assert "Install" in list_output
+    list_output = json.loads(tools.list_pages("Example Docs"))
+    assert list_output["ok"] is True
+    assert [page["title"] for page in list_output["pages"]] == ["Guide", "Install"]
 
     search_output = json.loads(tools.search_docs("Example Docs", "Alpha"))
     assert search_output["mode"] == "keyword"
@@ -60,9 +68,13 @@ def test_mcp_tools_return_site_pages_search_and_fetch(monkeypatch, tmp_path):
     ]
     assert isinstance(search_output["results"][0]["score"], float)
 
-    fetch_output = tools.fetch_page("Example Docs", "https://example.test/guide")
-    assert fetch_output.startswith("# Guide")
-    assert "Alpha beta" in fetch_output
+    fetch_output = json.loads(tools.fetch_page("Example Docs", "https://example.test/guide"))
+    assert fetch_output["ok"] is True
+    assert fetch_output["page"] == {
+        "title": "Guide",
+        "url": "https://example.test/guide",
+        "content_md": "Alpha beta",
+    }
 
 
 def test_keyword_score_is_monotonic_with_result_order():
@@ -73,20 +85,110 @@ def test_keyword_score_is_monotonic_with_result_order():
 def test_mcp_tools_report_unknown_site(monkeypatch):
     monkeypatch.setattr(tools, "_get_sites", lambda: [])
 
-    assert tools.list_pages("Missing Docs") == "Site 'Missing Docs' not found."
-    assert json.loads(tools.search_docs("Missing Docs", "query")) == {
+    assert json.loads(tools.list_pages("Missing Docs"))["error"]["code"] == "site_not_found"
+    search_response = json.loads(tools.search_docs("Missing Docs", "query"))
+    assert search_response == {
         "mode": "keyword",
         "vector_hits": 0,
         "keyword_hits": 0,
         "results": [],
+        "contract_version": "1.0",
+        "ok": False,
         "error": {
+            "code": "site_not_found",
             "type": "site_not_found",
             "message": "Site 'Missing Docs' not found.",
         },
     }
     assert (
-        tools.fetch_page("Missing Docs", "https://example.test") == "Site 'Missing Docs' not found."
+        json.loads(tools.fetch_page("Missing Docs", "https://example.test"))["error"]["code"]
+        == "site_not_found"
     )
+
+
+def test_get_sites_marks_missing_index_unavailable(monkeypatch, tmp_path):
+    """TS-TF-006: Site status exposes degradation without leaking a path."""
+    missing_index = tmp_path / "not-present.db"
+    monkeypatch.setattr(
+        tools,
+        "_get_sites",
+        lambda: [
+            {
+                "name": "Unavailable Docs",
+                "url": "https://unavailable.example.test",
+                "auth_required": False,
+                "index_file": str(missing_index),
+            }
+        ],
+    )
+
+    payload = json.loads(tools.get_sites())
+
+    assert payload["ok"] is True
+    assert payload["sites"] == [
+        {
+            "name": "Unavailable Docs",
+            "url": "https://unavailable.example.test",
+            "auth_required": False,
+            "index": {"status": "unavailable", "page_count": None},
+        }
+    ]
+
+
+def test_vector_error_diagnostics_redact_paths():
+    """TS-TF-006: Recoverable vector errors cannot expose internal paths."""
+    site = {"name": "Example Docs"}
+    internal_path = "/private/runtime/docs.vec.db"
+
+    for error in (
+        tools.VectorBackendUnavailableError(f"backend failed at {internal_path}"),
+        tools.VectorSidecarStaleError(f"stale sidecar at {internal_path}"),
+        tools.VectorSidecarSchemaMismatchError(f"schema at {internal_path}"),
+        tools.VectorSidecarIncompatibleError(f"incompatible sidecar at {internal_path}"),
+        RuntimeError(f"unreadable sidecar at {internal_path}"),
+    ):
+        payload = tools._vector_lookup_error(site, internal_path, error)
+        assert internal_path not in payload["message"]
+        assert "/" not in payload["message"]
+
+
+def test_tool_contract_reports_empty_invalid_and_unavailable_states(monkeypatch, tmp_path):
+    """TS-TF-006: standardized contracts cover principal non-success states."""
+    empty_index = tmp_path / "empty.db"
+    init_db(str(empty_index))
+    unavailable_index = tmp_path / "missing" / "docs.db"
+    monkeypatch.setattr(
+        tools,
+        "_get_sites",
+        lambda: [
+            {
+                "name": "Empty Docs",
+                "url": "https://empty.example.test",
+                "auth_required": False,
+                "index_file": str(empty_index),
+            },
+            {
+                "name": "Unavailable Docs",
+                "url": "https://unavailable.example.test",
+                "auth_required": False,
+                "index_file": str(unavailable_index),
+            },
+        ],
+    )
+
+    assert json.loads(tools.list_pages("Empty Docs"))["pages"] == []
+    assert json.loads(tools.list_pages("Unavailable Docs"))["error"]["code"] == "index_unavailable"
+    assert (
+        json.loads(tools.fetch_page("Empty Docs", "https://example.test/missing"))["error"]["code"]
+        == "page_not_found"
+    )
+
+    for response in (
+        tools.list_pages(" "),
+        tools.fetch_page("Empty Docs", " "),
+        tools.search_docs("Empty Docs", " "),
+    ):
+        assert json.loads(response)["error"]["code"] == "invalid_argument"
 
 
 def test_search_docs_returns_empty_json_for_empty_or_missing_indexes(monkeypatch, tmp_path):
@@ -122,14 +224,16 @@ def test_search_docs_returns_empty_json_for_empty_or_missing_indexes(monkeypatch
     assert empty_response["keyword_hits"] == 0
     assert empty_response["results"] == []
     assert empty_response["error"]["type"] == "vector_index_missing"
-    assert str(tmp_path / "empty.vec.db") in empty_response["error"]["message"]
+    assert empty_response["error"]["message"] == (
+        "Vector search is enabled for 'Empty Docs' but the sidecar is missing."
+    )
 
     assert missing_response["mode"] == "keyword"
     assert missing_response["vector_hits"] == 0
     assert missing_response["keyword_hits"] == 0
     assert missing_response["results"] == []
-    assert missing_response["error"]["type"] == "vector_index_missing"
-    assert str(missing_index_file.with_suffix(".vec.db")) in missing_response["error"]["message"]
+    assert missing_response["error"]["type"] == "index_unavailable"
+    assert missing_response["error"]["message"] == ("The index for 'Missing Docs' is unavailable.")
 
 
 def test_search_docs_returns_empty_json_for_zero_match_query(monkeypatch, tmp_path):
@@ -157,7 +261,9 @@ def test_search_docs_returns_empty_json_for_zero_match_query(monkeypatch, tmp_pa
     assert response["keyword_hits"] == 0
     assert response["results"] == []
     assert response["error"]["type"] == "vector_index_missing"
-    assert str(index_file.with_suffix(".vec.db")) in response["error"]["message"]
+    assert response["error"]["message"] == (
+        "Vector search is enabled for 'Example Docs' but the sidecar is missing."
+    )
 
 
 def test_search_docs_keyword_mode_skips_vector_lookup(monkeypatch, tmp_path):
@@ -557,8 +663,8 @@ def test_search_docs_returns_empty_json_on_sqlite_query_error(monkeypatch, tmp_p
     assert response["vector_hits"] == 0
     assert response["keyword_hits"] == 0
     assert response["results"] == []
-    assert response["error"]["type"] == "vector_index_missing"
-    assert str(index_file.with_suffix(".vec.db")) in response["error"]["message"]
+    assert response["error"]["type"] == "index_unavailable"
+    assert response["error"]["message"] == ("The index for 'Broken Docs' is unavailable.")
 
 
 def test_search_docs_logs_hybrid_vector_degradation(monkeypatch, tmp_path, caplog):
@@ -631,8 +737,8 @@ def test_search_docs_normalizes_unreadable_vector_error_message(monkeypatch, tmp
     response = json.loads(tools.search_docs("Example Docs", "Alpha"))
 
     assert response["error"]["type"] == "vector_index_unreadable"
-    assert response["error"]["message"] == (
-        f"Vector sidecar for 'Example Docs' is unreadable (broken): {vector_index_file}"
+    assert (
+        response["error"]["message"] == "Vector sidecar for 'Example Docs' is unreadable (broken)."
     )
 
 
@@ -688,7 +794,19 @@ def test_search_docs_rejects_non_positive_limit(monkeypatch, tmp_path):
         ],
     )
 
-    expected = {"mode": "keyword", "vector_hits": 0, "keyword_hits": 0, "results": []}
+    expected = {
+        "mode": "keyword",
+        "vector_hits": 0,
+        "keyword_hits": 0,
+        "results": [],
+        "contract_version": "1.0",
+        "ok": False,
+        "error": {
+            "code": "invalid_argument",
+            "type": "invalid_argument",
+            "message": "limit must be a positive integer.",
+        },
+    }
 
     assert json.loads(tools.search_docs("Example Docs", "Alpha", limit=0)) == expected
 
@@ -940,6 +1058,8 @@ def test_search_response_ranks_mixed_keyword_and_vector_results_deterministicall
     response = tools._search_response(keyword_results, vector_results, limit=10)
 
     assert response == {
+        "ok": True,
+        "contract_version": "1.0",
         "mode": "hybrid",
         "vector_hits": 2,
         "keyword_hits": 2,
@@ -1083,7 +1203,9 @@ def test_search_docs_falls_back_to_keyword_when_vector_lookup_fails(monkeypatch,
         }
     ]
     assert response["error"]["type"] == "vector_index_missing"
-    assert str(tmp_path / "docs.vec.db") in response["error"]["message"]
+    assert response["error"]["message"] == (
+        "Vector search is enabled for 'Example Docs' but the sidecar is missing."
+    )
     assert isinstance(response["results"][0]["score"], float)
 
 
@@ -1123,6 +1245,8 @@ def test_search_docs_returns_vector_only_results_when_keyword_has_no_hits(monkey
     response = json.loads(tools.search_docs("Example Docs", "Alpha"))
 
     assert response == {
+        "ok": True,
+        "contract_version": "1.0",
         "mode": "vector",
         "vector_hits": 1,
         "keyword_hits": 0,
@@ -1333,8 +1457,8 @@ def test_search_docs_reports_missing_site_index_file_as_incompatible(monkeypatch
     assert response["vector_hits"] == 0
     assert response["keyword_hits"] == 0
     assert response["results"] == []
-    assert response["error"]["type"] == "vector_index_incompatible"
-    assert "missing index_file" in response["error"]["message"]
+    assert response["error"]["type"] == "index_unavailable"
+    assert response["error"]["message"] == "The index for 'Example Docs' is unavailable."
 
 
 def test_search_docs_returns_keyword_results_when_vector_lookup_returns_no_hits(
@@ -1365,6 +1489,8 @@ def test_search_docs_returns_keyword_results_when_vector_lookup_returns_no_hits(
     response = json.loads(tools.search_docs("Example Docs", "Alpha"))
 
     assert response == {
+        "ok": True,
+        "contract_version": "1.0",
         "mode": "keyword",
         "vector_hits": 0,
         "keyword_hits": 1,
@@ -1488,6 +1614,8 @@ def test_get_version_returns_server_metadata(monkeypatch):
     payload = json.loads(tools.get_version())
 
     assert payload == {
+        "contract_version": "1.0",
+        "ok": True,
         "package_name": "doc-mcp",
         "server_name": "docs-mcp",
         "version": "1.2.0",

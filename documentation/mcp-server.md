@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-08-15
-- Version: v3.0
+- Last Updated: 2026-08-23
+- Version: v4.0
 
 ## Change Log
+- 2026-08-23 | v4.0 | Standardized all MCP tool contracts on JSON, added the contract matrix and structured error convention, and documented the Markdown-to-JSON migration for site, page-list, and page-fetch tools.
 - 2026-08-15 | v3.0 | Consolidated packaged-version harness instructions in the dedicated harness testing guide and kept this reference as a cross-link.
 - 2026-08-02 | v2.3 | Added the packaged-wheel MCP version comparison harness, its safe configuration, fixtures, diagnostics, and CI usage.
 - 2026-06-21 | v2.2 | Defined the vector sidecar compatibility contract with strict schema-version checks, deterministic keyword fallback reasons, rebuild-based migration guidance, crawl-fingerprint stale detection based on source content hashes and crawl timestamps, and release-facing search contract wording.
@@ -59,17 +60,42 @@ python -m src.main
 - `fetch_page(site_name, url)`
 
 ### Tool Behavior
-- `get_sites` lists each configured site and counts pages in its SQLite index.
-- `get_version` returns the MCP server name and code-embedded package version for runtime checks.
-- `list_pages` returns indexed page titles, URLs, and last crawled timestamps.
-- `search_docs` uses the site-level `search_engine` setting to choose keyword-only, vector-only, or hybrid search while preserving the current JSON response contract.
-- `fetch_page` returns the full Markdown content for a single indexed page.
 
-### Search Contract
-`search_docs(site_name, query, limit=10)` returns a JSON string with this shape:
+All tools return a JSON string. Successful responses include `ok: true` and
+`contract_version: "1.0"`; expected failures include `ok: false`, the same
+contract version, and an `error` object with a stable `code` and a safe,
+human-readable `message`. Search retains its established result fields and adds
+the shared envelope metadata; search failures use the same envelope.
+`error.type` remains a compatibility alias for existing search clients and equals
+`error.code`.
+
+### Contract Matrix
+
+| Tool | Arguments and defaults | Success / empty response | Expected errors | Compatibility |
+| --- | --- | --- | --- | --- |
+| `get_sites` | None | `{"ok": true, "contract_version": "1.0", "sites": [...]}`; empty configuration has `sites: []`. Site entries contain `name`, `url`, `auth_required`, and index `status`/`page_count`. | An unreadable index has `index.status: "unavailable"`; configuration failures use MCP transport errors. | Replaces the former Markdown listing. Parse JSON. |
+| `get_version` | None | `{"ok": true, "contract_version": "1.0", "server_name", "package_name", "version"}`. | None expected. | Preserves prior version fields; version values vary between packages. |
+| `list_pages` | `site_name`: non-empty string | `{"ok": true, "contract_version": "1.0", "site_name", "pages": [...]}`; empty index has `pages: []`. Pages have `title`, `url`, `last_crawled`. | `invalid_argument`, `site_not_found`, `index_unavailable`. | Replaces the former Markdown listing. |
+| `search_docs` | `site_name`, `query`: non-empty strings; `limit=10`, positive integer | `ok`, `contract_version`, plus existing `mode`, counters, and ordered `results`; zero matches use `results: []`. | `invalid_argument`, `site_not_found`, `index_unavailable`, and vector fallback codes below. | Existing result fields and schema are unchanged; envelope metadata is additive. |
+| `fetch_page` | `site_name`, `url`: non-empty strings | `{"ok": true, "contract_version": "1.0", "site_name", "page": {"title", "url", "content_md"}}`. | `invalid_argument`, `site_not_found`, `page_not_found`, `index_unavailable`. | Replaces the former Markdown page document. Render `page.content_md` when needed. |
+
+Example error:
 
 ```json
 {
+  "contract_version": "1.0",
+  "ok": false,
+  "error": {"code": "site_not_found", "message": "Site 'Missing Docs' not found."}
+}
+```
+
+### Search Contract
+`search_docs(site_name, query, limit=10)` returns a JSON string with this success shape:
+
+```json
+{
+  "ok": true,
+  "contract_version": "1.0",
   "mode": "keyword",
   "vector_hits": 0,
   "keyword_hits": 2,
@@ -109,6 +135,8 @@ If no keyword results are available, the tool still returns valid JSON:
 
 ```json
 {
+  "ok": true,
+  "contract_version": "1.0",
   "mode": "keyword",
   "vector_hits": 0,
   "keyword_hits": 0,
@@ -124,7 +152,9 @@ If the site name is unknown, the tool returns structured JSON with an `error` ob
   "vector_hits": 0,
   "keyword_hits": 0,
   "results": [],
+  "ok": false,
   "error": {
+    "code": "site_not_found",
     "type": "site_not_found",
     "message": "Site 'Missing Docs' not found."
   }
@@ -133,13 +163,21 @@ If the site name is unknown, the tool returns structured JSON with an `error` ob
 
 Successful search calls and empty-index search calls still return the base JSON search contract.
 
+Invalid `site_name`, `query`, and non-positive or non-integer `limit` values
+return this empty search shape with `ok: false` and `error.code:
+"invalid_argument"`. No expected failure includes stack traces, filesystem paths,
+or configuration secrets. Vector fallback messages retain their stable error code
+and diagnostic category but never expose the sidecar path.
+
 When vector fallback is explicit, the response may also include:
 
 ```json
 {
+  "ok": false,
   "error": {
+    "code": "vector_index_missing | vector_index_unreadable | vector_index_stale | vector_index_schema_mismatch | vector_index_incompatible | vector_backend_unavailable",
     "type": "vector_index_missing | vector_index_unreadable | vector_index_stale | vector_index_schema_mismatch | vector_index_incompatible | vector_backend_unavailable",
-    "message": "Human-readable fallback reason"
+    "message": "Human-readable fallback reason without internal paths"
   }
 }
 ```

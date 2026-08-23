@@ -247,7 +247,7 @@ The command exits with status `0` only when all normalized responses match.
 
 ### Comparing a deliberate behavior change
 
-If a response difference is intentional, first decide whether it is a semantic contract change or nondeterministic metadata. Only nondeterministic, non-semantic fields belong in `HARNESS_ALLOWLIST`. `initialize` exposes the version at `result.serverInfo.version`; `get_version` returns a JSON-encoded payload in both `result.content.0.text` and `result.structuredContent.result`. To ignore only the version key in all three locations while retaining every other tool field:
+If a response difference is intentional, first decide whether it is a semantic contract change or nondeterministic metadata. A `contract_version` difference is a semantic incompatibility and must fail comparison; it must never be added to `HARNESS_ALLOWLIST`. Only nondeterministic, non-semantic fields belong in the allowlist. `initialize` exposes the package version at `result.serverInfo.version`; `get_version` returns a JSON-encoded payload in both `result.content.0.text` and `result.structuredContent.result`. To ignore only the package version key in all three locations while retaining every other tool field:
 
 ```dotenv
 HARNESS_ALLOWLIST=result.serverInfo.version,result.content.0.text.version,result.structuredContent.result.version

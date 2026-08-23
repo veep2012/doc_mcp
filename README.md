@@ -92,7 +92,7 @@ docmcp-crawl --site "My Docs"
 docmcp-server
 ```
 
-Since `0.99.0`, `search_docs(site_name, query, limit=10)` returns JSON text, not Markdown or prose snippets. MCP clients and prompt flows should parse the JSON response instead of rendering it directly as display text.
+All MCP tools return JSON text. Since `0.99.0`, `search_docs(site_name, query, limit=10)` has returned JSON; `get_sites`, `list_pages`, and `fetch_page` now do the same. MCP clients and prompt flows should parse each response, check its `ok` field, and render `fetch_page`'s `page.content_md` when Markdown is needed. See the [MCP server contract](documentation/mcp-server.md).
 
 ## Smoke Tests
 

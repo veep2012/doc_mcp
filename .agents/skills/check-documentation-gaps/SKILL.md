@@ -9,7 +9,8 @@ Review documentation from the implementation outward. Default mode is audit-only
 
 ## Inputs and modes
 
-- Scope may be a feature, module, story, recent change, or the whole repository.
+- Scope may be a feature, endpoint, module, story, recent change, or the whole repository.
+- A GitHub issue/story URL is optional. If provided, read it through GitHub tools first and use it as a requirement source, not as a substitute for inspecting code.
 - `audit` (default): report gaps and recommendations; make no writes.
 - `fix`: update documentation for confirmed gaps, then validate the result. Do not change production code or tests unless separately requested.
 
@@ -17,7 +18,7 @@ Review documentation from the implementation outward. Default mode is audit-only
 
 1. Establish the documentation scope.
    - Inspect the working tree and recent relevant diffs without reverting user changes.
-   - Locate canonical product, configuration, operations, architecture, story, and test-scenario documents.
+   - Locate canonical product, configuration, operations, architecture, story, scenario, and operational documents.
    - Read repository documentation rules, templates, and standards before judging format or required sections.
    - If a story is supplied, distinguish acceptance criteria from suggested tests and narrative context.
 
@@ -44,7 +45,7 @@ Review documentation from the implementation outward. Default mode is audit-only
    - Make the smallest documentation-only edits that accurately describe current behavior.
    - Prefer the canonical document and avoid duplicating a contract in several places.
    - Preserve user changes and avoid broad rewrites or speculative requirements.
-   - If implementation and documentation disagree, report the conflict and fix documentation only when current implementation is clearly authoritative.
+   - If implementation and documentation disagree, do not silently choose: report the conflict and fix documentation only when current implementation is clearly authoritative.
    - Update scenario mappings and changelogs only when required by repository standards; do not fabricate dates, versions, or completed validation.
 
 6. Re-check after edits.
