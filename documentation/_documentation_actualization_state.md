@@ -23,8 +23,8 @@ Track periodic documentation-refresh cadence for repository docs.
   - Detailed change logs for each documentation update.
 
 ## Design / Behavior
-- Last Check: 2026-07-18
-- Last Full Actualization: 2026-04-24
+- Last Check: 2026-08-23
+- Last Full Actualization: 2026-08-23
 - Cadence Days: 30
 
 Use `.agents/skills/monthly-doc-actualizer/scripts/check_due.py` to evaluate due status and update these fields.

@@ -123,6 +123,7 @@ Mode and fallback behavior:
 - `search_engine: keyword` skips vector lookup entirely.
 - `search_engine: vector` still falls back to keyword results when vector search cannot answer, and includes an `error` object when the vector sidecar is missing, unreadable, stale, incompatible, or the embedding backend is unavailable.
 - `search_engine: hybrid` also includes the same `error` object when vector lookup degrades, while preserving keyword results when available.
+- If the site configuration cannot be loaded while a tool is handling a request, the tool returns `configuration_unavailable` with the fixed message `Server configuration is unavailable.`; raw configuration diagnostics remain server-side only.
 - `vector_index_schema_mismatch` is returned when the sidecar header or stored schema version does not match the current runtime contract; rebuild the sidecar with `docmcp-vectorize` to migrate it.
 - `vector_index_incompatible` covers configuration problems such as a missing usable `index_file` and query-time metadata mismatches such as an embedding-model change or missing embedding dimensions.
 - Vector queries require the sidecar header version and the stored metadata schema version to match the current runtime contract, and also require the metadata to match the current `index_file` and `vectorizer.embedding_model`; rebuild the sidecar after changing any of those inputs.

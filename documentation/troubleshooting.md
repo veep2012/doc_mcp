@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-07-29
-- Version: v1.16
+- Last Updated: 2026-08-23
+- Version: v1.17
 
 ## Change Log
+- 2026-08-23 | v1.17 | Documented the safe `configuration_unavailable` response returned when the running MCP server cannot reload site configuration.
 - 2026-07-29 | v1.16 | Added proxy and DNS troubleshooting for authenticated PDF downloads.
 - 2026-07-26 | v1.15 | Clarified MCP smoke-test prerequisites and optional dependency gate behavior.
 - 2026-07-19 | v1.14 | Added PDF download-endpoint, HTTP-response, redirect-policy, and targeted-reindex failure guidance; documented optional runtime dependency skips during default test collection.
@@ -136,6 +137,11 @@ List the most common failure modes for `doc-mcp` and the first corrective step f
 - Create the runtime workspace with `mkdir -p config storage index`, put `sites.yaml` under `config/`, and pass `DOC_MCP_HOME` plus `CONFIG_FILE` through the MCP client environment.
 - Site-specific output directories are created when that site is authenticated, crawled, or queried, so one unused site's paths do not block server startup.
 - For VS Code, check the `docs-mcp` output from `MCP: List Servers` to see the exact startup configuration error.
+
+### The Running Server Cannot Reload Configuration
+- The MCP tools reload site configuration when handling requests. If the file is missing, invalid YAML, or otherwise invalid, the affected tool returns `error.code: "configuration_unavailable"` with the fixed message `Server configuration is unavailable.`.
+- The detailed configuration failure is logged server-side; it is not included in the MCP response.
+- Restore or correct `config/sites.yaml` and retry the request. Restart the server if the MCP client does not retry the failed request.
 
 ### Podman Smoke Runtime Is Stale Or Unreachable
 - If `make test` reaches the smoke phase and Podman reports that the machine is already running but the socket refuses connections, treat the local Podman machine state as stale.
