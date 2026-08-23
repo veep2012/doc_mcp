@@ -21,6 +21,7 @@ require_test_dependency("mcp.client.stdio", "MCP", "smoke tests")
 
 from mcp import ClientSession  # noqa: E402
 from mcp.client.stdio import StdioServerParameters, stdio_client  # noqa: E402
+from pydantic import AnyUrl  # noqa: E402
 
 _SMOKE_ARTIFACT_DIRS: list[tempfile.TemporaryDirectory[str]] = []
 
@@ -271,3 +272,20 @@ async def call_search_docs(
         {"site_name": site_name, "query": query},
         errlog=errlog,
     )
+
+
+async def read_mcp_resource(runtime_root: Path, uri: str) -> tuple[list, list, str]:
+    """Discover MCP resources and read one resource through the stdio server."""
+    server = StdioServerParameters(
+        command=sys.executable,
+        args=["-m", "src.main"],
+        cwd=REPO_ROOT,
+        env=smoke_env(runtime_root),
+    )
+    async with stdio_client(server) as streams:
+        async with ClientSession(*streams) as session:
+            await session.initialize()
+            resources = (await session.list_resources()).resources
+            templates = (await session.list_resource_templates()).resourceTemplates
+            result = await session.read_resource(AnyUrl(uri))
+            return resources, templates, result.contents[0].text

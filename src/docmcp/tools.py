@@ -15,6 +15,8 @@ import logging
 import os
 import sqlite3
 from pathlib import Path
+from urllib.parse import quote, unquote
+from unicodedata import normalize
 
 try:
     from mcp.server.fastmcp import FastMCP
@@ -30,12 +32,23 @@ except ModuleNotFoundError:  # pragma: no cover - only used in minimal test envi
 
             return decorator
 
+        def resource(self, uri: str, **kwargs):
+            def decorator(func):
+                return func
+
+            return decorator
+
         def run(self, transport: str = "stdio"):
             raise ModuleNotFoundError("mcp is required to run the MCP server")
 
 
 from . import __version__
-from .config.loader import ConfigError, get_sites as _get_sites, _normalize_search_engine
+from .config.loader import (
+    ConfigError,
+    find_site,
+    get_sites as _get_sites,
+    _normalize_search_engine,
+)
 from .index_store import (
     _normalize_search_limit,
     count_pages,
@@ -73,10 +86,104 @@ def _load_sites() -> list[dict]:
 
 
 def _find_site(name: str) -> dict | None:
-    for site in _load_sites():
-        if site["name"].lower() == name.lower():
-            return site
-    return None
+    return find_site(_load_sites(), name)
+
+
+def _page_key_from_url(url: str) -> str:
+    """Encode a canonical page URL as one URI-safe resource path segment."""
+    return quote(normalize("NFC", url), safe="")
+
+
+def _page_resource_uri(site: dict, url: str) -> str:
+    return f"docmcp://site/{site['site_id']}/page/{_page_key_from_url(url)}"
+
+
+def _decode_page_key(page_key: str) -> str | None:
+    if not _valid_nonempty_text(page_key):
+        return None
+    decoded = unquote(page_key)
+    if quote(decoded, safe="") != page_key:
+        return None
+    return decoded
+
+
+def _find_site_by_id(site_id: str) -> dict | None:
+    return next((site for site in _load_sites() if site["site_id"] == site_id), None)
+
+
+def _resource_site_or_error(site_id: str) -> dict:
+    try:
+        site = _find_site_by_id(site_id)
+    except _ConfigurationUnavailableError as exc:
+        raise ValueError("Server configuration is unavailable.") from exc
+    if not site:
+        raise ValueError("Documentation site resource was not found.")
+    return site
+
+
+@mcp.resource(
+    "docmcp://sites",
+    name="Documentation sites",
+    description="Configured documentation sites.",
+    mime_type="text/markdown",
+)
+def documentation_sites_resource() -> str:
+    """Return the configured documentation catalog without private settings."""
+    try:
+        sites = _load_sites()
+    except _ConfigurationUnavailableError as exc:
+        raise ValueError("Server configuration is unavailable.") from exc
+    lines = ["# Documentation sites", ""]
+    lines.extend(
+        f"- {json.dumps(site['name'], ensure_ascii=False)}: "
+        f"<docmcp://site/{site['site_id']}>"
+        for site in sites
+    )
+    return "\n".join(lines)
+
+
+@mcp.resource(
+    "docmcp://site/{site_id}",
+    name="Documentation site",
+    description="A configured documentation site.",
+    mime_type="text/markdown",
+)
+def documentation_site_resource(site_id: str) -> str:
+    """Return a safe representation of one configured documentation site."""
+    site = _resource_site_or_error(site_id)
+    return "\n".join(
+        [
+            "# Documentation site",
+            "",
+            f"Name: {json.dumps(site['name'], ensure_ascii=False)}",
+            "",
+            f"Indexed page URI template: `docmcp://site/{site['site_id']}/page/{{page_key}}`",
+        ]
+    )
+
+
+@mcp.resource(
+    "docmcp://site/{site_id}/page/{page_key}",
+    name="Documentation page",
+    description="An indexed documentation page in Markdown.",
+    mime_type="text/markdown",
+)
+def documentation_page_resource(site_id: str, page_key: str) -> str:
+    """Return one indexed page after strict resource-URI validation."""
+    site = _resource_site_or_error(site_id)
+    page_url = _decode_page_key(page_key)
+    if page_url is None:
+        raise ValueError("Documentation page resource URI is malformed.")
+    if not Path(site["index_file"]).is_file():
+        raise ValueError("Documentation page resource is unavailable.")
+    try:
+        page = get_page(site["index_file"], page_url)
+    except (OSError, sqlite3.Error) as exc:
+        logger.warning("Could not read page resource for site %r", site["name"], exc_info=True)
+        raise ValueError("Documentation page resource is unavailable.") from exc
+    if not page:
+        raise ValueError("Documentation page resource was not found.")
+    return page["content_md"]
 
 
 def _configuration_error_response() -> dict:
@@ -291,8 +398,8 @@ def _vector_lookup_strict(site: dict, query: str, limit: int) -> tuple[list[dict
         return [], _vector_lookup_error(site, vector_index_file, exc)
 
 
-def _normalize_keyword_results(results: list[dict]) -> list[dict]:
-    return [
+def _normalize_keyword_results(results: list[dict], site: dict | None = None) -> list[dict]:
+    normalized_results = [
         {
             "text": result.get("excerpt") or "",
             "page_url": result["url"],
@@ -303,10 +410,14 @@ def _normalize_keyword_results(results: list[dict]) -> list[dict]:
         }
         for index, result in enumerate(results)
     ]
+    if site and site.get("site_id"):
+        for result in normalized_results:
+            result["resource_uri"] = _page_resource_uri(site, result["page_url"])
+    return normalized_results
 
 
-def _normalize_vector_results(results: list[dict]) -> list[dict]:
-    return [
+def _normalize_vector_results(results: list[dict], site: dict | None = None) -> list[dict]:
+    normalized_results = [
         {
             "text": result.get("text") or "",
             "page_url": result["page_url"],
@@ -317,6 +428,10 @@ def _normalize_vector_results(results: list[dict]) -> list[dict]:
         }
         for result in results
     ]
+    if site and site.get("site_id"):
+        for result in normalized_results:
+            result["resource_uri"] = _page_resource_uri(site, result["page_url"])
+    return normalized_results
 
 
 def _public_search_results(results: list[dict]) -> list[dict]:
@@ -356,6 +471,11 @@ def _merge_search_results(
                 "title": result["title"],
                 "score": result["score"],
                 "source": result["source"],
+                **(
+                    {"resource_uri": result["resource_uri"]}
+                    if "resource_uri" in result
+                    else {}
+                ),
             }
         )
 
@@ -372,11 +492,16 @@ def _select_search_mode(contributors: set[str]) -> str:
 
 
 def _search_response(
-    keyword_results: list[dict], vector_results: list[dict], limit: int, error: dict | None = None
+    keyword_results: list[dict],
+    vector_results: list[dict],
+    limit: int,
+    error: dict | None = None,
+    *,
+    site: dict | None = None,
 ) -> dict:
     response = _empty_search_response()
-    normalized_keyword_results = _normalize_keyword_results(keyword_results)
-    normalized_vector_results = _normalize_vector_results(vector_results)
+    normalized_keyword_results = _normalize_keyword_results(keyword_results, site)
+    normalized_vector_results = _normalize_vector_results(vector_results, site)
     merged_results, contributors = _merge_search_results(
         normalized_vector_results, normalized_keyword_results, limit
     )
@@ -402,7 +527,7 @@ def _keyword_search_response(site: dict, query: str, limit: int) -> dict:
         )
     response = _empty_search_response("keyword")
     response["keyword_hits"] = len(keyword_results)
-    response["results"] = _public_search_results(_normalize_keyword_results(keyword_results))
+    response["results"] = _public_search_results(_normalize_keyword_results(keyword_results, site))
     _log_vector_path_decision(
         site=site,
         search_engine=_site_search_engine(site),
@@ -420,7 +545,7 @@ def _vector_search_response(site: dict, query: str, limit: int) -> dict:
     if vector_results:
         response = _empty_search_response("vector")
         response["vector_hits"] = len(vector_results)
-        response["results"] = _public_search_results(_normalize_vector_results(vector_results))
+        response["results"] = _public_search_results(_normalize_vector_results(vector_results, site))
         _log_vector_path_decision(
             site=site,
             search_engine=_site_search_engine(site),
@@ -435,7 +560,7 @@ def _vector_search_response(site: dict, query: str, limit: int) -> dict:
     keyword_results = _keyword_lookup(site, query, limit)
     response = _empty_search_response("keyword")
     response["keyword_hits"] = len(keyword_results)
-    response["results"] = _public_search_results(_normalize_keyword_results(keyword_results))
+    response["results"] = _public_search_results(_normalize_keyword_results(keyword_results, site))
     if error:
         response["ok"] = False
         response["contract_version"] = CONTRACT_VERSION
@@ -600,7 +725,9 @@ def search_docs(site_name: str, query: str, limit: int = 10) -> str:
     except sqlite3.Error:
         return _serialize(_degraded_search_response(site))
     vector_results, error = _vector_lookup(site, query, normalized_limit)
-    response = _search_response(keyword_results, vector_results, normalized_limit, error)
+    response = _search_response(
+        keyword_results, vector_results, normalized_limit, error, site=site
+    )
     _log_vector_path_decision(
         site=site,
         search_engine=search_engine,

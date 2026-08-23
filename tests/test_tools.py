@@ -77,6 +77,42 @@ def test_mcp_tools_return_site_pages_search_and_fetch(monkeypatch, tmp_path):
     }
 
 
+def test_mcp_resources_read_catalog_site_and_indexed_page(monkeypatch, tmp_path):
+    """TS-TF-024: Resources expose safe catalog, site, and indexed-page Markdown."""
+    index_file = tmp_path / "private" / "docs.db"
+    init_db(str(index_file))
+    page_url = "https://example.test/guide?language=中文"
+    upsert_page(str(index_file), page_url, "Guide", "# Guide\n\nAlpha beta")
+    site = {
+        "name": "My Private Docs",
+        "canonical_name": "My Private Docs",
+        "site_id": "My%20Private%20Docs",
+        "url": "https://example.test",
+        "auth_required": True,
+        "index_file": str(index_file),
+        "session_file": str(tmp_path / "private" / "session.json"),
+    }
+    monkeypatch.setattr(tools, "_get_sites", lambda: [site])
+
+    catalog = tools.documentation_sites_resource()
+    assert "docmcp://site/My%20Private%20Docs" in catalog
+    assert str(index_file) not in catalog
+    assert site["session_file"] not in catalog
+    assert tools.documentation_site_resource(site["site_id"]).endswith(
+        "docmcp://site/My%20Private%20Docs/page/{page_key}`"
+    )
+
+    page_key = tools._page_key_from_url(page_url)
+    assert tools.documentation_page_resource(site["site_id"], page_key) == "# Guide\n\nAlpha beta"
+    assert tools._page_resource_uri(site, page_url).endswith(f"/page/{page_key}")
+    with pytest.raises(ValueError, match="malformed"):
+        tools.documentation_page_resource(site["site_id"], "not%zzcanonical")
+    with pytest.raises(ValueError, match="not found"):
+        tools.documentation_page_resource(site["site_id"], tools._page_key_from_url("https://else.test"))
+    with pytest.raises(ValueError, match="site resource was not found"):
+        tools.documentation_site_resource("Missing")
+
+
 def test_keyword_score_is_monotonic_with_result_order():
     assert tools._keyword_score(-0.001, 0) > tools._keyword_score(-10.0, 1)
     assert tools._keyword_score(-10.0, 1) > tools._keyword_score(-20.0, 2)

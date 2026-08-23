@@ -10,7 +10,7 @@
 - Related Tickets: veep2012/doc_mcp#2
 
 ## Change Log
-- 2026-08-23 | v2.5 | Expanded MCP tool and stdio scenarios for the JSON contract, structured errors, empty states, preserved search semantics for degraded source indexes, fixed safe vector error messages with server-side raw exception logging, complete missing-page response assertions, and safe configuration-failure coverage.
+- 2026-08-23 | v2.6 | Expanded MCP tool and stdio scenarios for the JSON contract, structured errors, empty states, preserved search semantics for degraded source indexes, fixed safe vector error messages with server-side raw exception logging, complete missing-page response assertions, safe configuration-failure coverage, and normalized MCP resource discovery and reads.
 - 2026-08-16 | v2.4 | Extended TS-TF-022 with a real repository-built wheel rewrite and installation check, extended TS-TF-023 with concurrent-process artifact creation coverage so parallel harness runs receive distinct directories, and added diagnostics for vector sidecars built with a different embedding model than configured in sites.yaml.
 - 2026-08-15 | v1.3 | Added failure-boundary coverage for invalid harness options, malformed or mismatched MCP responses, early server exit, and preserved comparison-failure artifacts.
 - 2026-08-14 | v1.0 | Added the lightweight MCP dependency profile and dual full/MCP-only wheel output, including cached baseline/current harness images, live image-build progress, vector-search runtime coverage, shell timeout overrides, concurrent stderr artifact streaming for verbose runs, and fixed internal safety limits after removing the configurable harness timeout.
@@ -76,6 +76,7 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - `TS-TF-021` - Harness runtime selection gives explicit process/Make overrides precedence over repository `.env`, then uses `.env-harness` and Podman as fallbacks.
 - `TS-TF-022` - MCP-only wheel rewriting renames distribution metadata, replaces dependencies and entry points, regenerates valid RECORD hashes, uses the expected output filename, and produces an installable wheel.
 - `TS-TF-023` - Harness artifact run directories retain a UTC timestamp and add a collision-resistant UUID suffix so repeated or parallel runs receive distinct diagnostic directories.
+- `TS-TF-024` - Site identities and page resource URIs are NFC-normalized, percent-encoded, deterministic, and readable through MCP resources without exposing private configuration.
 
 ### Scenario Details
 #### TS-TF-001
@@ -116,6 +117,12 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - Preconditions: A prepared local SQLite index exists for the temporary runtime workspace.
 - Action: Start the isolated stdio server and call `get_sites`, `get_version`, `list_pages`, `search_docs`, and `fetch_page`, including an unknown-site and invalid-argument call.
 - Expected Result: Every response is valid JSON with the documented contract metadata and result/error fields; search content and page content are preserved, expected failures are structured, and MCP stdout contains no diagnostic output.
+
+#### TS-TF-024
+- Purpose: Validate normalized site configuration and MCP resource access.
+- Preconditions: A temporary normalized configuration and readable SQLite index contain a configured site and indexed page.
+- Action: Load names with spaces, Unicode, and case-colliding variants; discover the catalog/template resources; read valid catalog, site, and page URIs; and read malformed, unknown, and absent-page URIs.
+- Expected Result: Site IDs use trimmed NFC names encoded as one UTF-8 URI segment, colliding canonical names fail configuration loading, catalog and site resources disclose no runtime paths or credentials, valid pages return Markdown, malformed or missing resources return safe protocol errors, and each `search_docs` result has its deterministic page `resource_uri`.
 
 #### TS-TF-009
 - Purpose: Make missing smoke prerequisites actionable.
@@ -225,6 +232,7 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - `TS-TF-021` -> `tests/test_harness.py::{test_load_config_uses_project_env_container_runtime,test_load_config_process_runtime_overrides_project_env}`
 - `TS-TF-022` -> `tests/test_packaging.py::{test_build_mcp_wheel_rewrites_and_installs_minimal_wheel,test_build_mcp_wheel_rewrites_real_repository_wheel}`
 - `TS-TF-023` -> `tests/test_harness.py::{test_create_run_dir_uses_unique_timestamped_names,test_create_run_dir_is_safe_for_parallel_processes}`
+- `TS-TF-024` -> `tests/test_config_loader.py::{test_load_config_normalizes_site_id_and_rejects_identity_collisions}`, `tests/test_tools.py::test_mcp_resources_read_catalog_site_and_indexed_page`, `tests/smoke/test_mcp_smoke.py::test_mcp_stdio_search_docs_uses_prepared_index`
 
 ## Edge Cases
 - If Podman is installed but not usable in the current environment, rerun smoke tests with `CONTAINER_BIN=docker`.

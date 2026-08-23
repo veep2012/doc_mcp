@@ -6,9 +6,10 @@
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
 - Last Updated: 2026-08-23
-- Version: v4.0
+- Version: v4.1
 
 ## Change Log
+- 2026-08-23 | v4.1 | Added catalog, site, and indexed-page MCP resources with normalized URI identities and search-result resource links.
 - 2026-08-23 | v4.0 | Standardized all MCP tool contracts on JSON, added the contract matrix and structured error convention, documented the Markdown-to-JSON migration for site, page-list, and page-fetch tools, fixed vector fallback messages so raw exception diagnostics remain server-side only, documented corrupt keyword indexes as `index_unavailable` failures, specified the full `page_not_found` response shape and preserved its legacy message, clarified per-site index degradation in `get_sites`, and added the safe `configuration_unavailable` contract.
 - 2026-08-15 | v3.0 | Consolidated packaged-version harness instructions in the dedicated harness testing guide and kept this reference as a cross-link.
 - 2026-08-02 | v2.3 | Added the packaged-wheel MCP version comparison harness, its safe configuration, fixtures, diagnostics, and CI usage.
@@ -59,6 +60,21 @@ python -m src.main
 - `search_docs(site_name, query, limit=10)`
 - `fetch_page(site_name, url)`
 
+### Resources
+The server advertises the MCP `resources` capability in addition to the existing tools. Tools remain available and retain their JSON contracts.
+
+```text
+docmcp://sites
+└── docmcp://site/<site-id>
+    └── docmcp://site/<site-id>/page/<page-key>
+```
+
+- `docmcp://sites` is a readable Markdown catalog of configured documentation sites. It links to each site resource and does not disclose session paths, index paths, credentials, or private configuration.
+- `docmcp://site/<site-id>` is a parameterized site resource. `<site-id>` is the normalized, UTF-8 percent-encoded identity described in [configuration.md](configuration.md).
+- `docmcp://site/<site-id>/page/<page-key>` is the indexed-page resource template. `<page-key>` is the canonical page URL normalized to NFC and UTF-8 percent-encoded as one URI segment. It is stable while the canonical URL remains unchanged.
+- Reading a valid page resource returns the indexed Markdown content. Missing sites/pages, malformed page keys, unavailable indexes, and unavailable configuration return safe MCP protocol errors without filesystem paths, credentials, or raw configuration diagnostics.
+- `search_docs` includes `resource_uri` on each result when the normalized configuration supplies a site identity, allowing clients to read the matching page directly.
+
 ### Tool Behavior
 
 All tools return a JSON string. Successful responses include `ok: true` and
@@ -105,6 +121,7 @@ Example error:
     {
       "text": "Result snippet or chunk text",
       "page_url": "https://docs.example.com/page",
+      "resource_uri": "docmcp://site/My%20Docs/page/https%3A%2F%2Fdocs.example.com%2Fpage",
       "title": "Page title",
       "score": 0.87,
       "source": "keyword"

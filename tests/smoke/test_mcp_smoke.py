@@ -8,6 +8,7 @@ from smoke_support import (
     call_mcp_tool,
     call_search_docs,
     print_smoke_context,
+    read_mcp_resource,
     smoke_artifact_root,
     smoke_log_file,
 )
@@ -65,6 +66,27 @@ async def test_mcp_stdio_search_docs_uses_prepared_index():
     assert payload["results"][0]["title"] == "Guide"
     assert payload["results"][0]["page_url"] == "https://example.test/guide"
     assert payload["results"][0]["source"] == "keyword"
+    assert (
+        payload["results"][0]["resource_uri"]
+        == "docmcp://site/Prepared%20Docs/page/https%3A%2F%2Fexample.test%2Fguide"
+    )
+
+    resources, templates, catalog = await read_mcp_resource(runtime_root, "docmcp://sites")
+    assert any(str(resource.uri) == "docmcp://sites" for resource in resources)
+    assert {
+        template.uriTemplate
+        for template in templates
+    } == {
+        "docmcp://site/{site_id}",
+        "docmcp://site/{site_id}/page/{page_key}",
+    }
+    assert "docmcp://site/Prepared%20Docs" in catalog
+
+    _, _, page_resource = await read_mcp_resource(
+        runtime_root,
+        "docmcp://site/Prepared%20Docs/page/https%3A%2F%2Fexample.test%2Fguide",
+    )
+    assert page_resource == "Alpha beta gamma"
 
     sites_payload = json.loads(await call_mcp_tool(runtime_root, "get_sites", {}))
     assert sites_payload["ok"] is True

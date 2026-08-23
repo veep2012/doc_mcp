@@ -397,3 +397,65 @@ def test_example_config_with_playwright_settings_loads(monkeypatch):
     sites = load_config(str(config_path))["sites"]
 
     assert sites[0]["playwright"]["browser"] == "firefox"
+
+
+def test_load_config_normalizes_site_id_and_rejects_identity_collisions(monkeypatch, tmp_path):
+    """TS-TF-024: Site identities are NFC-normalized UTF-8 URI segments."""
+    runtime_root = tmp_path / "runtime"
+    (runtime_root / "config").mkdir(parents=True)
+    config_path = runtime_root / "config" / "sites.yaml"
+    config_path.write_text(
+        textwrap.dedent(
+            """
+            sites:
+              - name: "  My Private Docs  "
+                url: "https://example.test/private"
+                auth_required: false
+                index_file: "index/private.db"
+              - name: "我的文档"
+                url: "https://example.test/chinese"
+                auth_required: false
+                index_file: "index/chinese.db"
+              - name: "📚 Docs"
+                url: "https://example.test/books"
+                auth_required: false
+                index_file: "index/books.db"
+              - name: "Cafe\u0301"
+                url: "https://example.test/cafe"
+                auth_required: false
+                index_file: "index/cafe.db"
+            """
+        ).strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("DOC_MCP_HOME", str(runtime_root))
+
+    sites = load_config()["sites"]
+
+    assert [(site["canonical_name"], site["site_id"]) for site in sites] == [
+        ("My Private Docs", "My%20Private%20Docs"),
+        ("我的文档", "%E6%88%91%E7%9A%84%E6%96%87%E6%A1%A3"),
+        ("📚 Docs", "%F0%9F%93%9A%20Docs"),
+        ("Café", "Caf%C3%A9"),
+    ]
+
+    config_path.write_text(
+        textwrap.dedent(
+            """
+            sites:
+              - name: "Café"
+                url: "https://example.test/one"
+                auth_required: false
+                index_file: "index/one.db"
+              - name: "cafe\u0301"
+                url: "https://example.test/two"
+                auth_required: false
+                index_file: "index/two.db"
+            """
+        ).strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="Duplicate site identity after name normalization"):
+        load_config()
