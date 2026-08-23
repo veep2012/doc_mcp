@@ -152,6 +152,7 @@ If the site name is unknown, the tool returns structured JSON with an `error` ob
   "vector_hits": 0,
   "keyword_hits": 0,
   "results": [],
+  "contract_version": "1.0",
   "ok": false,
   "error": {
     "code": "site_not_found",
