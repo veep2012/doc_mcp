@@ -186,7 +186,7 @@ def documentation_sites_resource() -> str:
 @mcp.resource(
     "docmcp://site/{site_id}",
     name="Documentation site",
-    description="A configured documentation site.",
+    description="A configured documentation site with addressable child page resources.",
     mime_type="text/markdown",
 )
 def documentation_site_resource(site_id: str) -> str:

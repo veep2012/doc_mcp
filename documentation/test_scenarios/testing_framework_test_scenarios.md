@@ -10,7 +10,7 @@
 - Related Tickets: veep2012/doc_mcp#2
 
 ## Change Log
-- 2026-08-29 | v2.7 | Expanded MCP tool and stdio scenarios for the JSON contract, structured errors, empty states, preserved search semantics for degraded source indexes, fixed safe vector error messages with server-side raw exception logging, complete missing-page response assertions, safe configuration-failure coverage, compact site-resource metadata, normalized MCP resource discovery and reads, MCP public contract version 1.1, explicit harness rejection of contract-version mismatches, and paginated `list_pages` continuation behavior.
+- 2026-08-29 | v2.7 | Expanded MCP tool and stdio scenarios for the JSON contract, structured errors, empty states, preserved search semantics for degraded source indexes, fixed safe vector error messages with server-side raw exception logging, complete missing-page response assertions, safe configuration-failure coverage, compact site-resource metadata, discoverable site and page resource templates, normalized page-resource reads, MCP public contract version 1.1, explicit harness rejection of contract-version mismatches, and paginated `list_pages` continuation behavior.
 - 2026-08-16 | v2.4 | Extended TS-TF-022 with a real repository-built wheel rewrite and installation check, extended TS-TF-023 with concurrent-process artifact creation coverage so parallel harness runs receive distinct directories, and added diagnostics for vector sidecars built with a different embedding model than configured in sites.yaml.
 - 2026-08-15 | v1.3 | Added failure-boundary coverage for invalid harness options, malformed or mismatched MCP responses, early server exit, and preserved comparison-failure artifacts.
 - 2026-08-14 | v1.0 | Added the lightweight MCP dependency profile and dual full/MCP-only wheel output, including cached baseline/current harness images, live image-build progress, vector-search runtime coverage, shell timeout overrides, concurrent stderr artifact streaming for verbose runs, and fixed internal safety limits after removing the configurable harness timeout.
@@ -76,7 +76,7 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - `TS-TF-021` - Harness runtime selection gives explicit process/Make overrides precedence over repository `.env`, then uses `.env-harness` and Podman as fallbacks.
 - `TS-TF-022` - MCP-only wheel rewriting renames distribution metadata, replaces dependencies and entry points, regenerates valid RECORD hashes, uses the expected output filename, and produces an installable wheel.
 - `TS-TF-023` - Harness artifact run directories retain a UTC timestamp and add a collision-resistant UUID suffix so repeated or parallel runs receive distinct diagnostic directories.
-- `TS-TF-024` - Site identities and page resource URIs are NFC-normalized, percent-encoded, deterministic, and readable through MCP resources without exposing private configuration.
+- `TS-TF-024` - Site identities and page resource URIs are NFC-normalized, percent-encoded, deterministic, and readable through discoverable MCP resource templates without exposing private configuration.
 - `TS-TF-025` - `list_pages` returns bounded, deterministic pages with an opaque continuation cursor and a `nextCursor` only when more pages remain.
 
 ### Scenario Details
@@ -123,7 +123,7 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - Purpose: Validate normalized site configuration and MCP resource access.
 - Preconditions: A temporary normalized configuration and readable SQLite index contain a configured site and indexed page.
 - Action: Load names with spaces, Unicode, and case-colliding variants; discover the catalog/template resources; read valid catalog, site, and page URIs; and read malformed, unknown, and absent-page URIs.
-- Expected Result: Site IDs use trimmed NFC names encoded as one UTF-8 URI segment, colliding canonical names fail configuration loading, catalog and site resources disclose no runtime paths or credentials, site resources return only the site name, page count, crawl/index status, page URI template, and instructions to use `list_pages` for the page catalog, valid pages return Markdown, malformed or missing resources return safe protocol errors, and each `list_pages` entry and `search_docs` result has its deterministic page `resource_uri`.
+- Expected Result: Site IDs use trimmed NFC names encoded as one UTF-8 URI segment, the server advertises `docmcp://site/{site_id}` and `docmcp://site/{site_id}/page/{page_key}` as resource templates, and the presence of the page template indicates addressable child page resources. Colliding canonical names fail configuration loading, catalog and site resources disclose no runtime paths or credentials, site resources return only the site name, page count, crawl/index status, page URI template, and instructions to use `list_pages` for the page catalog, every `list_pages` `resource_uri` can be read through standard resource access to return the page Markdown and the corresponding page remains available through `fetch_page`, malformed or missing resources return safe protocol errors, and each `search_docs` result has its deterministic page `resource_uri`.
 
 #### TS-TF-025
 - Purpose: Validate bounded MCP page listing and continuation across the complete indexed ordering.

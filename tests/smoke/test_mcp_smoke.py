@@ -17,6 +17,7 @@ from smoke_support import (
 @pytest.mark.smoke
 @pytest.mark.mcp_smoke
 async def test_mcp_stdio_search_docs_uses_prepared_index():
+    """TS-TF-024: MCP resource templates advertise addressable site pages."""
     runtime_root = smoke_artifact_root("mcp")
 
     index_file = runtime_root / "index" / "prepared.db"
@@ -106,6 +107,10 @@ async def test_mcp_stdio_search_docs_uses_prepared_index():
         pages_payload["pages"][0]["resource_uri"]
         == "docmcp://site/Prepared%20Docs/page/https%3A%2F%2Fexample.test%2Fguide"
     )
+    _, _, listed_page_resource = await read_mcp_resource(
+        runtime_root, pages_payload["pages"][0]["resource_uri"]
+    )
+    assert listed_page_resource == "Alpha beta gamma"
 
     page_payload = json.loads(
         await call_mcp_tool(

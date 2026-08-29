@@ -114,6 +114,11 @@ def test_mcp_resources_read_catalog_site_and_indexed_page(monkeypatch, tmp_path)
         'Page catalog: call `list_pages` with site_name="My Private Docs".'
     )
 
+    listed_page = json.loads(tools.list_pages("My Private Docs"))["pages"][0]
+    listed_page_key = listed_page["resource_uri"].split("/page/", 1)[1]
+    assert tools.documentation_page_resource(site["site_id"], listed_page_key) == (
+        "# Guide\n\nAlpha beta"
+    )
     page_key = tools._page_key_from_url(page_url)
     assert tools.documentation_page_resource(site["site_id"], page_key) == "# Guide\n\nAlpha beta"
     assert tools._page_resource_uri(site, page_url).endswith(f"/page/{page_key}")
