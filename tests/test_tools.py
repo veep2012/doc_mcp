@@ -124,12 +124,41 @@ def test_mcp_resources_read_catalog_site_and_indexed_page(monkeypatch, tmp_path)
     assert tools._page_resource_uri(site, page_url).endswith(f"/page/{page_key}")
     with pytest.raises(ValueError, match="malformed"):
         tools.documentation_page_resource(site["site_id"], "not%zzcanonical")
-    with pytest.raises(ValueError, match="not found"):
+    with pytest.raises(ValueError, match="out of scope"):
         tools.documentation_page_resource(
             site["site_id"], tools._page_key_from_url("https://else.test")
         )
     with pytest.raises(ValueError, match="site resource was not found"):
         tools.documentation_site_resource("Missing")
+
+
+def test_mcp_page_resource_canonicalizes_and_enforces_scope(monkeypatch, tmp_path):
+    """TS-TF-024: Page resources canonicalize URLs and reject out-of-scope pages."""
+    index_file = tmp_path / "docs.db"
+    init_db(str(index_file))
+    upsert_page(str(index_file), "https://example.test/docs/guide", "Guide", "Guide content")
+    upsert_page(str(index_file), "https://other.test/docs/secret", "Secret", "Secret content")
+    site = {
+        "name": "Example Docs",
+        "canonical_name": "Example Docs",
+        "site_id": "Example%20Docs",
+        "url": "https://example.test",
+        "auth_required": False,
+        "index_file": str(index_file),
+        "crawl": {"start_url": "https://example.test/docs"},
+    }
+    monkeypatch.setattr(tools, "_get_sites", lambda: [site])
+
+    noncanonical_key = tools._page_key_from_url("https://EXAMPLE.TEST/docs/guide/")
+    assert tools.documentation_page_resource(site["site_id"], noncanonical_key) == "Guide content"
+
+    out_of_scope_key = tools._page_key_from_url("https://other.test/docs/secret")
+    with pytest.raises(ValueError, match="out of scope"):
+        tools.documentation_page_resource(site["site_id"], out_of_scope_key)
+
+    out_of_scope_path_key = tools._page_key_from_url("https://example.test/private/secret")
+    with pytest.raises(ValueError, match="out of scope"):
+        tools.documentation_page_resource(site["site_id"], out_of_scope_path_key)
 
 
 def test_list_pages_paginates_with_opaque_cursor(monkeypatch, tmp_path):

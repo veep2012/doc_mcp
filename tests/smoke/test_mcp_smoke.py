@@ -7,8 +7,10 @@ from docmcp.index_store import init_db, upsert_page
 from smoke_support import (
     call_mcp_tool,
     call_search_docs,
+    initialize_mcp_capabilities,
     print_smoke_context,
     read_mcp_resource,
+    read_mcp_resource_failure,
     smoke_artifact_root,
     smoke_log_file,
 )
@@ -17,7 +19,7 @@ from smoke_support import (
 @pytest.mark.smoke
 @pytest.mark.mcp_smoke
 async def test_mcp_stdio_search_docs_uses_prepared_index():
-    """TS-TF-024: MCP resource templates advertise addressable site pages."""
+    """TS-TF-024: MCP resources advertise capabilities and addressable site pages."""
     runtime_root = smoke_artifact_root("mcp")
 
     index_file = runtime_root / "index" / "prepared.db"
@@ -39,6 +41,9 @@ async def test_mcp_stdio_search_docs_uses_prepared_index():
         + "\n",
         encoding="utf-8",
     )
+
+    capabilities = await initialize_mcp_capabilities(runtime_root)
+    assert capabilities.resources is not None
 
     print_smoke_context(
         "mcp smoke",
@@ -85,6 +90,21 @@ async def test_mcp_stdio_search_docs_uses_prepared_index():
         "docmcp://site/Prepared%20Docs/page/https%3A%2F%2Fexample.test%2Fguide",
     )
     assert page_resource == "Alpha beta gamma"
+    malformed_error = await read_mcp_resource_failure(
+        runtime_root,
+        "docmcp://site/Prepared%20Docs/page/not%2fcanonical",
+    )
+    assert "malformed" in malformed_error.lower()
+    missing_page_error = await read_mcp_resource_failure(
+        runtime_root,
+        "docmcp://site/Prepared%20Docs/page/https%3A%2F%2Fexample.test%2Fmissing",
+    )
+    assert "not found" in missing_page_error.lower()
+    out_of_scope_error = await read_mcp_resource_failure(
+        runtime_root,
+        "docmcp://site/Prepared%20Docs/page/https%3A%2F%2Fother.test%2Fsecret",
+    )
+    assert "out of scope" in out_of_scope_error.lower()
 
     sites_payload = json.loads(await call_mcp_tool(runtime_root, "get_sites", {}))
     assert sites_payload["ok"] is True

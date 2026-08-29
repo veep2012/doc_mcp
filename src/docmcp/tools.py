@@ -17,7 +17,7 @@ import logging
 import os
 import sqlite3
 from pathlib import Path
-from urllib.parse import quote, unquote
+from urllib.parse import quote, unquote, urlsplit, urlunsplit
 from unicodedata import normalize
 
 try:
@@ -91,9 +91,18 @@ def _find_site(name: str) -> dict | None:
     return find_site(_load_sites(), name)
 
 
+def _canonical_page_url(url: str) -> str:
+    """Return the URL form used for indexed page resource identity and lookup."""
+    parsed = urlsplit(normalize("NFC", url))
+    path = parsed.path
+    if path != "/" and path.endswith("/"):
+        path = path.rstrip("/")
+    return urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(), path, parsed.query, ""))
+
+
 def _page_key_from_url(url: str) -> str:
     """Encode a canonical page URL as one URI-safe resource path segment."""
-    return quote(normalize("NFC", url), safe="")
+    return quote(_canonical_page_url(url), safe="")
 
 
 def _page_resource_uri(site: dict, url: str) -> str:
@@ -150,6 +159,26 @@ def _resource_site_or_error(site_id: str) -> dict:
     if not site:
         raise ValueError("Documentation site resource was not found.")
     return site
+
+
+def _resource_scope_reason(site: dict, page_url: str) -> str | None:
+    """Return a safe reason when a page URL is outside the configured site scope."""
+    try:
+        page = urlsplit(page_url)
+        crawl = site.get("crawl") or {}
+        scope_url = crawl.get("start_url") or site.get("url")
+        scope = urlsplit(scope_url)
+    except (AttributeError, TypeError, ValueError):
+        return "page URL is malformed"
+
+    if page.scheme not in {"http", "https"} or page.netloc.lower() != scope.netloc.lower():
+        return "page URL is outside the configured site host"
+
+    scope_path = scope.path.rstrip("/") or "/"
+    page_path = page.path or "/"
+    if scope_path != "/" and page_path != scope_path and not page_path.startswith(f"{scope_path}/"):
+        return "page URL is outside the configured site path"
+    return None
 
 
 def _site_index_metadata(site: dict) -> dict[str, int | str | None]:
@@ -221,6 +250,10 @@ def documentation_page_resource(site_id: str, page_key: str) -> str:
     page_url = _decode_page_key(page_key)
     if page_url is None:
         raise ValueError("Documentation page resource URI is malformed.")
+    page_url = _canonical_page_url(page_url)
+    scope_reason = _resource_scope_reason(site, page_url)
+    if scope_reason:
+        raise ValueError("Documentation page resource is out of scope.")
     if not Path(site["index_file"]).is_file():
         raise ValueError("Documentation page resource is unavailable.")
     try:

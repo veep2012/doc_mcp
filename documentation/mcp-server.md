@@ -9,7 +9,7 @@
 - Version: v4.2
 
 ## Change Log
-- 2026-08-29 | v4.2 | Bumped the public MCP contract version to 1.1 to include the resources capability, discoverable site and page resource templates, compact site-resource metadata, resource links in the server contract, deterministic page `resource_uri` values on every `list_pages` entry, and paginated page listing with continuation cursors.
+- 2026-08-29 | v4.2 | Bumped the public MCP contract version to 1.1 to include the resources capability, discoverable site and page resource templates, compact site-resource metadata, resource links in the server contract, deterministic and scope-checked page `resource_uri` values on every `list_pages` entry, and paginated page listing with continuation cursors.
 - 2026-08-23 | v4.1 | Standardized MCP tool contracts on JSON with structured errors, safe configuration/index degradation, and complete missing-page behavior; added catalog, site, and indexed-page resources with normalized URI identities and search-result resource links.
 - 2026-08-15 | v3.0 | Consolidated packaged-version harness instructions in the dedicated harness testing guide and kept this reference as a cross-link.
 - 2026-08-02 | v2.3 | Added the packaged-wheel MCP version comparison harness, its safe configuration, fixtures, diagnostics, and CI usage.
@@ -71,8 +71,9 @@ docmcp://sites
 
 - `docmcp://sites` is a readable Markdown catalog of configured documentation sites. It links to each site resource and does not disclose session paths, index paths, credentials, or private configuration.
 - `docmcp://site/<site-id>` is a parameterized compact site resource template. Its presence indicates that the site has addressable child page resources. It returns the site name, indexed page count, crawl/index status, page URI template, and instructions to call `list_pages` for the page catalog. `<site-id>` is the normalized, UTF-8 percent-encoded identity described in [configuration.md](configuration.md). It does not return page contents, the site URL, filesystem paths, credentials, or other private configuration.
-- `docmcp://site/<site-id>/page/<page-key>` is the parameterized indexed-page resource template. `<page-key>` is the canonical page URL normalized to NFC and UTF-8 percent-encoded as one URI segment. It is stable while the canonical URL remains unchanged.
-- Reading a valid page resource returns the indexed Markdown content. Missing sites/pages, malformed page keys, unavailable indexes, and unavailable configuration return safe MCP protocol errors without filesystem paths, credentials, or raw configuration diagnostics.
+- `docmcp://site/<site-id>/page/<page-key>` is the parameterized indexed-page resource template. `<page-key>` is the canonical page URL normalized to NFC, with scheme/host lowercased, fragments removed, and a trailing path slash removed except for `/`, then UTF-8 percent-encoded as one URI segment. It is stable while the canonical URL remains unchanged.
+- Reading a valid page resource returns the indexed Markdown content only when the canonical URL belongs to the configured site host and crawl start path. Missing sites/pages, malformed page keys, out-of-scope URLs, unavailable indexes, and unavailable configuration return safe MCP protocol errors without filesystem paths, credentials, or raw configuration diagnostics.
+- For sites with `auth_required: true`, authentication is performed before crawling and indexing; MCP resource reads use the resulting configured index and do not implement per-caller identity or session authorization.
 - `search_docs` includes `resource_uri` on each result when the normalized configuration supplies a site identity, allowing clients to read the matching page directly. `list_pages` includes the same deterministic `resource_uri` for every page entry and supports bounded continuation pagination.
 
 ### Tool Behavior
