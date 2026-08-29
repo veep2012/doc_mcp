@@ -137,14 +137,16 @@ def _fixture(tmp_path: Path) -> None:
                 {
                     "jsonrpc": "2.0",
                     "id": 7,
-                    "method": "tools/call",
-                    "params": {"name": "get_version"},
+                    "method": "resources/read",
+                    "params": {
+                        "uri": "docmcp://site/Harness/page/https%3A%2F%2Fexample.test%2Fharness"
+                    },
                 },
                 {
                     "jsonrpc": "2.0",
                     "id": 8,
                     "method": "tools/call",
-                    "params": {"name": "search_docs"},
+                    "params": {"name": "get_version"},
                 },
                 {
                     "jsonrpc": "2.0",
@@ -155,6 +157,12 @@ def _fixture(tmp_path: Path) -> None:
                 {
                     "jsonrpc": "2.0",
                     "id": 10,
+                    "method": "tools/call",
+                    "params": {"name": "search_docs"},
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 11,
                     "method": "tools/call",
                     "params": {"name": "search_docs"},
                 },
@@ -184,9 +192,35 @@ def test_load_config_validates_fixture_and_corpus(tmp_path: Path, monkeypatch: p
     config, corpus = load_config(_write_env(tmp_path), root=tmp_path)
 
     assert config.container_bin == "podman"
-    assert len(corpus) == 10
+    assert len(corpus) == 11
     assert corpus[1]["method"] == "notifications/initialized"
     assert "id" not in corpus[1]
+
+
+def test_load_config_rejects_corpus_without_site_or_page_resource_reads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """TS-TF-013: Resource coverage cannot be reduced to catalog discovery alone."""
+    _fixture(tmp_path)
+    corpus_path = tmp_path / "fixture" / "mcp_requests.json"
+    corpus = json.loads(corpus_path.read_text(encoding="utf-8"))
+    corpus_path.write_text(
+        json.dumps(
+            [
+                request
+                for request in corpus
+                if request.get("method") != "resources/read"
+                or request.get("params", {}).get("uri") == "docmcp://sites"
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "baseline.whl").touch()
+    (tmp_path / "current.whl").touch()
+    monkeypatch.setattr("docmcp.harness.config.shutil.which", lambda _: "/usr/bin/podman")
+
+    with pytest.raises(HarnessError, match="missing: page, site"):
+        load_config(_write_env(tmp_path), root=tmp_path)
 
 
 def test_load_config_uses_project_env_container_runtime(

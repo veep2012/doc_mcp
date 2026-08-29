@@ -17,8 +17,7 @@ import logging
 import os
 import sqlite3
 from pathlib import Path
-from urllib.parse import quote, unquote, urlsplit, urlunsplit
-from unicodedata import normalize
+from urllib.parse import quote, unquote, urlsplit
 
 try:
     from mcp.server.fastmcp import FastMCP
@@ -52,6 +51,7 @@ from .config.loader import (
     _normalize_search_engine,
 )
 from .index_store import (
+    _canonical_page_url,
     _normalize_search_limit,
     count_pages,
     get_page,
@@ -89,15 +89,6 @@ def _load_sites() -> list[dict]:
 
 def _find_site(name: str) -> dict | None:
     return find_site(_load_sites(), name)
-
-
-def _canonical_page_url(url: str) -> str:
-    """Return the URL form used for indexed page resource identity and lookup."""
-    parsed = urlsplit(normalize("NFC", url))
-    path = parsed.path
-    if path != "/" and path.endswith("/"):
-        path = path.rstrip("/")
-    return urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(), path, parsed.query, ""))
 
 
 def _page_key_from_url(url: str) -> str:

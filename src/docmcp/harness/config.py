@@ -9,6 +9,7 @@ import sqlite3
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from dotenv import dotenv_values
 
@@ -54,6 +55,21 @@ class HarnessConfig:
 def _is_notification(request: dict) -> bool:
     method = request.get("method")
     return isinstance(method, str) and method.startswith("notifications/")
+
+
+def _resource_read_kind(uri: str) -> str | None:
+    """Classify the required catalog, site, and page resource URI shapes."""
+    if uri == "docmcp://sites":
+        return "catalog"
+    parsed = urlsplit(uri)
+    if parsed.scheme != "docmcp" or parsed.netloc != "site" or parsed.query or parsed.fragment:
+        return None
+    segments = parsed.path.split("/")
+    if len(segments) == 2 and segments[1]:
+        return "site"
+    if len(segments) == 4 and segments[1] and segments[2] == "page" and segments[3]:
+        return "page"
+    return None
 
 
 def _resolve(value: str, root: Path) -> Path:
@@ -106,6 +122,24 @@ def _validate_corpus(path: Path) -> list[dict]:
         missing = ", ".join(sorted(required_resource_methods - methods))
         raise HarnessError(
             "MCP request corpus must include resource discovery and read requests: " + missing
+        )
+    resource_read_kinds = set()
+    for request in corpus:
+        if request.get("method") != "resources/read":
+            continue
+        params = request.get("params")
+        uri = params.get("uri") if isinstance(params, dict) else None
+        if not isinstance(uri, str):
+            raise HarnessError("Each resources/read request must include a string uri parameter.")
+        kind = _resource_read_kind(uri)
+        if kind:
+            resource_read_kinds.add(kind)
+    required_resource_kinds = {"catalog", "site", "page"}
+    if not required_resource_kinds.issubset(resource_read_kinds):
+        missing = ", ".join(sorted(required_resource_kinds - resource_read_kinds))
+        raise HarnessError(
+            "MCP request corpus must include resources/read requests for catalog, site, and "
+            f"indexed-page URI shapes; missing: {missing}"
         )
     for request in corpus:
         if request.get("jsonrpc") != "2.0" or not request.get("method"):

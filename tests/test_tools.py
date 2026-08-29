@@ -161,6 +161,40 @@ def test_mcp_page_resource_canonicalizes_and_enforces_scope(monkeypatch, tmp_pat
         tools.documentation_page_resource(site["site_id"], out_of_scope_path_key)
 
 
+def test_legacy_url_variants_have_readable_list_and_search_resource_uris(monkeypatch, tmp_path):
+    """TS-TF-024: Canonical resource URIs resolve legacy URL variants."""
+    index_file = tmp_path / "docs.db"
+    init_db(str(index_file))
+    legacy_url = "HTTPS://EXAMPLE.TEST/docs/Cafe\u0301/#intro"
+    with sqlite3.connect(str(index_file)) as conn:
+        conn.execute(
+            "INSERT INTO pages (url, title, content_md, last_crawled) VALUES (?, ?, ?, ?)",
+            (legacy_url, "Cafe", "Alpha legacy content", "2026-08-29T00:00:00+00:00"),
+        )
+
+    site = {
+        "name": "Example Docs",
+        "site_id": "Example%20Docs",
+        "url": "https://example.test",
+        "auth_required": False,
+        "index_file": str(index_file),
+        "crawl": {"start_url": "https://example.test/docs"},
+    }
+    monkeypatch.setattr(tools, "_get_sites", lambda: [site])
+
+    canonical_url = "https://example.test/docs/Caf\u00e9"
+    expected_uri = tools._page_resource_uri(site, canonical_url)
+    listed = json.loads(tools.list_pages("Example Docs"))["pages"]
+    searched = json.loads(tools.search_docs("Example Docs", "Alpha"))["results"]
+
+    assert listed[0]["resource_uri"] == expected_uri
+    assert searched[0]["resource_uri"] == expected_uri
+    assert (
+        tools.documentation_page_resource(site["site_id"], expected_uri.rsplit("/", 1)[-1])
+        == "Alpha legacy content"
+    )
+
+
 def test_list_pages_paginates_with_opaque_cursor(monkeypatch, tmp_path):
     """TS-TF-025: list_pages resumes stable pages with an opaque cursor."""
     index_file = tmp_path / "docs.db"
