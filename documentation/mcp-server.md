@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-08-23
-- Version: v4.1
+- Last Updated: 2026-08-29
+- Version: v4.2
 
 ## Change Log
+- 2026-08-29 | v4.2 | Bumped the public MCP contract version to 1.1 to include the resources capability and resource links in the server contract.
 - 2026-08-23 | v4.1 | Standardized MCP tool contracts on JSON with structured errors, safe configuration/index degradation, and complete missing-page behavior; added catalog, site, and indexed-page resources with normalized URI identities and search-result resource links.
 - 2026-08-15 | v3.0 | Consolidated packaged-version harness instructions in the dedicated harness testing guide and kept this reference as a cross-link.
 - 2026-08-02 | v2.3 | Added the packaged-wheel MCP version comparison harness, its safe configuration, fixtures, diagnostics, and CI usage.
@@ -77,7 +78,7 @@ docmcp://sites
 ### Tool Behavior
 
 All tools return a JSON string. Successful responses include `ok: true` and
-`contract_version: "1.0"`; expected failures include `ok: false`, the same
+`contract_version: "1.1"`; expected failures include `ok: false`, the same
 contract version, and an `error` object with a stable `code` and a safe,
 human-readable `message`. Error messages are fixed per public error code; raw
 exception text, credentials, URLs, SQL details, and filesystem paths are logged
@@ -90,17 +91,17 @@ the shared envelope metadata; search failures use the same envelope.
 
 | Tool | Arguments and defaults | Success / empty response | Expected errors | Compatibility |
 | --- | --- | --- | --- | --- |
-| `get_sites` | None | `{"ok": true, "contract_version": "1.0", "sites": [...]}`; empty configuration has `sites: []`. Site entries contain `name`, `url`, `auth_required`, and index `status`/`page_count`. | An unreadable index has `index.status: "unavailable"`; configuration failures return `configuration_unavailable` with a fixed safe message. | The top-level `ok: true` means the site discovery request succeeded; callers must inspect each site's nested index status. |
-| `get_version` | None | `{"ok": true, "contract_version": "1.0", "server_name", "package_name", "version"}`. | None expected. | Preserves prior version fields; version values vary between packages. |
-| `list_pages` | `site_name`: non-empty string | `{"ok": true, "contract_version": "1.0", "site_name", "pages": [...]}`; empty index has `pages: []`. Pages have `title`, `url`, `last_crawled`. | `invalid_argument`, `site_not_found`, `index_unavailable`, `configuration_unavailable`. | Replaces the former Markdown listing. |
+| `get_sites` | None | `{"ok": true, "contract_version": "1.1", "sites": [...]}`; empty configuration has `sites: []`. Site entries contain `name`, `url`, `auth_required`, and index `status`/`page_count`. | An unreadable index has `index.status: "unavailable"`; configuration failures return `configuration_unavailable` with a fixed safe message. | The top-level `ok: true` means the site discovery request succeeded; callers must inspect each site's nested index status. |
+| `get_version` | None | `{"ok": true, "contract_version": "1.1", "server_name", "package_name", "version"}`. | None expected. | Preserves prior version fields; version values vary between packages. |
+| `list_pages` | `site_name`: non-empty string | `{"ok": true, "contract_version": "1.1", "site_name", "pages": [...]}`; empty index has `pages: []`. Pages have `title`, `url`, `last_crawled`. | `invalid_argument`, `site_not_found`, `index_unavailable`, `configuration_unavailable`. | Replaces the former Markdown listing. |
 | `search_docs` | `site_name`, `query`: non-empty strings; `limit=10`, positive integer | `ok`, `contract_version`, plus existing `mode`, counters, and ordered `results`; zero matches use `results: []`. | `invalid_argument`, `site_not_found`, `index_unavailable`, `configuration_unavailable`, and vector fallback codes below. | Existing result fields and schema are unchanged; envelope metadata is additive. |
-| `fetch_page` | `site_name`, `url`: non-empty strings | `{"ok": true, "contract_version": "1.0", "site_name", "page": {"title", "url", "content_md"}}`. | `invalid_argument`, `site_not_found`, `page_not_found`, `index_unavailable`, `configuration_unavailable`. A `page_not_found` response retains `site_name`, the requested `url`, and `page: null`; its error includes both `code` and compatibility alias `type`, with the legacy message `Page not found in index: {url}`. | Replaces the former Markdown page document while preserving the legacy missing-page message. Render `page.content_md` when needed. |
+| `fetch_page` | `site_name`, `url`: non-empty strings | `{"ok": true, "contract_version": "1.1", "site_name", "page": {"title", "url", "content_md"}}`. | `invalid_argument`, `site_not_found`, `page_not_found`, `index_unavailable`, `configuration_unavailable`. A `page_not_found` response retains `site_name`, the requested `url`, and `page: null`; its error includes both `code` and compatibility alias `type`, with the legacy message `Page not found in index: {url}`. | Replaces the former Markdown page document while preserving the legacy missing-page message. Render `page.content_md` when needed. |
 
 Example error:
 
 ```json
 {
-  "contract_version": "1.0",
+  "contract_version": "1.1",
   "ok": false,
   "error": {"code": "site_not_found", "message": "Site 'Missing Docs' not found."}
 }
@@ -112,7 +113,7 @@ Example error:
 ```json
 {
   "ok": true,
-  "contract_version": "1.0",
+  "contract_version": "1.1",
   "mode": "keyword",
   "vector_hits": 0,
   "keyword_hits": 2,
@@ -155,7 +156,7 @@ If no keyword results are available, the tool still returns valid JSON:
 ```json
 {
   "ok": true,
-  "contract_version": "1.0",
+  "contract_version": "1.1",
   "mode": "keyword",
   "vector_hits": 0,
   "keyword_hits": 0,
@@ -171,7 +172,7 @@ If the site name is unknown, the tool returns structured JSON with an `error` ob
   "vector_hits": 0,
   "keyword_hits": 0,
   "results": [],
-  "contract_version": "1.0",
+  "contract_version": "1.1",
   "ok": false,
   "error": {
     "code": "site_not_found",

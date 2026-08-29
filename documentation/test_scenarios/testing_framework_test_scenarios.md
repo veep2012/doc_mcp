@@ -5,12 +5,12 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-05-03
-- Last Updated: 2026-08-23
-- Version: v2.5
+- Last Updated: 2026-08-29
+- Version: v2.7
 - Related Tickets: veep2012/doc_mcp#2
 
 ## Change Log
-- 2026-08-23 | v2.6 | Expanded MCP tool and stdio scenarios for the JSON contract, structured errors, empty states, preserved search semantics for degraded source indexes, fixed safe vector error messages with server-side raw exception logging, complete missing-page response assertions, safe configuration-failure coverage, and normalized MCP resource discovery and reads.
+- 2026-08-29 | v2.7 | Expanded MCP tool and stdio scenarios for the JSON contract, structured errors, empty states, preserved search semantics for degraded source indexes, fixed safe vector error messages with server-side raw exception logging, complete missing-page response assertions, safe configuration-failure coverage, normalized MCP resource discovery and reads, MCP public contract version 1.1, and explicit harness rejection of contract-version mismatches.
 - 2026-08-16 | v2.4 | Extended TS-TF-022 with a real repository-built wheel rewrite and installation check, extended TS-TF-023 with concurrent-process artifact creation coverage so parallel harness runs receive distinct directories, and added diagnostics for vector sidecars built with a different embedding model than configured in sites.yaml.
 - 2026-08-15 | v1.3 | Added failure-boundary coverage for invalid harness options, malformed or mismatched MCP responses, early server exit, and preserved comparison-failure artifacts.
 - 2026-08-14 | v1.0 | Added the lightweight MCP dependency profile and dual full/MCP-only wheel output, including cached baseline/current harness images, live image-build progress, vector-search runtime coverage, shell timeout overrides, concurrent stderr artifact streaming for verbose runs, and fixed internal safety limits after removing the configurable harness timeout.
@@ -65,7 +65,7 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - `TS-TF-010` - Default collection remains usable and reports actionable skips for unavailable optional runtime dependencies.
 - `TS-TF-011` - Test files do not import shared helpers through the `tests.*` package path.
 - `TS-TF-012` - Shared helpers import successfully through the supported pytest and direct Python invocation modes.
-- `TS-TF-013` - The MCP version-comparison harness validates its fixture and safe configuration, runs the checked-in initialization, `get_version`, `alpha`, missing-phrase, and missing-site corpus, normalizes only allowlisted fields (including JSON-encoded `get_version` payload versions), and reports unexpected differences.
+- `TS-TF-013` - The MCP version-comparison harness validates its fixture and safe configuration, runs the checked-in initialization, `get_version`, `alpha`, missing-phrase, and missing-site corpus, requires public contract version `1.1`, rejects any baseline/current `contract_version` mismatch even when package versions are allowlisted, normalizes only allowlisted fields (including JSON-encoded `get_version` payload versions), and reports unexpected differences.
 - `TS-TF-014` - Harness JSON artifacts recursively redact credential-like values, including nested objects and JSON-encoded tool text.
 - `TS-TF-015` - Invalid harness option values fail validation with actionable errors before a comparison starts.
 - `TS-TF-016` - Malformed, mismatched, or prematurely closed MCP responses fail the run and preserve comparison diagnostics.

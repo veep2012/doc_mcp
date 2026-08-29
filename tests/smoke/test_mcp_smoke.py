@@ -59,7 +59,7 @@ async def test_mcp_stdio_search_docs_uses_prepared_index():
 
     payload = json.loads(response)
     assert payload["ok"] is True
-    assert payload["contract_version"] == "1.0"
+    assert payload["contract_version"] == "1.1"
     assert payload["mode"] == "keyword"
     assert payload["vector_hits"] == 0
     assert payload["keyword_hits"] == 1
@@ -73,10 +73,7 @@ async def test_mcp_stdio_search_docs_uses_prepared_index():
 
     resources, templates, catalog = await read_mcp_resource(runtime_root, "docmcp://sites")
     assert any(str(resource.uri) == "docmcp://sites" for resource in resources)
-    assert {
-        template.uriTemplate
-        for template in templates
-    } == {
+    assert {template.uriTemplate for template in templates} == {
         "docmcp://site/{site_id}",
         "docmcp://site/{site_id}/page/{page_key}",
     }
@@ -94,7 +91,7 @@ async def test_mcp_stdio_search_docs_uses_prepared_index():
 
     version_payload = json.loads(await call_mcp_tool(runtime_root, "get_version", {}))
     assert version_payload["ok"] is True
-    assert version_payload["contract_version"] == "1.0"
+    assert version_payload["contract_version"] == "1.1"
 
     pages_payload = json.loads(
         await call_mcp_tool(

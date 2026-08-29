@@ -135,8 +135,7 @@ def documentation_sites_resource() -> str:
         raise ValueError("Server configuration is unavailable.") from exc
     lines = ["# Documentation sites", ""]
     lines.extend(
-        f"- {json.dumps(site['name'], ensure_ascii=False)}: "
-        f"<docmcp://site/{site['site_id']}>"
+        f"- {json.dumps(site['name'], ensure_ascii=False)}: " f"<docmcp://site/{site['site_id']}>"
         for site in sites
     )
     return "\n".join(lines)
@@ -205,7 +204,7 @@ def _emit_observation(event: str, **fields) -> None:
     obs_logger.info(json.dumps(payload, sort_keys=True, default=str))
 
 
-CONTRACT_VERSION = "1.0"
+CONTRACT_VERSION = "1.1"
 
 _VECTOR_ERROR_MESSAGES = {
     "vector_index_missing": "Vector search index is missing.",
@@ -471,11 +470,7 @@ def _merge_search_results(
                 "title": result["title"],
                 "score": result["score"],
                 "source": result["source"],
-                **(
-                    {"resource_uri": result["resource_uri"]}
-                    if "resource_uri" in result
-                    else {}
-                ),
+                **({"resource_uri": result["resource_uri"]} if "resource_uri" in result else {}),
             }
         )
 
@@ -545,7 +540,9 @@ def _vector_search_response(site: dict, query: str, limit: int) -> dict:
     if vector_results:
         response = _empty_search_response("vector")
         response["vector_hits"] = len(vector_results)
-        response["results"] = _public_search_results(_normalize_vector_results(vector_results, site))
+        response["results"] = _public_search_results(
+            _normalize_vector_results(vector_results, site)
+        )
         _log_vector_path_decision(
             site=site,
             search_engine=_site_search_engine(site),
@@ -725,9 +722,7 @@ def search_docs(site_name: str, query: str, limit: int = 10) -> str:
     except sqlite3.Error:
         return _serialize(_degraded_search_response(site))
     vector_results, error = _vector_lookup(site, query, normalized_limit)
-    response = _search_response(
-        keyword_results, vector_results, normalized_limit, error, site=site
-    )
+    response = _search_response(keyword_results, vector_results, normalized_limit, error, site=site)
     _log_vector_path_decision(
         site=site,
         search_engine=search_engine,

@@ -37,7 +37,7 @@ def test_mcp_tools_return_site_pages_search_and_fetch(monkeypatch, tmp_path):
 
     sites_output = json.loads(tools.get_sites())
     assert sites_output == {
-        "contract_version": "1.0",
+        "contract_version": "1.1",
         "ok": True,
         "sites": [
             {
@@ -108,7 +108,9 @@ def test_mcp_resources_read_catalog_site_and_indexed_page(monkeypatch, tmp_path)
     with pytest.raises(ValueError, match="malformed"):
         tools.documentation_page_resource(site["site_id"], "not%zzcanonical")
     with pytest.raises(ValueError, match="not found"):
-        tools.documentation_page_resource(site["site_id"], tools._page_key_from_url("https://else.test"))
+        tools.documentation_page_resource(
+            site["site_id"], tools._page_key_from_url("https://else.test")
+        )
     with pytest.raises(ValueError, match="site resource was not found"):
         tools.documentation_site_resource("Missing")
 
@@ -128,7 +130,7 @@ def test_mcp_tools_report_unknown_site(monkeypatch):
         "vector_hits": 0,
         "keyword_hits": 0,
         "results": [],
-        "contract_version": "1.0",
+        "contract_version": "1.1",
         "ok": False,
         "error": {
             "code": "site_not_found",
@@ -160,7 +162,7 @@ def test_mcp_tools_return_safe_configuration_error_contract(monkeypatch, caplog)
 
     assert responses[0] == {
         "ok": False,
-        "contract_version": "1.0",
+        "contract_version": "1.1",
         "error": {
             "code": "configuration_unavailable",
             "message": "Server configuration is unavailable.",
@@ -255,7 +257,7 @@ def test_tool_contract_reports_empty_invalid_and_unavailable_states(monkeypatch,
     assert json.loads(tools.list_pages("Unavailable Docs"))["error"]["code"] == "index_unavailable"
     assert json.loads(tools.fetch_page("Empty Docs", "https://example.test/missing")) == {
         "ok": False,
-        "contract_version": "1.0",
+        "contract_version": "1.1",
         "site_name": "Empty Docs",
         "url": "https://example.test/missing",
         "page": None,
@@ -899,7 +901,7 @@ def test_search_docs_rejects_non_positive_limit(monkeypatch, tmp_path):
         "vector_hits": 0,
         "keyword_hits": 0,
         "results": [],
-        "contract_version": "1.0",
+        "contract_version": "1.1",
         "ok": False,
         "error": {
             "code": "invalid_argument",
@@ -1159,7 +1161,7 @@ def test_search_response_ranks_mixed_keyword_and_vector_results_deterministicall
 
     assert response == {
         "ok": True,
-        "contract_version": "1.0",
+        "contract_version": "1.1",
         "mode": "hybrid",
         "vector_hits": 2,
         "keyword_hits": 2,
@@ -1344,7 +1346,7 @@ def test_search_docs_returns_vector_only_results_when_keyword_has_no_hits(monkey
 
     assert response == {
         "ok": True,
-        "contract_version": "1.0",
+        "contract_version": "1.1",
         "mode": "vector",
         "vector_hits": 1,
         "keyword_hits": 0,
@@ -1593,7 +1595,7 @@ def test_search_docs_returns_keyword_results_when_vector_lookup_returns_no_hits(
 
     assert response == {
         "ok": True,
-        "contract_version": "1.0",
+        "contract_version": "1.1",
         "mode": "keyword",
         "vector_hits": 0,
         "keyword_hits": 1,
@@ -1717,9 +1719,9 @@ def test_get_version_returns_server_metadata(monkeypatch):
     payload = json.loads(tools.get_version())
 
     assert payload == {
-        "contract_version": "1.0",
+        "contract_version": "1.1",
         "ok": True,
         "package_name": "doc-mcp",
         "server_name": "docs-mcp",
-        "version": "1.2.0",
+        "version": "1.2.1",
     }
