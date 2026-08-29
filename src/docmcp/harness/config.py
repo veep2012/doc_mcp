@@ -101,6 +101,12 @@ def _validate_corpus(path: Path) -> list[dict]:
         raise HarnessError(
             "MCP request corpus must include get_version and at least three search_docs requests."
         )
+    required_resource_methods = {"resources/list", "resources/templates/list", "resources/read"}
+    if not required_resource_methods.issubset(methods):
+        missing = ", ".join(sorted(required_resource_methods - methods))
+        raise HarnessError(
+            "MCP request corpus must include resource discovery and read requests: " + missing
+        )
     for request in corpus:
         if request.get("jsonrpc") != "2.0" or not request.get("method"):
             raise HarnessError("Each MCP request must contain jsonrpc='2.0' and method.")

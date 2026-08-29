@@ -115,27 +115,46 @@ def _fixture(tmp_path: Path) -> None:
             [
                 {"jsonrpc": "2.0", "id": 1, "method": "initialize"},
                 {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
+                {"jsonrpc": "2.0", "id": 3, "method": "resources/list", "params": {}},
                 {
                     "jsonrpc": "2.0",
-                    "id": 2,
+                    "id": 4,
+                    "method": "resources/templates/list",
+                    "params": {},
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 5,
+                    "method": "resources/read",
+                    "params": {"uri": "docmcp://sites"},
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 6,
+                    "method": "resources/read",
+                    "params": {"uri": "docmcp://site/Harness"},
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 7,
                     "method": "tools/call",
                     "params": {"name": "get_version"},
                 },
                 {
                     "jsonrpc": "2.0",
-                    "id": 3,
+                    "id": 8,
                     "method": "tools/call",
                     "params": {"name": "search_docs"},
                 },
                 {
                     "jsonrpc": "2.0",
-                    "id": 4,
+                    "id": 9,
                     "method": "tools/call",
                     "params": {"name": "search_docs"},
                 },
                 {
                     "jsonrpc": "2.0",
-                    "id": 5,
+                    "id": 10,
                     "method": "tools/call",
                     "params": {"name": "search_docs"},
                 },
@@ -165,7 +184,7 @@ def test_load_config_validates_fixture_and_corpus(tmp_path: Path, monkeypatch: p
     config, corpus = load_config(_write_env(tmp_path), root=tmp_path)
 
     assert config.container_bin == "podman"
-    assert len(corpus) == 6
+    assert len(corpus) == 10
     assert corpus[1]["method"] == "notifications/initialized"
     assert "id" not in corpus[1]
 

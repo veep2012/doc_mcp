@@ -10,7 +10,7 @@
 - Related Tickets: veep2012/doc_mcp#14, veep2012/doc_mcp#2
 
 ## Change Log
-- 2026-08-29 | v3.2 | Confirmed that contract version 1.1 is part of the MCP comparison surface and any baseline/current contract mismatch must fail the harness comparison.
+- 2026-08-29 | v3.2 | Confirmed that contract version 1.1 and resource discovery/read requests are part of the MCP comparison surface, and any baseline/current contract mismatch must fail the harness comparison.
 - 2026-08-23 | v3.1 | Clarified that `contract_version` differences are semantic incompatibilities that must fail comparison, and documented the exact package-version paths that may be allowlisted while retaining all other response fields.
 - 2026-08-16 | v3.0 | Documented the required `notifications/initialized` handshake, notification no-response behavior, redacted nonblocking stderr artifact handling, deadline-bound partial-response handling, source/vector fixture integrity preflight, container-runtime precedence, deterministic fixture index/sidecar regeneration, actual checked-in corpus coverage, end-to-end MCP-only wheel rewrite verification, collision-resistant artifact directories, explicit vector embedding-model mismatch diagnostics, and CI validation of the real MCP-only wheel metadata.
 - 2026-08-15 | v1.9 | Documented recursive credential redaction, corrected direct source-tree invocation and optional requirements configuration, and synchronized harness scenario coverage.
@@ -47,7 +47,7 @@ The harness validates installed wheels rather than importing the working tree. I
 ### Functional Requirements
 - FR-1: The baseline and current wheel paths must point to existing `.whl` files.
 - FR-2: The fixture must contain valid `config/sites.yaml`, non-empty readable SQLite indexes containing pages, valid vector sidecars for hybrid/vector sites, and a local `mcp_requests.json` copied from the tracked example.
-- FR-3: The request corpus must include `initialize`, a response-free `notifications/initialized` notification immediately afterward, `get_version`, and at least three `search_docs` calls; the fixture's hybrid/vector configuration must exercise the vector backend.
+- FR-3: The request corpus must include `initialize`, a response-free `notifications/initialized` notification immediately afterward, `get_version`, at least three `search_docs` calls, and representative MCP resource discovery and read requests; the fixture's hybrid/vector configuration must exercise the vector backend.
 - FR-4: The harness must fail on malformed responses, startup failures, timeouts, unavailable runtimes, non-allowlisted response differences, and any `contract_version` mismatch.
 - FR-4a: Each run must remove containers labeled `docmcp.harness=true` before starting new comparison containers.
 - FR-5: Only explicitly configured response paths may be ignored during comparison.
@@ -153,7 +153,7 @@ test -s tests/fixtures/harness/index/example.vec.db
 
 The reset makes regeneration deterministic from the two fixture pages. The vectorizer reads the configured `index/example.db` and replaces the derived `index/example.vec.db` sidecar using the checked-in embedding model and vectorizer settings.
 
-The checked-in corpus initializes the MCP session, sends `notifications/initialized`, requests `get_version`, searches `Harness Docs` for `alpha`, exercises a missing phrase, and requests a missing site. The guide does not promise domain-specific semantic queries or a particular `mode` in this corpus; those behaviors require separate fixture data and assertions. Keep the configured site name and index path aligned with `tests/fixtures/harness/config/sites.yaml`.
+The checked-in corpus initializes the MCP session, sends `notifications/initialized`, discovers MCP resources and templates, reads the catalog, configured site, and a stable indexed page, requests `get_version`, searches `Harness Docs` for representative phrases, and requests a missing site. The guide does not promise domain-specific semantic queries or a particular `mode` in this corpus; those behaviors require separate fixture data and assertions. Keep the configured site name, URL scope, and index path aligned with `tests/fixtures/harness/config/sites.yaml`.
 
 Create the local request corpus from the visible example:
 
@@ -267,6 +267,7 @@ Each request in the local `mcp_requests.json` must be a JSON object containing `
 - one `notifications/initialized` notification immediately after `initialize`, without an ID;
 - one `tools/call` request for `get_version`;
 - at least three `tools/call` requests for `search_docs`;
+- at least one `resources/list`, one `resources/templates/list`, and representative `resources/read` requests for the catalog, a configured site, and an indexed page;
 - valid request IDs on every non-notification entry and valid methods on every entry.
 
 The fixture configuration must resolve successfully. Every configured `index_file` must be a non-empty readable SQLite database containing pages. Each hybrid/vector site must also have its resolved `.vec.db` sidecar with matching source metadata, the supported sidecar schema, the configured embedding model, and non-empty vector records; otherwise preflight fails instead of allowing an always-fallback comparison. If the sidecar was built with a different embedding model, the preflight error identifies both the sidecar and configured models and instructs the operator to rebuild it. The fixture should include success, empty-result, and error behavior so a version change cannot silently break only one response class.
