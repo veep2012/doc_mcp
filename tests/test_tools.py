@@ -33,7 +33,7 @@ def test_mcp_tools_return_site_pages_search_and_fetch(monkeypatch, tmp_path):
                 "url": "https://example.test",
                 "auth_required": False,
                 "index_file": str(index_file),
-            }
+            },
         ],
     )
 
@@ -105,8 +105,13 @@ def test_mcp_resources_read_catalog_site_and_indexed_page(monkeypatch, tmp_path)
     assert "docmcp://site/My%20Private%20Docs" in catalog
     assert str(index_file) not in catalog
     assert site["session_file"] not in catalog
-    assert tools.documentation_site_resource(site["site_id"]).endswith(
-        "docmcp://site/My%20Private%20Docs/page/{page_key}`"
+    assert tools.documentation_site_resource(site["site_id"]) == (
+        "# Documentation site\n\n"
+        'Site name: "My Private Docs"\n'
+        "Page count: 1\n"
+        "Crawl/index status: ready\n\n"
+        "Page URI template: `docmcp://site/My%20Private%20Docs/page/{page_key}`\n\n"
+        'Page catalog: call `list_pages` with site_name="My Private Docs".'
     )
 
     page_key = tools._page_key_from_url(page_url)
@@ -120,6 +125,62 @@ def test_mcp_resources_read_catalog_site_and_indexed_page(monkeypatch, tmp_path)
         )
     with pytest.raises(ValueError, match="site resource was not found"):
         tools.documentation_site_resource("Missing")
+
+
+def test_list_pages_paginates_with_opaque_cursor(monkeypatch, tmp_path):
+    """TS-TF-025: list_pages resumes stable pages with an opaque cursor."""
+    index_file = tmp_path / "docs.db"
+    init_db(str(index_file))
+    for url, title in (
+        ("https://example.test/a", "Alpha"),
+        ("https://example.test/b", "Beta"),
+        ("https://example.test/c", "Gamma"),
+    ):
+        upsert_page(str(index_file), url, title, title)
+
+    monkeypatch.setattr(
+        tools,
+        "_get_sites",
+        lambda: [
+            {
+                "name": "Example Docs",
+                "site_id": "Example%20Docs",
+                "url": "https://example.test",
+                "auth_required": False,
+                "index_file": str(index_file),
+            },
+            {
+                "name": "Other Docs",
+                "site_id": "Other%20Docs",
+                "url": "https://other.example.test",
+                "auth_required": False,
+                "index_file": str(index_file),
+            },
+        ],
+    )
+
+    first = json.loads(tools.list_pages("Example Docs", limit=2))
+    assert [page["title"] for page in first["pages"]] == ["Alpha", "Beta"]
+    assert set(first) == {"ok", "contract_version", "site_name", "pages", "nextCursor"}
+    assert first["nextCursor"]
+    assert "Alpha" not in first["nextCursor"]
+
+    second = json.loads(tools.list_pages("Example Docs", limit=2, cursor=first["nextCursor"]))
+    assert [page["title"] for page in second["pages"]] == ["Gamma"]
+    assert "nextCursor" not in second
+    assert all("resource_uri" in page for page in first["pages"] + second["pages"])
+
+    assert (
+        json.loads(tools.list_pages("Example Docs", limit=0))["error"]["code"] == "invalid_argument"
+    )
+    assert (
+        json.loads(tools.list_pages("Example Docs", cursor="bad"))["error"]["code"]
+        == "invalid_argument"
+    )
+    assert (
+        json.loads(tools.list_pages("Other Docs", cursor=first["nextCursor"]))["error"]["code"]
+        == "invalid_argument"
+    )
 
 
 def test_keyword_score_is_monotonic_with_result_order():

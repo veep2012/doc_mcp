@@ -129,13 +129,26 @@ def get_page(index_file: str, url: str) -> dict | None:
     return None
 
 
-def list_pages(index_file: str) -> list[dict]:
-    """List all indexed pages (url, title, last_crawled)."""
+def list_pages(
+    index_file: str,
+    limit: int | None = None,
+    after: tuple[str, str] | None = None,
+) -> list[dict]:
+    """List indexed pages, optionally after a title/URL key and up to a limit."""
     conn = _get_ro_conn(index_file)
     if conn is None:
         return []
+    query = "SELECT url, title, last_crawled FROM pages"
+    parameters: tuple[object, ...] = ()
+    if after is not None:
+        query += " WHERE (title > ? OR (title = ? AND url > ?))"
+        parameters = (after[0], after[0], after[1])
+    query += " ORDER BY title, url"
+    if limit is not None:
+        query += " LIMIT ?"
+        parameters += (limit,)
     with conn as conn:
-        rows = conn.execute("SELECT url, title, last_crawled FROM pages ORDER BY title").fetchall()
+        rows = conn.execute(query, parameters).fetchall()
     return [{"url": r[0], "title": r[1], "last_crawled": r[2]} for r in rows]
 
 

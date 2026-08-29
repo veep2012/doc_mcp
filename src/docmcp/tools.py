@@ -10,6 +10,8 @@ Tools:
   - get_version   : report the MCP server version
 """
 
+import base64
+import binascii
 import json
 import logging
 import os
@@ -98,6 +100,35 @@ def _page_resource_uri(site: dict, url: str) -> str:
     return f"docmcp://site/{site['site_id']}/page/{_page_key_from_url(url)}"
 
 
+_LIST_PAGES_LIMIT_MAX = 100
+
+
+def _encode_pages_cursor(site: dict, page: dict) -> str:
+    payload = json.dumps(
+        {"site_id": site["site_id"], "title": page["title"], "url": page["url"]},
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return base64.urlsafe_b64encode(payload).decode("ascii").rstrip("=")
+
+
+def _decode_pages_cursor(site: dict, cursor: str) -> tuple[str, str] | None:
+    allowed_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+    if not _valid_nonempty_text(cursor) or any(char not in allowed_chars for char in cursor):
+        return None
+    try:
+        padding = "=" * (-len(cursor) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(cursor + padding).decode("utf-8"))
+    except (ValueError, UnicodeDecodeError, binascii.Error):
+        return None
+    if not isinstance(payload, dict) or payload.get("site_id") != site.get("site_id"):
+        return None
+    title, url = payload.get("title"), payload.get("url")
+    if not isinstance(title, str) or not isinstance(url, str) or not title or not url:
+        return None
+    return title, url
+
+
 def _decode_page_key(page_key: str) -> str | None:
     if not _valid_nonempty_text(page_key):
         return None
@@ -119,6 +150,17 @@ def _resource_site_or_error(site_id: str) -> dict:
     if not site:
         raise ValueError("Documentation site resource was not found.")
     return site
+
+
+def _site_index_metadata(site: dict) -> dict[str, int | str | None]:
+    """Return the compact public index metadata shared by site disclosures."""
+    if not Path(site["index_file"]).is_file():
+        return {"status": "unavailable", "page_count": None}
+    try:
+        return {"status": "ready", "page_count": count_pages(site["index_file"])}
+    except (OSError, sqlite3.Error):
+        logger.warning("Could not read index status for site %r", site["name"], exc_info=True)
+        return {"status": "unavailable", "page_count": None}
 
 
 @mcp.resource(
@@ -148,15 +190,21 @@ def documentation_sites_resource() -> str:
     mime_type="text/markdown",
 )
 def documentation_site_resource(site_id: str) -> str:
-    """Return a safe representation of one configured documentation site."""
+    """Return compact public metadata for one configured documentation site."""
     site = _resource_site_or_error(site_id)
+    index = _site_index_metadata(site)
+    page_count = index["page_count"] if index["page_count"] is not None else "unknown"
     return "\n".join(
         [
             "# Documentation site",
             "",
-            f"Name: {json.dumps(site['name'], ensure_ascii=False)}",
+            f"Site name: {json.dumps(site['name'], ensure_ascii=False)}",
+            f"Page count: {page_count}",
+            f"Crawl/index status: {index['status']}",
             "",
-            f"Indexed page URI template: `docmcp://site/{site['site_id']}/page/{{page_key}}`",
+            f"Page URI template: `docmcp://site/{site['site_id']}/page/{{page_key}}`",
+            "",
+            f"Page catalog: call `list_pages` with site_name={json.dumps(site['name'], ensure_ascii=False)}.",
         ]
     )
 
@@ -593,22 +641,7 @@ def get_sites() -> str:
         return _serialize(_configuration_error_response())
     result = []
     for site in sites:
-        if not Path(site["index_file"]).is_file():
-            result.append(
-                {
-                    "name": site["name"],
-                    "url": site["url"],
-                    "auth_required": bool(site.get("auth_required")),
-                    "index": {"status": "unavailable", "page_count": None},
-                }
-            )
-            continue
-        try:
-            n = count_pages(site["index_file"])
-            index = {"status": "ready", "page_count": n}
-        except (OSError, sqlite3.Error):
-            logger.warning("Could not read index status for site %r", site["name"], exc_info=True)
-            index = {"status": "unavailable", "page_count": None}
+        index = _site_index_metadata(site)
         result.append(
             {
                 "name": site["name"],
@@ -632,14 +665,24 @@ def get_version() -> str:
 
 
 @mcp.tool()
-def list_pages(site_name: str) -> str:
+def list_pages(site_name: str, limit: int = 100, cursor: str | None = None) -> str:
     """List all indexed pages for a documentation site.
 
     Args:
         site_name: Name of the site as configured in sites.yaml
+        limit: Maximum number of pages to return (default: 100, maximum: 100)
+        cursor: Opaque cursor returned by a previous call
     """
     if not _valid_nonempty_text(site_name):
         return _serialize(_tool_error("invalid_argument", "site_name must be a non-empty string."))
+    if (
+        isinstance(limit, bool)
+        or not isinstance(limit, int)
+        or not 0 < limit <= _LIST_PAGES_LIMIT_MAX
+    ):
+        return _serialize(
+            _tool_error("invalid_argument", "limit must be an integer from 1 to 100.")
+        )
     try:
         site = _find_site(site_name)
     except _ConfigurationUnavailableError:
@@ -650,29 +693,35 @@ def list_pages(site_name: str) -> str:
         return _serialize(
             _tool_error("index_unavailable", f"The index for '{site['name']}' is unavailable.")
         )
+    after = None if cursor is None else _decode_pages_cursor(site, cursor)
+    if cursor is not None and after is None:
+        return _serialize(_tool_error("invalid_argument", "cursor is invalid for this site."))
     try:
-        pages = _list_pages(site["index_file"])
+        pages = _list_pages(site["index_file"], limit=limit + 1, after=after)
     except (OSError, sqlite3.Error):
         logger.warning("Could not list pages for site %r", site["name"], exc_info=True)
         return _serialize(
             _tool_error("index_unavailable", f"The index for '{site['name']}' is unavailable.")
         )
+    has_more = len(pages) > limit
+    pages = pages[:limit]
     if not pages:
         return _serialize(_tool_success(site_name=site["name"], pages=[]))
-    return _serialize(
-        _tool_success(
-            site_name=site["name"],
-            pages=[
-                {
-                    "title": page["title"],
-                    "url": page["url"],
-                    "resource_uri": _page_resource_uri(site, page["url"]),
-                    "last_crawled": page["last_crawled"],
-                }
-                for page in pages
-            ],
-        )
+    response = _tool_success(
+        site_name=site["name"],
+        pages=[
+            {
+                "title": page["title"],
+                "url": page["url"],
+                "resource_uri": _page_resource_uri(site, page["url"]),
+                "last_crawled": page["last_crawled"],
+            }
+            for page in pages
+        ],
     )
+    if has_more:
+        response["nextCursor"] = _encode_pages_cursor(site, pages[-1])
+    return _serialize(response)
 
 
 @mcp.tool()
