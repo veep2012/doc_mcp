@@ -102,6 +102,10 @@ async def test_mcp_stdio_search_docs_uses_prepared_index():
     )
     assert pages_payload["ok"] is True
     assert pages_payload["pages"][0]["title"] == "Guide"
+    assert (
+        pages_payload["pages"][0]["resource_uri"]
+        == "docmcp://site/Prepared%20Docs/page/https%3A%2F%2Fexample.test%2Fguide"
+    )
 
     page_payload = json.loads(
         await call_mcp_tool(

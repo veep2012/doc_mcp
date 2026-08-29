@@ -17,6 +17,7 @@ def _require_vector_backend():
 
 
 def test_mcp_tools_return_site_pages_search_and_fetch(monkeypatch, tmp_path):
+    """TS-TF-006: list_pages includes a deterministic resource URI per page."""
     index_file = tmp_path / "docs.db"
     init_db(str(index_file))
     upsert_page(str(index_file), "https://example.test/guide", "Guide", "Alpha beta")
@@ -28,6 +29,7 @@ def test_mcp_tools_return_site_pages_search_and_fetch(monkeypatch, tmp_path):
         lambda: [
             {
                 "name": "Example Docs",
+                "site_id": "Example%20Docs",
                 "url": "https://example.test",
                 "auth_required": False,
                 "index_file": str(index_file),
@@ -52,6 +54,10 @@ def test_mcp_tools_return_site_pages_search_and_fetch(monkeypatch, tmp_path):
     list_output = json.loads(tools.list_pages("Example Docs"))
     assert list_output["ok"] is True
     assert [page["title"] for page in list_output["pages"]] == ["Guide", "Install"]
+    assert [page["resource_uri"] for page in list_output["pages"]] == [
+        "docmcp://site/Example%20Docs/page/https%3A%2F%2Fexample.test%2Fguide",
+        "docmcp://site/Example%20Docs/page/https%3A%2F%2Fexample.test%2Finstall",
+    ]
 
     search_output = json.loads(tools.search_docs("Example Docs", "Alpha"))
     assert search_output["mode"] == "keyword"
@@ -61,6 +67,7 @@ def test_mcp_tools_return_site_pages_search_and_fetch(monkeypatch, tmp_path):
         {
             "text": "[Alpha] beta",
             "page_url": "https://example.test/guide",
+            "resource_uri": "docmcp://site/Example%20Docs/page/https%3A%2F%2Fexample.test%2Fguide",
             "title": "Guide",
             "score": search_output["results"][0]["score"],
             "source": "keyword",

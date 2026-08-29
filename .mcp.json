@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "docs-mcp": {
+      "command": "${PWD}/.venv/bin/python",
+      "args": ["-m", "src.main"],
+      "env": {
+        "PYTHONPATH": "${PWD}",
+        "DOC_MCP_HOME": "${PWD}",
+        "CONFIG_FILE": "config/sites.yaml",
+        "MCP_SERVER_NAME": "docs-mcp"
+      }
+    }
+  }
+}

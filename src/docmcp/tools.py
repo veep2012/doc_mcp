@@ -663,7 +663,12 @@ def list_pages(site_name: str) -> str:
         _tool_success(
             site_name=site["name"],
             pages=[
-                {"title": page["title"], "url": page["url"], "last_crawled": page["last_crawled"]}
+                {
+                    "title": page["title"],
+                    "url": page["url"],
+                    "resource_uri": _page_resource_uri(site, page["url"]),
+                    "last_crawled": page["last_crawled"],
+                }
                 for page in pages
             ],
         )
