@@ -658,7 +658,7 @@ def _degraded_search_response(site: dict) -> dict:
 
 @mcp.tool()
 def get_sites() -> str:
-    """List configured sites as a JSON contract with their index status."""
+    """List configured documentation sites and their local index status."""
     try:
         sites = _load_sites()
     except _ConfigurationUnavailableError:
@@ -690,7 +690,7 @@ def get_version() -> str:
 
 @mcp.tool()
 def list_pages(site_name: str, limit: int = 100, cursor: str | None = None) -> str:
-    """List all indexed pages for a documentation site.
+    """List pages currently available in the local index for a documentation site.
 
     Args:
         site_name: Name of the site as configured in sites.yaml
@@ -750,7 +750,7 @@ def list_pages(site_name: str, limit: int = 100, cursor: str | None = None) -> s
 
 @mcp.tool()
 def search_docs(site_name: str, query: str, limit: int = 10) -> str:
-    """Full-text search across indexed documentation pages.
+    """Search locally indexed documentation using the configured search engine.
 
     Args:
         site_name: Name of the site to search
@@ -815,7 +815,7 @@ def search_docs(site_name: str, query: str, limit: int = 10) -> str:
 
 @mcp.tool()
 def fetch_page(site_name: str, url: str) -> str:
-    """Fetch the full Markdown content of a documentation page by URL.
+    """Fetch the full Markdown content of a documentation page by URL from the local index.
 
     Args:
         site_name: Name of the site

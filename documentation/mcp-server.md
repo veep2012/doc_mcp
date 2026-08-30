@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-08-29
-- Version: v4.2
+- Last Updated: 2026-08-30
+- Version: v4.3
 
 ## Change Log
+- 2026-08-30 | v4.3 | Clarified that site discovery, page listing, search, and page retrieval use the configured/local index and that `search_docs` uses the configured search engine.
 - 2026-08-29 | v4.2 | Bumped the public MCP contract version to 1.1 to include the resources capability, discoverable site and page resource templates, compact site-resource metadata, resource links in the server contract, deterministic and scope-checked page `resource_uri` values on every `list_pages` entry, paginated page listing with continuation cursors, and canonical-identity resolution for newly stored and legacy URL variants so emitted page resource URIs remain readable.
 - 2026-08-23 | v4.1 | Standardized MCP tool contracts on JSON with structured errors, safe configuration/index degradation, and complete missing-page behavior; added catalog, site, and indexed-page resources with normalized URI identities and search-result resource links.
 - 2026-08-15 | v3.0 | Consolidated packaged-version harness instructions in the dedicated harness testing guide and kept this reference as a cross-link.
@@ -54,11 +55,11 @@ python -m src.main
 ```
 
 ### Available Tools
-- `get_sites`
+- `get_sites` — list configured documentation sites and their local index status.
 - `get_version`
-- `list_pages(site_name, limit=100, cursor=null)`
-- `search_docs(site_name, query, limit=10)`
-- `fetch_page(site_name, url)`
+- `list_pages(site_name, limit=100, cursor=null)` — list pages currently available in the local index.
+- `search_docs(site_name, query, limit=10)` — search locally indexed documentation using the configured search engine.
+- `fetch_page(site_name, url)` — fetch Markdown content for a page from the local index.
 
 ### Resources
 The server advertises the MCP `resources` capability in addition to the existing tools. Tools remain available and retain their JSON contracts.
