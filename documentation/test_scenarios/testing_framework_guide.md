@@ -5,11 +5,12 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers and external QA
 - Created: 2026-07-26
-- Last Updated: 2026-07-26
-- Version: v0.1
+- Last Updated: 2026-08-29
+- Version: v0.2
 - Related Documents: [Testing Framework Test Scenarios](testing_framework_test_scenarios.md)
 
 ## Change Log
+- 2026-08-29 | v0.2 | Updated MCP smoke coverage guidance for resource capability discovery, valid resource reads, and rejected malformed, missing, and out-of-scope page reads.
 - 2026-07-26 | v0.1 | Added the external-QA guide for the pytest framework, repository layout, commands, shared helpers, and smoke-test diagnostics.
 
 ## Purpose
@@ -203,7 +204,7 @@ Each smoke test creates its own temporary runtime root. The test environment is 
 
 The root is cleaned up at Python process exit through `atexit`. While a test process is running, use the printed `runtime_root` and `log_file` paths to inspect evidence. Preserve relevant log output in the QA report before rerunning if the next run may replace the evidence.
 
-Smoke configuration normally uses paths relative to `DOC_MCP_HOME`. The crawl smoke test sets `auth_required: false`, uses a temporary HTTP site, and writes `index/smoke.db`. The MCP smoke test writes `index/prepared.db` and validates JSON fields including `mode`, hit counts, title, URL, and result source.
+Smoke configuration normally uses paths relative to `DOC_MCP_HOME`. The crawl smoke test sets `auth_required: false`, uses a temporary HTTP site, and writes `index/smoke.db`. The MCP smoke test writes `index/prepared.db`, verifies the initialized `resources` capability and site/page resource templates, reads a valid page resource, rejects malformed, missing, and out-of-scope resource reads, and validates JSON fields including `mode`, hit counts, title, URL, resource URI, and result source.
 
 ### Where to See E2E Results and Logs
 

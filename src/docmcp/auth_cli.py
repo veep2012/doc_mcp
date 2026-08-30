@@ -15,7 +15,7 @@ import sys
 from dotenv import load_dotenv
 
 from . import __version__
-from .config.loader import ConfigError, get_sites
+from .config.loader import ConfigError, find_site, get_sites
 
 load_dotenv()
 
@@ -59,7 +59,7 @@ def main():
             print(f"  - {site['name']} ({auth}) — {site['url']}")
         return
 
-    site = next((s for s in sites if s["name"].lower() == args.site.lower()), None)
+    site = find_site(sites, args.site)
 
     if not site:
         print(f"Site '{args.site}' not found in config. Use --list to see available sites.")

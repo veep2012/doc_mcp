@@ -1,3 +1,5 @@
+import sqlite3
+
 from docmcp.index_store import count_pages, get_page, init_db, list_pages, search_pages, upsert_page
 
 
@@ -56,10 +58,30 @@ def test_read_paths_do_not_create_missing_index_file(tmp_path):
     index_file = index_dir / "docs.db"
 
     assert not index_file.exists()
-
     assert search_pages(str(index_file), "Alpha") == []
     assert get_page(str(index_file), "https://example.test/missing") is None
     assert list_pages(str(index_file)) == []
     assert count_pages(str(index_file)) == 0
 
     assert not index_file.exists()
+
+
+def test_upsert_stores_canonical_url_and_reads_legacy_url_variants(tmp_path):
+    index_file = tmp_path / "docs.db"
+    legacy_url = "HTTPS://EXAMPLE.TEST/guide/"
+    canonical_url = "https://example.test/guide"
+
+    init_db(str(index_file))
+    upsert_page(str(index_file), legacy_url, "Guide", "Alpha content")
+
+    assert get_page(str(index_file), canonical_url)["url"] == canonical_url
+
+    with sqlite3.connect(str(index_file)) as conn:
+        conn.execute(
+            "UPDATE pages SET url = ? WHERE url = ?",
+            ("HTTPS://EXAMPLE.TEST/guide/#intro", canonical_url),
+        )
+
+    page = get_page(str(index_file), canonical_url)
+    assert page is not None
+    assert page["url"] == "HTTPS://EXAMPLE.TEST/guide/#intro"

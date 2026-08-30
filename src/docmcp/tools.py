@@ -10,11 +10,14 @@ Tools:
   - get_version   : report the MCP server version
 """
 
+import base64
+import binascii
 import json
 import logging
 import os
 import sqlite3
 from pathlib import Path
+from urllib.parse import quote, unquote, urlsplit
 
 try:
     from mcp.server.fastmcp import FastMCP
@@ -30,13 +33,25 @@ except ModuleNotFoundError:  # pragma: no cover - only used in minimal test envi
 
             return decorator
 
+        def resource(self, uri: str, **kwargs):
+            def decorator(func):
+                return func
+
+            return decorator
+
         def run(self, transport: str = "stdio"):
             raise ModuleNotFoundError("mcp is required to run the MCP server")
 
 
 from . import __version__
-from .config.loader import ConfigError, get_sites as _get_sites, _normalize_search_engine
+from .config.loader import (
+    ConfigError,
+    find_site,
+    get_sites as _get_sites,
+    _normalize_search_engine,
+)
 from .index_store import (
+    _canonical_page_url,
     _normalize_search_limit,
     count_pages,
     get_page,
@@ -73,10 +88,173 @@ def _load_sites() -> list[dict]:
 
 
 def _find_site(name: str) -> dict | None:
-    for site in _load_sites():
-        if site["name"].lower() == name.lower():
-            return site
+    return find_site(_load_sites(), name)
+
+
+def _page_key_from_url(url: str) -> str:
+    """Encode a canonical page URL as one URI-safe resource path segment."""
+    return quote(_canonical_page_url(url), safe="")
+
+
+def _page_resource_uri(site: dict, url: str) -> str:
+    return f"docmcp://site/{site['site_id']}/page/{_page_key_from_url(url)}"
+
+
+_LIST_PAGES_LIMIT_MAX = 100
+
+
+def _encode_pages_cursor(site: dict, page: dict) -> str:
+    payload = json.dumps(
+        {"site_id": site["site_id"], "title": page["title"], "url": page["url"]},
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return base64.urlsafe_b64encode(payload).decode("ascii").rstrip("=")
+
+
+def _decode_pages_cursor(site: dict, cursor: str) -> tuple[str, str] | None:
+    allowed_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+    if not _valid_nonempty_text(cursor) or any(char not in allowed_chars for char in cursor):
+        return None
+    try:
+        padding = "=" * (-len(cursor) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(cursor + padding).decode("utf-8"))
+    except (ValueError, UnicodeDecodeError, binascii.Error):
+        return None
+    if not isinstance(payload, dict) or payload.get("site_id") != site.get("site_id"):
+        return None
+    title, url = payload.get("title"), payload.get("url")
+    if not isinstance(title, str) or not isinstance(url, str) or not title or not url:
+        return None
+    return title, url
+
+
+def _decode_page_key(page_key: str) -> str | None:
+    if not _valid_nonempty_text(page_key):
+        return None
+    decoded = unquote(page_key)
+    if quote(decoded, safe="") != page_key:
+        return None
+    return decoded
+
+
+def _find_site_by_id(site_id: str) -> dict | None:
+    return next((site for site in _load_sites() if site["site_id"] == site_id), None)
+
+
+def _resource_site_or_error(site_id: str) -> dict:
+    try:
+        site = _find_site_by_id(site_id)
+    except _ConfigurationUnavailableError as exc:
+        raise ValueError("Server configuration is unavailable.") from exc
+    if not site:
+        raise ValueError("Documentation site resource was not found.")
+    return site
+
+
+def _resource_scope_reason(site: dict, page_url: str) -> str | None:
+    """Return a safe reason when a page URL is outside the configured site scope."""
+    try:
+        page = urlsplit(page_url)
+        crawl = site.get("crawl") or {}
+        scope_url = crawl.get("start_url") or site.get("url")
+        scope = urlsplit(scope_url)
+    except (AttributeError, TypeError, ValueError):
+        return "page URL is malformed"
+
+    if page.scheme not in {"http", "https"} or page.netloc.lower() != scope.netloc.lower():
+        return "page URL is outside the configured site host"
+
+    scope_path = scope.path.rstrip("/") or "/"
+    page_path = page.path or "/"
+    if scope_path != "/" and page_path != scope_path and not page_path.startswith(f"{scope_path}/"):
+        return "page URL is outside the configured site path"
     return None
+
+
+def _site_index_metadata(site: dict) -> dict[str, int | str | None]:
+    """Return the compact public index metadata shared by site disclosures."""
+    if not Path(site["index_file"]).is_file():
+        return {"status": "unavailable", "page_count": None}
+    try:
+        return {"status": "ready", "page_count": count_pages(site["index_file"])}
+    except (OSError, sqlite3.Error):
+        logger.warning("Could not read index status for site %r", site["name"], exc_info=True)
+        return {"status": "unavailable", "page_count": None}
+
+
+@mcp.resource(
+    "docmcp://sites",
+    name="Documentation sites",
+    description="Configured documentation sites.",
+    mime_type="text/markdown",
+)
+def documentation_sites_resource() -> str:
+    """Return the configured documentation catalog without private settings."""
+    try:
+        sites = _load_sites()
+    except _ConfigurationUnavailableError as exc:
+        raise ValueError("Server configuration is unavailable.") from exc
+    lines = ["# Documentation sites", ""]
+    lines.extend(
+        f"- {json.dumps(site['name'], ensure_ascii=False)}: " f"<docmcp://site/{site['site_id']}>"
+        for site in sites
+    )
+    return "\n".join(lines)
+
+
+@mcp.resource(
+    "docmcp://site/{site_id}",
+    name="Documentation site",
+    description="A configured documentation site with addressable child page resources.",
+    mime_type="text/markdown",
+)
+def documentation_site_resource(site_id: str) -> str:
+    """Return compact public metadata for one configured documentation site."""
+    site = _resource_site_or_error(site_id)
+    index = _site_index_metadata(site)
+    page_count = index["page_count"] if index["page_count"] is not None else "unknown"
+    return "\n".join(
+        [
+            "# Documentation site",
+            "",
+            f"Site name: {json.dumps(site['name'], ensure_ascii=False)}",
+            f"Page count: {page_count}",
+            f"Crawl/index status: {index['status']}",
+            "",
+            f"Page URI template: `docmcp://site/{site['site_id']}/page/{{page_key}}`",
+            "",
+            f"Page catalog: call `list_pages` with site_name={json.dumps(site['name'], ensure_ascii=False)}.",
+        ]
+    )
+
+
+@mcp.resource(
+    "docmcp://site/{site_id}/page/{page_key}",
+    name="Documentation page",
+    description="An indexed documentation page in Markdown.",
+    mime_type="text/markdown",
+)
+def documentation_page_resource(site_id: str, page_key: str) -> str:
+    """Return one indexed page after strict resource-URI validation."""
+    site = _resource_site_or_error(site_id)
+    page_url = _decode_page_key(page_key)
+    if page_url is None:
+        raise ValueError("Documentation page resource URI is malformed.")
+    page_url = _canonical_page_url(page_url)
+    scope_reason = _resource_scope_reason(site, page_url)
+    if scope_reason:
+        raise ValueError("Documentation page resource is out of scope.")
+    if not Path(site["index_file"]).is_file():
+        raise ValueError("Documentation page resource is unavailable.")
+    try:
+        page = get_page(site["index_file"], page_url)
+    except (OSError, sqlite3.Error) as exc:
+        logger.warning("Could not read page resource for site %r", site["name"], exc_info=True)
+        raise ValueError("Documentation page resource is unavailable.") from exc
+    if not page:
+        raise ValueError("Documentation page resource was not found.")
+    return page["content_md"]
 
 
 def _configuration_error_response() -> dict:
@@ -98,7 +276,7 @@ def _emit_observation(event: str, **fields) -> None:
     obs_logger.info(json.dumps(payload, sort_keys=True, default=str))
 
 
-CONTRACT_VERSION = "1.0"
+CONTRACT_VERSION = "1.1"
 
 _VECTOR_ERROR_MESSAGES = {
     "vector_index_missing": "Vector search index is missing.",
@@ -291,8 +469,8 @@ def _vector_lookup_strict(site: dict, query: str, limit: int) -> tuple[list[dict
         return [], _vector_lookup_error(site, vector_index_file, exc)
 
 
-def _normalize_keyword_results(results: list[dict]) -> list[dict]:
-    return [
+def _normalize_keyword_results(results: list[dict], site: dict | None = None) -> list[dict]:
+    normalized_results = [
         {
             "text": result.get("excerpt") or "",
             "page_url": result["url"],
@@ -303,10 +481,14 @@ def _normalize_keyword_results(results: list[dict]) -> list[dict]:
         }
         for index, result in enumerate(results)
     ]
+    if site and site.get("site_id"):
+        for result in normalized_results:
+            result["resource_uri"] = _page_resource_uri(site, result["page_url"])
+    return normalized_results
 
 
-def _normalize_vector_results(results: list[dict]) -> list[dict]:
-    return [
+def _normalize_vector_results(results: list[dict], site: dict | None = None) -> list[dict]:
+    normalized_results = [
         {
             "text": result.get("text") or "",
             "page_url": result["page_url"],
@@ -317,6 +499,10 @@ def _normalize_vector_results(results: list[dict]) -> list[dict]:
         }
         for result in results
     ]
+    if site and site.get("site_id"):
+        for result in normalized_results:
+            result["resource_uri"] = _page_resource_uri(site, result["page_url"])
+    return normalized_results
 
 
 def _public_search_results(results: list[dict]) -> list[dict]:
@@ -356,6 +542,7 @@ def _merge_search_results(
                 "title": result["title"],
                 "score": result["score"],
                 "source": result["source"],
+                **({"resource_uri": result["resource_uri"]} if "resource_uri" in result else {}),
             }
         )
 
@@ -372,11 +559,16 @@ def _select_search_mode(contributors: set[str]) -> str:
 
 
 def _search_response(
-    keyword_results: list[dict], vector_results: list[dict], limit: int, error: dict | None = None
+    keyword_results: list[dict],
+    vector_results: list[dict],
+    limit: int,
+    error: dict | None = None,
+    *,
+    site: dict | None = None,
 ) -> dict:
     response = _empty_search_response()
-    normalized_keyword_results = _normalize_keyword_results(keyword_results)
-    normalized_vector_results = _normalize_vector_results(vector_results)
+    normalized_keyword_results = _normalize_keyword_results(keyword_results, site)
+    normalized_vector_results = _normalize_vector_results(vector_results, site)
     merged_results, contributors = _merge_search_results(
         normalized_vector_results, normalized_keyword_results, limit
     )
@@ -402,7 +594,7 @@ def _keyword_search_response(site: dict, query: str, limit: int) -> dict:
         )
     response = _empty_search_response("keyword")
     response["keyword_hits"] = len(keyword_results)
-    response["results"] = _public_search_results(_normalize_keyword_results(keyword_results))
+    response["results"] = _public_search_results(_normalize_keyword_results(keyword_results, site))
     _log_vector_path_decision(
         site=site,
         search_engine=_site_search_engine(site),
@@ -420,7 +612,9 @@ def _vector_search_response(site: dict, query: str, limit: int) -> dict:
     if vector_results:
         response = _empty_search_response("vector")
         response["vector_hits"] = len(vector_results)
-        response["results"] = _public_search_results(_normalize_vector_results(vector_results))
+        response["results"] = _public_search_results(
+            _normalize_vector_results(vector_results, site)
+        )
         _log_vector_path_decision(
             site=site,
             search_engine=_site_search_engine(site),
@@ -435,7 +629,7 @@ def _vector_search_response(site: dict, query: str, limit: int) -> dict:
     keyword_results = _keyword_lookup(site, query, limit)
     response = _empty_search_response("keyword")
     response["keyword_hits"] = len(keyword_results)
-    response["results"] = _public_search_results(_normalize_keyword_results(keyword_results))
+    response["results"] = _public_search_results(_normalize_keyword_results(keyword_results, site))
     if error:
         response["ok"] = False
         response["contract_version"] = CONTRACT_VERSION
@@ -464,29 +658,14 @@ def _degraded_search_response(site: dict) -> dict:
 
 @mcp.tool()
 def get_sites() -> str:
-    """List configured sites as a JSON contract with their index status."""
+    """List configured documentation sites and their local index status."""
     try:
         sites = _load_sites()
     except _ConfigurationUnavailableError:
         return _serialize(_configuration_error_response())
     result = []
     for site in sites:
-        if not Path(site["index_file"]).is_file():
-            result.append(
-                {
-                    "name": site["name"],
-                    "url": site["url"],
-                    "auth_required": bool(site.get("auth_required")),
-                    "index": {"status": "unavailable", "page_count": None},
-                }
-            )
-            continue
-        try:
-            n = count_pages(site["index_file"])
-            index = {"status": "ready", "page_count": n}
-        except (OSError, sqlite3.Error):
-            logger.warning("Could not read index status for site %r", site["name"], exc_info=True)
-            index = {"status": "unavailable", "page_count": None}
+        index = _site_index_metadata(site)
         result.append(
             {
                 "name": site["name"],
@@ -510,14 +689,24 @@ def get_version() -> str:
 
 
 @mcp.tool()
-def list_pages(site_name: str) -> str:
-    """List all indexed pages for a documentation site.
+def list_pages(site_name: str, limit: int = 100, cursor: str | None = None) -> str:
+    """List pages currently available in the local index for a documentation site.
 
     Args:
         site_name: Name of the site as configured in sites.yaml
+        limit: Maximum number of pages to return (default: 100, maximum: 100)
+        cursor: Opaque cursor returned by a previous call
     """
     if not _valid_nonempty_text(site_name):
         return _serialize(_tool_error("invalid_argument", "site_name must be a non-empty string."))
+    if (
+        isinstance(limit, bool)
+        or not isinstance(limit, int)
+        or not 0 < limit <= _LIST_PAGES_LIMIT_MAX
+    ):
+        return _serialize(
+            _tool_error("invalid_argument", "limit must be an integer from 1 to 100.")
+        )
     try:
         site = _find_site(site_name)
     except _ConfigurationUnavailableError:
@@ -528,29 +717,40 @@ def list_pages(site_name: str) -> str:
         return _serialize(
             _tool_error("index_unavailable", f"The index for '{site['name']}' is unavailable.")
         )
+    after = None if cursor is None else _decode_pages_cursor(site, cursor)
+    if cursor is not None and after is None:
+        return _serialize(_tool_error("invalid_argument", "cursor is invalid for this site."))
     try:
-        pages = _list_pages(site["index_file"])
+        pages = _list_pages(site["index_file"], limit=limit + 1, after=after)
     except (OSError, sqlite3.Error):
         logger.warning("Could not list pages for site %r", site["name"], exc_info=True)
         return _serialize(
             _tool_error("index_unavailable", f"The index for '{site['name']}' is unavailable.")
         )
+    has_more = len(pages) > limit
+    pages = pages[:limit]
     if not pages:
         return _serialize(_tool_success(site_name=site["name"], pages=[]))
-    return _serialize(
-        _tool_success(
-            site_name=site["name"],
-            pages=[
-                {"title": page["title"], "url": page["url"], "last_crawled": page["last_crawled"]}
-                for page in pages
-            ],
-        )
+    response = _tool_success(
+        site_name=site["name"],
+        pages=[
+            {
+                "title": page["title"],
+                "url": page["url"],
+                "resource_uri": _page_resource_uri(site, page["url"]),
+                "last_crawled": page["last_crawled"],
+            }
+            for page in pages
+        ],
     )
+    if has_more:
+        response["nextCursor"] = _encode_pages_cursor(site, pages[-1])
+    return _serialize(response)
 
 
 @mcp.tool()
 def search_docs(site_name: str, query: str, limit: int = 10) -> str:
-    """Full-text search across indexed documentation pages.
+    """Search locally indexed documentation using the configured search engine.
 
     Args:
         site_name: Name of the site to search
@@ -600,7 +800,7 @@ def search_docs(site_name: str, query: str, limit: int = 10) -> str:
     except sqlite3.Error:
         return _serialize(_degraded_search_response(site))
     vector_results, error = _vector_lookup(site, query, normalized_limit)
-    response = _search_response(keyword_results, vector_results, normalized_limit, error)
+    response = _search_response(keyword_results, vector_results, normalized_limit, error, site=site)
     _log_vector_path_decision(
         site=site,
         search_engine=search_engine,
@@ -615,7 +815,7 @@ def search_docs(site_name: str, query: str, limit: int = 10) -> str:
 
 @mcp.tool()
 def fetch_page(site_name: str, url: str) -> str:
-    """Fetch the full Markdown content of a documentation page by URL.
+    """Fetch the full Markdown content of a documentation page by URL from the local index.
 
     Args:
         site_name: Name of the site

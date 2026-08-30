@@ -8,7 +8,7 @@ import sys
 from dotenv import load_dotenv
 
 from . import __version__
-from .config.loader import ConfigError, get_sites
+from .config.loader import ConfigError, find_site, get_sites
 from .vector_index import (
     VectorBackendUnavailableError,
     VectorIndexError,
@@ -58,9 +58,7 @@ def main() -> None:
             print(f"  - {site['name']} -> {resolve_vector_index_file(site)}")
         return
 
-    site = next(
-        (candidate for candidate in sites if candidate["name"].lower() == args.site.lower()), None
-    )
+    site = find_site(sites, args.site)
     if not site:
         print(
             f"[vectorize] Site '{args.site}' not found. Use --list to see available sites.",

@@ -5,10 +5,12 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-06-21
-- Version: v1.4
+- Last Updated: 2026-08-29
+- Version: v1.6
 
 ## Change Log
+- 2026-08-29 | v1.6 | Documented canonical page-resource URLs, configured host/start-path scope enforcement, and the authentication boundary for MCP resource reads.
+- 2026-08-23 | v1.5 | Added normalized site configuration and MCP resource access to the runtime overview.
 - 2026-06-21 | v1.4 | Added the local vector sidecar to the runtime overview and clarified the data flow between crawl, vectorize, and MCP query time.
 - 2026-05-21 | v1.3 | Clarified the full MCP tool surface and the runtime env resolution behavior.
 - 2026-05-20 | v1.2 | Noted the current CLI version/help behavior and the source-tree versus installed command model.
@@ -45,8 +47,8 @@ flowchart TD
 - `docmcp-crawl` opens the site in Playwright, walks the documentation tree, converts HTML to Markdown, and stores results in SQLite.
 - `docmcp-vectorize` reads the crawl index after a crawl and writes the optional local vector sidecar.
 - `docmcp-server` starts the MCP server in stdio mode through `src/docmcp/main.py`.
-- `src/docmcp/tools.py` exposes the MCP tools used by clients.
-- `src/docmcp/config/loader.py` loads `config/sites.yaml` and resolves `${ENV_VAR}` placeholders from the runtime `.env` plus process env.
+- `src/docmcp/tools.py` exposes MCP tools and documentation resources used by clients.
+- `src/docmcp/config/loader.py` is the shared site-configuration path. It resolves `${ENV_VAR}` placeholders, validates each site, derives NFC-normalized names, and creates deterministic URI-safe site IDs.
 - `src/docmcp/index_store.py` manages the SQLite schema, FTS5 index, and page upserts.
 - The CLI entry points support `--help` and `--version` without forcing the browser-heavy auth or crawl imports unless they are needed.
 
@@ -57,6 +59,7 @@ flowchart TD
 4. Each crawled page is normalized, converted to Markdown, and written to SQLite.
 5. The vectorizer can optionally build a local vector sidecar from the crawl index.
 6. The MCP server reads from SQLite and, when available, the vector sidecar to return site lists, page lists, search results, or page content to AI clients.
+7. Clients may use either the existing tools or resources: `docmcp://sites`, `docmcp://site/<site-id>`, and `docmcp://site/<site-id>/page/<page-key>`. Page resource keys use canonical NFC-normalized URLs with lowercased scheme/host, removed fragments, and normalized trailing slashes; reads reject URLs outside the configured host/start path. Search results include page resource links for direct Markdown reads. Authenticated-site access is established before indexing; the local MCP server does not provide per-caller authorization.
 
 ### Storage Layout
 - Sessions: `storage/<site>.json`

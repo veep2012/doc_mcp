@@ -7,6 +7,8 @@ import re
 import math
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
+from unicodedata import normalize
 
 import yaml
 from dotenv import dotenv_values
@@ -34,6 +36,30 @@ def _runtime_root() -> Path:
 # glob patterns, or scalar options in the current schema, not local paths.
 _RUNTIME_PATH_KEYS = frozenset({"session_file", "index_file", "vector_index_file"})
 _REDIRECT_POLICIES = frozenset({"final", "requested", "skip"})
+
+
+def _canonical_site_name(name: str) -> str:
+    """Return the shared canonical form used to identify a configured site."""
+    return normalize("NFC", name.strip())
+
+
+def site_id_from_name(name: str) -> str:
+    """Return the URI-safe identity for a canonical site name."""
+    return quote(_canonical_site_name(name), safe="")
+
+
+def find_site(sites: list[dict], name: str) -> dict | None:
+    """Find a site using the repository's case-insensitive canonical name policy."""
+    if not isinstance(name, str):
+        return None
+    canonical_name_key = _canonical_site_name(name).casefold()
+    for site in sites:
+        configured_name = site.get("canonical_name")
+        if not isinstance(configured_name, str):
+            configured_name = _canonical_site_name(site.get("name", ""))
+        if configured_name.casefold() == canonical_name_key:
+            return site
+    return None
 
 
 def _resolve_runtime_path(value: Any, root: Path) -> Any:
@@ -139,6 +165,13 @@ def _validate_non_negative_int(value: object, field_name: str, site_name: str | 
 def _validate_site_config(site: dict) -> dict:
     site_name = site.get("name")
     _validate_non_empty_string(site_name, "site.name")
+    canonical_name = _canonical_site_name(site_name)
+    if not canonical_name:
+        raise ConfigError(
+            f"Invalid site.name: received {site_name!r}; expected a non-empty string."
+        )
+    site["canonical_name"] = canonical_name
+    site["site_id"] = site_id_from_name(canonical_name)
     _validate_non_empty_string(site.get("url"), "site.url", site_name)
     _validate_bool(site.get("auth_required"), "site.auth_required", site_name)
     if "session_file" in site and site["session_file"] is not None:
@@ -260,10 +293,19 @@ def _validate_sites(config: Any) -> list[dict]:
         )
 
     validated_sites: list[dict] = []
+    site_names: set[str] = set()
     for site in sites:
         if not isinstance(site, dict):
             raise ConfigError(f"Invalid site entry: expected a mapping, received {site!r}.")
-        validated_sites.append(_validate_site_config(site))
+        validated_site = _validate_site_config(site)
+        identity_key = validated_site["canonical_name"].casefold()
+        if identity_key in site_names:
+            raise ConfigError(
+                "Duplicate site identity after name normalization: "
+                f"{validated_site['canonical_name']!r}."
+            )
+        site_names.add(identity_key)
+        validated_sites.append(validated_site)
 
     config["sites"] = validated_sites
     return validated_sites
@@ -340,7 +382,4 @@ def get_sites(config_path: str | None = None) -> list[dict]:
 
 def get_site_by_name(name: str, config_path: str | None = None) -> dict | None:
     """Find a site config by its name."""
-    for site in get_sites(config_path):
-        if site.get("name") == name:
-            return site
-    return None
+    return find_site(get_sites(config_path), name)

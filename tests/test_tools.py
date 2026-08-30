@@ -17,6 +17,7 @@ def _require_vector_backend():
 
 
 def test_mcp_tools_return_site_pages_search_and_fetch(monkeypatch, tmp_path):
+    """TS-TF-006: list_pages includes a deterministic resource URI per page."""
     index_file = tmp_path / "docs.db"
     init_db(str(index_file))
     upsert_page(str(index_file), "https://example.test/guide", "Guide", "Alpha beta")
@@ -28,16 +29,17 @@ def test_mcp_tools_return_site_pages_search_and_fetch(monkeypatch, tmp_path):
         lambda: [
             {
                 "name": "Example Docs",
+                "site_id": "Example%20Docs",
                 "url": "https://example.test",
                 "auth_required": False,
                 "index_file": str(index_file),
-            }
+            },
         ],
     )
 
     sites_output = json.loads(tools.get_sites())
     assert sites_output == {
-        "contract_version": "1.0",
+        "contract_version": "1.1",
         "ok": True,
         "sites": [
             {
@@ -52,6 +54,10 @@ def test_mcp_tools_return_site_pages_search_and_fetch(monkeypatch, tmp_path):
     list_output = json.loads(tools.list_pages("Example Docs"))
     assert list_output["ok"] is True
     assert [page["title"] for page in list_output["pages"]] == ["Guide", "Install"]
+    assert [page["resource_uri"] for page in list_output["pages"]] == [
+        "docmcp://site/Example%20Docs/page/https%3A%2F%2Fexample.test%2Fguide",
+        "docmcp://site/Example%20Docs/page/https%3A%2F%2Fexample.test%2Finstall",
+    ]
 
     search_output = json.loads(tools.search_docs("Example Docs", "Alpha"))
     assert search_output["mode"] == "keyword"
@@ -61,6 +67,7 @@ def test_mcp_tools_return_site_pages_search_and_fetch(monkeypatch, tmp_path):
         {
             "text": "[Alpha] beta",
             "page_url": "https://example.test/guide",
+            "resource_uri": "docmcp://site/Example%20Docs/page/https%3A%2F%2Fexample.test%2Fguide",
             "title": "Guide",
             "score": search_output["results"][0]["score"],
             "source": "keyword",
@@ -75,6 +82,173 @@ def test_mcp_tools_return_site_pages_search_and_fetch(monkeypatch, tmp_path):
         "url": "https://example.test/guide",
         "content_md": "Alpha beta",
     }
+
+
+def test_mcp_resources_read_catalog_site_and_indexed_page(monkeypatch, tmp_path):
+    """TS-TF-024: Resources expose safe catalog, site, and indexed-page Markdown."""
+    index_file = tmp_path / "private" / "docs.db"
+    init_db(str(index_file))
+    page_url = "https://example.test/guide?language=中文"
+    upsert_page(str(index_file), page_url, "Guide", "# Guide\n\nAlpha beta")
+    site = {
+        "name": "My Private Docs",
+        "canonical_name": "My Private Docs",
+        "site_id": "My%20Private%20Docs",
+        "url": "https://example.test",
+        "auth_required": True,
+        "index_file": str(index_file),
+        "session_file": str(tmp_path / "private" / "session.json"),
+    }
+    monkeypatch.setattr(tools, "_get_sites", lambda: [site])
+
+    catalog = tools.documentation_sites_resource()
+    assert "docmcp://site/My%20Private%20Docs" in catalog
+    assert str(index_file) not in catalog
+    assert site["session_file"] not in catalog
+    assert tools.documentation_site_resource(site["site_id"]) == (
+        "# Documentation site\n\n"
+        'Site name: "My Private Docs"\n'
+        "Page count: 1\n"
+        "Crawl/index status: ready\n\n"
+        "Page URI template: `docmcp://site/My%20Private%20Docs/page/{page_key}`\n\n"
+        'Page catalog: call `list_pages` with site_name="My Private Docs".'
+    )
+
+    listed_page = json.loads(tools.list_pages("My Private Docs"))["pages"][0]
+    listed_page_key = listed_page["resource_uri"].split("/page/", 1)[1]
+    assert tools.documentation_page_resource(site["site_id"], listed_page_key) == (
+        "# Guide\n\nAlpha beta"
+    )
+    page_key = tools._page_key_from_url(page_url)
+    assert tools.documentation_page_resource(site["site_id"], page_key) == "# Guide\n\nAlpha beta"
+    assert tools._page_resource_uri(site, page_url).endswith(f"/page/{page_key}")
+    with pytest.raises(ValueError, match="malformed"):
+        tools.documentation_page_resource(site["site_id"], "not%zzcanonical")
+    with pytest.raises(ValueError, match="out of scope"):
+        tools.documentation_page_resource(
+            site["site_id"], tools._page_key_from_url("https://else.test")
+        )
+    with pytest.raises(ValueError, match="site resource was not found"):
+        tools.documentation_site_resource("Missing")
+
+
+def test_mcp_page_resource_canonicalizes_and_enforces_scope(monkeypatch, tmp_path):
+    """TS-TF-024: Page resources canonicalize URLs and reject out-of-scope pages."""
+    index_file = tmp_path / "docs.db"
+    init_db(str(index_file))
+    upsert_page(str(index_file), "https://example.test/docs/guide", "Guide", "Guide content")
+    upsert_page(str(index_file), "https://other.test/docs/secret", "Secret", "Secret content")
+    site = {
+        "name": "Example Docs",
+        "canonical_name": "Example Docs",
+        "site_id": "Example%20Docs",
+        "url": "https://example.test",
+        "auth_required": False,
+        "index_file": str(index_file),
+        "crawl": {"start_url": "https://example.test/docs"},
+    }
+    monkeypatch.setattr(tools, "_get_sites", lambda: [site])
+
+    noncanonical_key = tools._page_key_from_url("https://EXAMPLE.TEST/docs/guide/")
+    assert tools.documentation_page_resource(site["site_id"], noncanonical_key) == "Guide content"
+
+    out_of_scope_key = tools._page_key_from_url("https://other.test/docs/secret")
+    with pytest.raises(ValueError, match="out of scope"):
+        tools.documentation_page_resource(site["site_id"], out_of_scope_key)
+
+    out_of_scope_path_key = tools._page_key_from_url("https://example.test/private/secret")
+    with pytest.raises(ValueError, match="out of scope"):
+        tools.documentation_page_resource(site["site_id"], out_of_scope_path_key)
+
+
+def test_legacy_url_variants_have_readable_list_and_search_resource_uris(monkeypatch, tmp_path):
+    """TS-TF-024: Canonical resource URIs resolve legacy URL variants."""
+    index_file = tmp_path / "docs.db"
+    init_db(str(index_file))
+    legacy_url = "HTTPS://EXAMPLE.TEST/docs/Cafe\u0301/#intro"
+    with sqlite3.connect(str(index_file)) as conn:
+        conn.execute(
+            "INSERT INTO pages (url, title, content_md, last_crawled) VALUES (?, ?, ?, ?)",
+            (legacy_url, "Cafe", "Alpha legacy content", "2026-08-29T00:00:00+00:00"),
+        )
+
+    site = {
+        "name": "Example Docs",
+        "site_id": "Example%20Docs",
+        "url": "https://example.test",
+        "auth_required": False,
+        "index_file": str(index_file),
+        "crawl": {"start_url": "https://example.test/docs"},
+    }
+    monkeypatch.setattr(tools, "_get_sites", lambda: [site])
+
+    canonical_url = "https://example.test/docs/Caf\u00e9"
+    expected_uri = tools._page_resource_uri(site, canonical_url)
+    listed = json.loads(tools.list_pages("Example Docs"))["pages"]
+    searched = json.loads(tools.search_docs("Example Docs", "Alpha"))["results"]
+
+    assert listed[0]["resource_uri"] == expected_uri
+    assert searched[0]["resource_uri"] == expected_uri
+    assert (
+        tools.documentation_page_resource(site["site_id"], expected_uri.rsplit("/", 1)[-1])
+        == "Alpha legacy content"
+    )
+
+
+def test_list_pages_paginates_with_opaque_cursor(monkeypatch, tmp_path):
+    """TS-TF-025: list_pages resumes stable pages with an opaque cursor."""
+    index_file = tmp_path / "docs.db"
+    init_db(str(index_file))
+    for url, title in (
+        ("https://example.test/a", "Alpha"),
+        ("https://example.test/b", "Beta"),
+        ("https://example.test/c", "Gamma"),
+    ):
+        upsert_page(str(index_file), url, title, title)
+
+    monkeypatch.setattr(
+        tools,
+        "_get_sites",
+        lambda: [
+            {
+                "name": "Example Docs",
+                "site_id": "Example%20Docs",
+                "url": "https://example.test",
+                "auth_required": False,
+                "index_file": str(index_file),
+            },
+            {
+                "name": "Other Docs",
+                "site_id": "Other%20Docs",
+                "url": "https://other.example.test",
+                "auth_required": False,
+                "index_file": str(index_file),
+            },
+        ],
+    )
+
+    first = json.loads(tools.list_pages("Example Docs", limit=2))
+    assert [page["title"] for page in first["pages"]] == ["Alpha", "Beta"]
+    assert set(first) == {"ok", "contract_version", "site_name", "pages", "nextCursor"}
+    assert first["nextCursor"]
+    assert "Alpha" not in first["nextCursor"]
+
+    second = json.loads(tools.list_pages("Example Docs", limit=2, cursor=first["nextCursor"]))
+    assert [page["title"] for page in second["pages"]] == ["Gamma"]
+    assert "nextCursor" not in second
+    assert all("resource_uri" in page for page in first["pages"] + second["pages"])
+
+    assert (
+        json.loads(tools.list_pages("Example Docs", limit=0))["error"]["code"] == "invalid_argument"
+    )
+    assert (
+        json.loads(tools.list_pages("Example Docs", cursor="bad"))["error"]["code"]
+        == "invalid_argument"
+    )
+    assert (
+        json.loads(tools.list_pages("Other Docs", cursor=first["nextCursor"]))["error"]["code"]
+        == "invalid_argument"
+    )
 
 
 def test_keyword_score_is_monotonic_with_result_order():
@@ -92,7 +266,7 @@ def test_mcp_tools_report_unknown_site(monkeypatch):
         "vector_hits": 0,
         "keyword_hits": 0,
         "results": [],
-        "contract_version": "1.0",
+        "contract_version": "1.1",
         "ok": False,
         "error": {
             "code": "site_not_found",
@@ -124,7 +298,7 @@ def test_mcp_tools_return_safe_configuration_error_contract(monkeypatch, caplog)
 
     assert responses[0] == {
         "ok": False,
-        "contract_version": "1.0",
+        "contract_version": "1.1",
         "error": {
             "code": "configuration_unavailable",
             "message": "Server configuration is unavailable.",
@@ -219,7 +393,7 @@ def test_tool_contract_reports_empty_invalid_and_unavailable_states(monkeypatch,
     assert json.loads(tools.list_pages("Unavailable Docs"))["error"]["code"] == "index_unavailable"
     assert json.loads(tools.fetch_page("Empty Docs", "https://example.test/missing")) == {
         "ok": False,
-        "contract_version": "1.0",
+        "contract_version": "1.1",
         "site_name": "Empty Docs",
         "url": "https://example.test/missing",
         "page": None,
@@ -863,7 +1037,7 @@ def test_search_docs_rejects_non_positive_limit(monkeypatch, tmp_path):
         "vector_hits": 0,
         "keyword_hits": 0,
         "results": [],
-        "contract_version": "1.0",
+        "contract_version": "1.1",
         "ok": False,
         "error": {
             "code": "invalid_argument",
@@ -1123,7 +1297,7 @@ def test_search_response_ranks_mixed_keyword_and_vector_results_deterministicall
 
     assert response == {
         "ok": True,
-        "contract_version": "1.0",
+        "contract_version": "1.1",
         "mode": "hybrid",
         "vector_hits": 2,
         "keyword_hits": 2,
@@ -1308,7 +1482,7 @@ def test_search_docs_returns_vector_only_results_when_keyword_has_no_hits(monkey
 
     assert response == {
         "ok": True,
-        "contract_version": "1.0",
+        "contract_version": "1.1",
         "mode": "vector",
         "vector_hits": 1,
         "keyword_hits": 0,
@@ -1557,7 +1731,7 @@ def test_search_docs_returns_keyword_results_when_vector_lookup_returns_no_hits(
 
     assert response == {
         "ok": True,
-        "contract_version": "1.0",
+        "contract_version": "1.1",
         "mode": "keyword",
         "vector_hits": 0,
         "keyword_hits": 1,
@@ -1681,9 +1855,9 @@ def test_get_version_returns_server_metadata(monkeypatch):
     payload = json.loads(tools.get_version())
 
     assert payload == {
-        "contract_version": "1.0",
+        "contract_version": "1.1",
         "ok": True,
         "package_name": "doc-mcp",
         "server_name": "docs-mcp",
-        "version": "1.2.0",
+        "version": "1.2.1",
     }

@@ -7,7 +7,10 @@ from docmcp.index_store import init_db, upsert_page
 from smoke_support import (
     call_mcp_tool,
     call_search_docs,
+    initialize_mcp_capabilities,
     print_smoke_context,
+    read_mcp_resource,
+    read_mcp_resource_failure,
     smoke_artifact_root,
     smoke_log_file,
 )
@@ -16,6 +19,7 @@ from smoke_support import (
 @pytest.mark.smoke
 @pytest.mark.mcp_smoke
 async def test_mcp_stdio_search_docs_uses_prepared_index():
+    """TS-TF-024: MCP resources advertise capabilities and addressable site pages."""
     runtime_root = smoke_artifact_root("mcp")
 
     index_file = runtime_root / "index" / "prepared.db"
@@ -38,6 +42,9 @@ async def test_mcp_stdio_search_docs_uses_prepared_index():
         encoding="utf-8",
     )
 
+    capabilities = await initialize_mcp_capabilities(runtime_root)
+    assert capabilities.resources is not None
+
     print_smoke_context(
         "mcp smoke",
         [
@@ -58,13 +65,46 @@ async def test_mcp_stdio_search_docs_uses_prepared_index():
 
     payload = json.loads(response)
     assert payload["ok"] is True
-    assert payload["contract_version"] == "1.0"
+    assert payload["contract_version"] == "1.1"
     assert payload["mode"] == "keyword"
     assert payload["vector_hits"] == 0
     assert payload["keyword_hits"] == 1
     assert payload["results"][0]["title"] == "Guide"
     assert payload["results"][0]["page_url"] == "https://example.test/guide"
     assert payload["results"][0]["source"] == "keyword"
+    assert (
+        payload["results"][0]["resource_uri"]
+        == "docmcp://site/Prepared%20Docs/page/https%3A%2F%2Fexample.test%2Fguide"
+    )
+
+    resources, templates, catalog = await read_mcp_resource(runtime_root, "docmcp://sites")
+    assert any(str(resource.uri) == "docmcp://sites" for resource in resources)
+    assert {template.uriTemplate for template in templates} == {
+        "docmcp://site/{site_id}",
+        "docmcp://site/{site_id}/page/{page_key}",
+    }
+    assert "docmcp://site/Prepared%20Docs" in catalog
+
+    _, _, page_resource = await read_mcp_resource(
+        runtime_root,
+        "docmcp://site/Prepared%20Docs/page/https%3A%2F%2Fexample.test%2Fguide",
+    )
+    assert page_resource == "Alpha beta gamma"
+    malformed_error = await read_mcp_resource_failure(
+        runtime_root,
+        "docmcp://site/Prepared%20Docs/page/not%2fcanonical",
+    )
+    assert "malformed" in malformed_error.lower()
+    missing_page_error = await read_mcp_resource_failure(
+        runtime_root,
+        "docmcp://site/Prepared%20Docs/page/https%3A%2F%2Fexample.test%2Fmissing",
+    )
+    assert "not found" in missing_page_error.lower()
+    out_of_scope_error = await read_mcp_resource_failure(
+        runtime_root,
+        "docmcp://site/Prepared%20Docs/page/https%3A%2F%2Fother.test%2Fsecret",
+    )
+    assert "out of scope" in out_of_scope_error.lower()
 
     sites_payload = json.loads(await call_mcp_tool(runtime_root, "get_sites", {}))
     assert sites_payload["ok"] is True
@@ -72,7 +112,7 @@ async def test_mcp_stdio_search_docs_uses_prepared_index():
 
     version_payload = json.loads(await call_mcp_tool(runtime_root, "get_version", {}))
     assert version_payload["ok"] is True
-    assert version_payload["contract_version"] == "1.0"
+    assert version_payload["contract_version"] == "1.1"
 
     pages_payload = json.loads(
         await call_mcp_tool(
@@ -83,6 +123,14 @@ async def test_mcp_stdio_search_docs_uses_prepared_index():
     )
     assert pages_payload["ok"] is True
     assert pages_payload["pages"][0]["title"] == "Guide"
+    assert (
+        pages_payload["pages"][0]["resource_uri"]
+        == "docmcp://site/Prepared%20Docs/page/https%3A%2F%2Fexample.test%2Fguide"
+    )
+    _, _, listed_page_resource = await read_mcp_resource(
+        runtime_root, pages_payload["pages"][0]["resource_uri"]
+    )
+    assert listed_page_resource == "Alpha beta gamma"
 
     page_payload = json.loads(
         await call_mcp_tool(

@@ -46,5 +46,37 @@
       "name": "search_docs",
       "arguments": {"site_name": "Missing Docs", "query": "alpha", "limit": 1}
     }
+  },
+  {
+    "jsonrpc": "2.0",
+    "id": 6,
+    "method": "resources/list",
+    "params": {}
+  },
+  {
+    "jsonrpc": "2.0",
+    "id": 7,
+    "method": "resources/templates/list",
+    "params": {}
+  },
+  {
+    "jsonrpc": "2.0",
+    "id": 8,
+    "method": "resources/read",
+    "params": {"uri": "docmcp://sites"}
+  },
+  {
+    "jsonrpc": "2.0",
+    "id": 9,
+    "method": "resources/read",
+    "params": {"uri": "docmcp://site/Harness%20Docs"}
+  },
+  {
+    "jsonrpc": "2.0",
+    "id": 10,
+    "method": "resources/read",
+    "params": {
+      "uri": "docmcp://site/Harness%20Docs/page/https%3A%2F%2Fexample.test%2Falpha"
+    }
   }
 ]

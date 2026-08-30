@@ -31,7 +31,7 @@ from urllib.parse import urljoin, urlparse, urlunparse
 from dotenv import load_dotenv
 
 from . import __version__
-from .config.loader import ConfigError, get_sites
+from .config.loader import ConfigError, find_site, get_sites
 from .config.playwright import BrowserUnavailableError, launch_browser, resolve_playwright_settings
 from .index_store import init_db, upsert_page
 from .vector_index import (
@@ -1330,7 +1330,7 @@ def main():
             print(f"  - {s['name']} ({auth}) — {s['url']}")
         return
 
-    site = next((s for s in sites if s["name"].lower() == args.site.lower()), None)
+    site = find_site(sites, args.site)
     if not site:
         print(f"[crawl] Site '{args.site}' not found. Use --list to see available sites.")
         sys.exit(1)

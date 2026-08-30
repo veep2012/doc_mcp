@@ -6,8 +6,19 @@ Uses SQLite FTS5 for full-text keyword search.
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
+from unicodedata import normalize
+from urllib.parse import urlsplit, urlunsplit
 
 _SEARCH_LIMIT_MAX = 100
+
+
+def _canonical_page_url(url: str) -> str:
+    """Return the stable identity used for indexed page URLs."""
+    parsed = urlsplit(normalize("NFC", url))
+    path = parsed.path
+    if path != "/" and path.endswith("/"):
+        path = path.rstrip("/")
+    return urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(), path, parsed.query, ""))
 
 
 def _get_conn(index_file: str) -> sqlite3.Connection:
@@ -73,6 +84,7 @@ def init_db(index_file: str) -> None:
 def upsert_page(index_file: str, url: str, title: str, content_md: str) -> None:
     """Insert or update a page in the index."""
     last_crawled = datetime.now(timezone.utc).isoformat()
+    canonical_url = _canonical_page_url(url)
     with _get_conn(index_file) as conn:
         conn.execute(
             """
@@ -83,7 +95,7 @@ def upsert_page(index_file: str, url: str, title: str, content_md: str) -> None:
                 content_md   = excluded.content_md,
                 last_crawled = excluded.last_crawled
         """,
-            (url, title, content_md, last_crawled),
+            (canonical_url, title, content_md, last_crawled),
         )
 
 
@@ -116,26 +128,54 @@ def search_pages(index_file: str, query: str, limit: int = 10) -> list[dict]:
 
 
 def get_page(index_file: str, url: str) -> dict | None:
-    """Fetch a single page by URL."""
+    """Fetch a single page by canonical URL identity, including legacy rows."""
     conn = _get_ro_conn(index_file)
     if conn is None:
         return None
+    canonical_url = _canonical_page_url(url)
     with conn as conn:
         row = conn.execute(
-            "SELECT url, title, content_md, last_crawled FROM pages WHERE url = ?", (url,)
+            "SELECT url, title, content_md, last_crawled FROM pages WHERE url = ?",
+            (canonical_url,),
         ).fetchone()
+        if row is None:
+            # Indexes created before canonical URL storage may contain raw URL variants.
+            rows = conn.execute(
+                "SELECT url, title, content_md, last_crawled FROM pages ORDER BY id"
+            ).fetchall()
+            row = next(
+                (
+                    candidate
+                    for candidate in rows
+                    if _canonical_page_url(candidate[0]) == canonical_url
+                ),
+                None,
+            )
     if row:
         return {"url": row[0], "title": row[1], "content_md": row[2], "last_crawled": row[3]}
     return None
 
 
-def list_pages(index_file: str) -> list[dict]:
-    """List all indexed pages (url, title, last_crawled)."""
+def list_pages(
+    index_file: str,
+    limit: int | None = None,
+    after: tuple[str, str] | None = None,
+) -> list[dict]:
+    """List indexed pages, optionally after a title/URL key and up to a limit."""
     conn = _get_ro_conn(index_file)
     if conn is None:
         return []
+    query = "SELECT url, title, last_crawled FROM pages"
+    parameters: tuple[object, ...] = ()
+    if after is not None:
+        query += " WHERE (title > ? OR (title = ? AND url > ?))"
+        parameters = (after[0], after[0], after[1])
+    query += " ORDER BY title, url"
+    if limit is not None:
+        query += " LIMIT ?"
+        parameters += (limit,)
     with conn as conn:
-        rows = conn.execute("SELECT url, title, last_crawled FROM pages ORDER BY title").fetchall()
+        rows = conn.execute(query, parameters).fetchall()
     return [{"url": r[0], "title": r[1], "last_crawled": r[2]} for r in rows]
 
 

@@ -5,11 +5,13 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-08-23
-- Version: v4.0
+- Last Updated: 2026-08-30
+- Version: v4.3
 
 ## Change Log
-- 2026-08-23 | v4.0 | Standardized all MCP tool contracts on JSON, added the contract matrix and structured error convention, documented the Markdown-to-JSON migration for site, page-list, and page-fetch tools, fixed vector fallback messages so raw exception diagnostics remain server-side only, documented corrupt keyword indexes as `index_unavailable` failures, specified the full `page_not_found` response shape and preserved its legacy message, clarified per-site index degradation in `get_sites`, and added the safe `configuration_unavailable` contract.
+- 2026-08-30 | v4.3 | Clarified that site discovery, page listing, search, and page retrieval use the configured/local index and that `search_docs` uses the configured search engine.
+- 2026-08-29 | v4.2 | Bumped the public MCP contract version to 1.1 to include the resources capability, discoverable site and page resource templates, compact site-resource metadata, resource links in the server contract, deterministic and scope-checked page `resource_uri` values on every `list_pages` entry, paginated page listing with continuation cursors, and canonical-identity resolution for newly stored and legacy URL variants so emitted page resource URIs remain readable.
+- 2026-08-23 | v4.1 | Standardized MCP tool contracts on JSON with structured errors, safe configuration/index degradation, and complete missing-page behavior; added catalog, site, and indexed-page resources with normalized URI identities and search-result resource links.
 - 2026-08-15 | v3.0 | Consolidated packaged-version harness instructions in the dedicated harness testing guide and kept this reference as a cross-link.
 - 2026-08-02 | v2.3 | Added the packaged-wheel MCP version comparison harness, its safe configuration, fixtures, diagnostics, and CI usage.
 - 2026-06-21 | v2.2 | Defined the vector sidecar compatibility contract with strict schema-version checks, deterministic keyword fallback reasons, rebuild-based migration guidance, crawl-fingerprint stale detection based on source content hashes and crawl timestamps, and release-facing search contract wording.
@@ -53,16 +55,32 @@ python -m src.main
 ```
 
 ### Available Tools
-- `get_sites`
+- `get_sites` — list configured documentation sites and their local index status.
 - `get_version`
-- `list_pages(site_name)`
-- `search_docs(site_name, query, limit=10)`
-- `fetch_page(site_name, url)`
+- `list_pages(site_name, limit=100, cursor=null)` — list pages currently available in the local index.
+- `search_docs(site_name, query, limit=10)` — search locally indexed documentation using the configured search engine.
+- `fetch_page(site_name, url)` — fetch Markdown content for a page from the local index.
+
+### Resources
+The server advertises the MCP `resources` capability in addition to the existing tools. Tools remain available and retain their JSON contracts.
+
+```text
+docmcp://sites
+└── docmcp://site/<site-id>
+    └── docmcp://site/<site-id>/page/<page-key>
+```
+
+- `docmcp://sites` is a readable Markdown catalog of configured documentation sites. It links to each site resource and does not disclose session paths, index paths, credentials, or private configuration.
+- `docmcp://site/<site-id>` is a parameterized compact site resource template. Its presence indicates that the site has addressable child page resources. It returns the site name, indexed page count, crawl/index status, page URI template, and instructions to call `list_pages` for the page catalog. `<site-id>` is the normalized, UTF-8 percent-encoded identity described in [configuration.md](configuration.md). It does not return page contents, the site URL, filesystem paths, credentials, or other private configuration.
+- `docmcp://site/<site-id>/page/<page-key>` is the parameterized indexed-page resource template. `<page-key>` is the canonical page URL normalized to NFC, with scheme/host lowercased, fragments removed, and a trailing path slash removed except for `/`, then UTF-8 percent-encoded as one URI segment. New index writes store this canonical URL; reads also resolve legacy rows by the same canonical identity. It is stable while the canonical URL remains unchanged.
+- Reading a valid page resource returns the indexed Markdown content only when the canonical URL belongs to the configured site host and crawl start path. Missing sites/pages, malformed page keys, out-of-scope URLs, unavailable indexes, and unavailable configuration return safe MCP protocol errors without filesystem paths, credentials, or raw configuration diagnostics.
+- For sites with `auth_required: true`, authentication is performed before crawling and indexing; MCP resource reads use the resulting configured index and do not implement per-caller identity or session authorization.
+- `search_docs` includes `resource_uri` on each result when the normalized configuration supplies a site identity, allowing clients to read the matching page directly. `list_pages` includes the same deterministic `resource_uri` for every page entry and supports bounded continuation pagination.
 
 ### Tool Behavior
 
 All tools return a JSON string. Successful responses include `ok: true` and
-`contract_version: "1.0"`; expected failures include `ok: false`, the same
+`contract_version: "1.1"`; expected failures include `ok: false`, the same
 contract version, and an `error` object with a stable `code` and a safe,
 human-readable `message`. Error messages are fixed per public error code; raw
 exception text, credentials, URLs, SQL details, and filesystem paths are logged
@@ -75,17 +93,17 @@ the shared envelope metadata; search failures use the same envelope.
 
 | Tool | Arguments and defaults | Success / empty response | Expected errors | Compatibility |
 | --- | --- | --- | --- | --- |
-| `get_sites` | None | `{"ok": true, "contract_version": "1.0", "sites": [...]}`; empty configuration has `sites: []`. Site entries contain `name`, `url`, `auth_required`, and index `status`/`page_count`. | An unreadable index has `index.status: "unavailable"`; configuration failures return `configuration_unavailable` with a fixed safe message. | The top-level `ok: true` means the site discovery request succeeded; callers must inspect each site's nested index status. |
-| `get_version` | None | `{"ok": true, "contract_version": "1.0", "server_name", "package_name", "version"}`. | None expected. | Preserves prior version fields; version values vary between packages. |
-| `list_pages` | `site_name`: non-empty string | `{"ok": true, "contract_version": "1.0", "site_name", "pages": [...]}`; empty index has `pages: []`. Pages have `title`, `url`, `last_crawled`. | `invalid_argument`, `site_not_found`, `index_unavailable`, `configuration_unavailable`. | Replaces the former Markdown listing. |
+| `get_sites` | None | `{"ok": true, "contract_version": "1.1", "sites": [...]}`; empty configuration has `sites: []`. Site entries contain `name`, `url`, `auth_required`, and index `status`/`page_count`. | An unreadable index has `index.status: "unavailable"`; configuration failures return `configuration_unavailable` with a fixed safe message. | The top-level `ok: true` means the site discovery request succeeded; callers must inspect each site's nested index status. |
+| `get_version` | None | `{"ok": true, "contract_version": "1.1", "server_name", "package_name", "version"}`. | None expected. | Preserves prior version fields; version values vary between packages. |
+| `list_pages` | `site_name`: non-empty string; `limit`: integer from 1 to 100, default 100; `cursor`: optional opaque cursor from a prior response | `{"ok": true, "contract_version": "1.1", "site_name", "pages": [...]}`; empty index has `pages: []`. Pages have `title`, `url`, `resource_uri`, `last_crawled`; `resource_uri` uses the indexed page resource template and is deterministic for the configured site and canonical URL. A response includes `nextCursor` only when more pages are available. Pass `nextCursor` as `cursor` to continue. | `invalid_argument`, `site_not_found`, `index_unavailable`, `configuration_unavailable`. Invalid or site-mismatched cursors are `invalid_argument`. | Replaces the former Markdown listing. |
 | `search_docs` | `site_name`, `query`: non-empty strings; `limit=10`, positive integer | `ok`, `contract_version`, plus existing `mode`, counters, and ordered `results`; zero matches use `results: []`. | `invalid_argument`, `site_not_found`, `index_unavailable`, `configuration_unavailable`, and vector fallback codes below. | Existing result fields and schema are unchanged; envelope metadata is additive. |
-| `fetch_page` | `site_name`, `url`: non-empty strings | `{"ok": true, "contract_version": "1.0", "site_name", "page": {"title", "url", "content_md"}}`. | `invalid_argument`, `site_not_found`, `page_not_found`, `index_unavailable`, `configuration_unavailable`. A `page_not_found` response retains `site_name`, the requested `url`, and `page: null`; its error includes both `code` and compatibility alias `type`, with the legacy message `Page not found in index: {url}`. | Replaces the former Markdown page document while preserving the legacy missing-page message. Render `page.content_md` when needed. |
+| `fetch_page` | `site_name`, `url`: non-empty strings | `{"ok": true, "contract_version": "1.1", "site_name", "page": {"title", "url", "content_md"}}`. | `invalid_argument`, `site_not_found`, `page_not_found`, `index_unavailable`, `configuration_unavailable`. A `page_not_found` response retains `site_name`, the requested `url`, and `page: null`; its error includes both `code` and compatibility alias `type`, with the legacy message `Page not found in index: {url}`. | Replaces the former Markdown page document while preserving the legacy missing-page message. Render `page.content_md` when needed. |
 
 Example error:
 
 ```json
 {
-  "contract_version": "1.0",
+  "contract_version": "1.1",
   "ok": false,
   "error": {"code": "site_not_found", "message": "Site 'Missing Docs' not found."}
 }
@@ -97,7 +115,7 @@ Example error:
 ```json
 {
   "ok": true,
-  "contract_version": "1.0",
+  "contract_version": "1.1",
   "mode": "keyword",
   "vector_hits": 0,
   "keyword_hits": 2,
@@ -105,6 +123,7 @@ Example error:
     {
       "text": "Result snippet or chunk text",
       "page_url": "https://docs.example.com/page",
+      "resource_uri": "docmcp://site/My%20Docs/page/https%3A%2F%2Fdocs.example.com%2Fpage",
       "title": "Page title",
       "score": 0.87,
       "source": "keyword"
@@ -139,7 +158,7 @@ If no keyword results are available, the tool still returns valid JSON:
 ```json
 {
   "ok": true,
-  "contract_version": "1.0",
+  "contract_version": "1.1",
   "mode": "keyword",
   "vector_hits": 0,
   "keyword_hits": 0,
@@ -155,7 +174,7 @@ If the site name is unknown, the tool returns structured JSON with an `error` ob
   "vector_hits": 0,
   "keyword_hits": 0,
   "results": [],
-  "contract_version": "1.0",
+  "contract_version": "1.1",
   "ok": false,
   "error": {
     "code": "site_not_found",

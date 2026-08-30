@@ -115,27 +115,54 @@ def _fixture(tmp_path: Path) -> None:
             [
                 {"jsonrpc": "2.0", "id": 1, "method": "initialize"},
                 {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
+                {"jsonrpc": "2.0", "id": 3, "method": "resources/list", "params": {}},
                 {
                     "jsonrpc": "2.0",
-                    "id": 2,
+                    "id": 4,
+                    "method": "resources/templates/list",
+                    "params": {},
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 5,
+                    "method": "resources/read",
+                    "params": {"uri": "docmcp://sites"},
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 6,
+                    "method": "resources/read",
+                    "params": {"uri": "docmcp://site/Harness"},
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 7,
+                    "method": "resources/read",
+                    "params": {
+                        "uri": "docmcp://site/Harness/page/https%3A%2F%2Fexample.test%2Fharness"
+                    },
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 8,
                     "method": "tools/call",
                     "params": {"name": "get_version"},
                 },
                 {
                     "jsonrpc": "2.0",
-                    "id": 3,
+                    "id": 9,
                     "method": "tools/call",
                     "params": {"name": "search_docs"},
                 },
                 {
                     "jsonrpc": "2.0",
-                    "id": 4,
+                    "id": 10,
                     "method": "tools/call",
                     "params": {"name": "search_docs"},
                 },
                 {
                     "jsonrpc": "2.0",
-                    "id": 5,
+                    "id": 11,
                     "method": "tools/call",
                     "params": {"name": "search_docs"},
                 },
@@ -165,9 +192,35 @@ def test_load_config_validates_fixture_and_corpus(tmp_path: Path, monkeypatch: p
     config, corpus = load_config(_write_env(tmp_path), root=tmp_path)
 
     assert config.container_bin == "podman"
-    assert len(corpus) == 6
+    assert len(corpus) == 11
     assert corpus[1]["method"] == "notifications/initialized"
     assert "id" not in corpus[1]
+
+
+def test_load_config_rejects_corpus_without_site_or_page_resource_reads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """TS-TF-013: Resource coverage cannot be reduced to catalog discovery alone."""
+    _fixture(tmp_path)
+    corpus_path = tmp_path / "fixture" / "mcp_requests.json"
+    corpus = json.loads(corpus_path.read_text(encoding="utf-8"))
+    corpus_path.write_text(
+        json.dumps(
+            [
+                request
+                for request in corpus
+                if request.get("method") != "resources/read"
+                or request.get("params", {}).get("uri") == "docmcp://sites"
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "baseline.whl").touch()
+    (tmp_path / "current.whl").touch()
+    monkeypatch.setattr("docmcp.harness.config.shutil.which", lambda _: "/usr/bin/podman")
+
+    with pytest.raises(HarnessError, match="missing: page, site"):
+        load_config(_write_env(tmp_path), root=tmp_path)
 
 
 def test_load_config_uses_project_env_container_runtime(
@@ -320,10 +373,10 @@ def test_comparison_allows_only_explicit_version_difference():
 def test_comparison_rejects_contract_version_difference():
     """TS-TF-013: Contract-version changes are semantic, not metadata drift."""
     baseline_payload = json.dumps(
-        {"contract_version": "1.0", "ok": True, "version": "1.1.1"}, indent=2
+        {"contract_version": "1.1", "ok": True, "version": "1.2.0"}, indent=2
     )
     current_payload = json.dumps(
-        {"contract_version": "2.0", "ok": True, "version": "1.1.2"}, indent=2
+        {"contract_version": "1.0", "ok": True, "version": "1.2.1"}, indent=2
     )
     baseline = [{"result": {"content": [{"type": "text", "text": baseline_payload}]}}]
     current = [{"result": {"content": [{"type": "text", "text": current_payload}]}}]
@@ -335,7 +388,7 @@ def test_comparison_allowlists_version_in_get_version_tool_payload():
     """TS-TF-013: Allowlist the version without hiding another tool-result change."""
     baseline_payload = json.dumps(
         {
-            "contract_version": "1.0",
+            "contract_version": "1.1",
             "ok": True,
             "package_name": "doc-mcp",
             "server_name": "docs-mcp",
@@ -345,7 +398,7 @@ def test_comparison_allowlists_version_in_get_version_tool_payload():
     )
     current_payload = json.dumps(
         {
-            "contract_version": "1.0",
+            "contract_version": "1.1",
             "ok": True,
             "package_name": "doc-mcp",
             "server_name": "docs-mcp",
@@ -375,7 +428,7 @@ def test_comparison_allowlists_version_in_get_version_tool_payload():
 
     current[0]["result"]["content"][0]["text"] = json.dumps(
         {
-            "contract_version": "1.0",
+            "contract_version": "1.1",
             "ok": True,
             "package_name": "doc-mcp",
             "server_name": "other-server",

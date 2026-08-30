@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-08-09
-- Version: v2.4
+- Last Updated: 2026-08-23
+- Version: v2.5
 
 ## Change Log
+- 2026-08-23 | v2.5 | Documented normalized site identities used consistently by CLI, indexing, tools, and MCP resources.
 - 2026-08-09 | v2.4 | Clarified redirected PDF response capture, PDF signature validation, and authenticated request fallback behavior.
 - 2026-07-29 | v2.3 | Documented proxy-backed, authenticated PDF download behavior.
 - 2026-07-19 | v2.2 | Clarified that PDF handling is automatic and applies to both `.pdf` URLs and `application/pdf` responses, including targeted reindexing.
@@ -97,6 +98,14 @@ MCP_SERVER_NAME=docs-mcp
 - `vectorizer.chunk_overlap`: defaults to `120`.
 - `vectorizer.embedding_model`: defaults to `BAAI/bge-small-en-v1.5`.
 - Authentication is completed manually in a visible browser. Complete any CAPTCHA, MFA, magic-link, or anti-bot steps there; headless crawling requires a valid saved session.
+
+### Site Identity Normalization
+- The loader is the single configuration path for authentication, crawling, vectorization, startup, and MCP tools/resources.
+- `name` remains the configured display name. The loader also derives a `canonical_name` and `site_id` for internal consumers.
+- A canonical name trims surrounding whitespace and is normalized to Unicode NFC. Site lookups use the repository's case-insensitive policy.
+- `site_id` percent-encodes the canonical name as exactly one UTF-8 URI path segment. Escapes use uppercase hexadecimal characters; unreserved URI characters remain unescaped.
+- For example, `"  My Private Docs  "` becomes `My%20Private%20Docs`, `"我的文档"` becomes `%E6%88%91%E7%9A%84%E6%96%87%E6%A1%A3`, and `"📚 Docs"` becomes `%F0%9F%93%9A%20Docs`.
+- Names that collide after NFC normalization and case handling are invalid. Correct the conflicting site definition instead of relying on a resource identity to distinguish it.
 
 ### Search And Vector Settings
 - `vector_index_file`: local sqlite-vec sidecar path for that site's chunk embeddings; if omitted, the runtime uses the same directory and file stem as `index_file` with a `.vec.db` suffix.
@@ -212,6 +221,7 @@ sites:
 
 ## Edge Cases
 - Unset placeholders resolve to an empty string instead of crashing.
+- Empty site names, including names made empty by trimming, and normalized/case-insensitive identity collisions fail configuration loading consistently for every consumer.
 - Workspace `.env` values are only used for config resolution; loading config does not mutate process env.
 - `CONFIG_FILE` can override the default config path.
 - Relative `CONFIG_FILE`, `session_file`, `index_file`, and `vector_index_file` values should be interpreted from `DOC_MCP_HOME` or the process working directory.
