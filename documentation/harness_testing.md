@@ -6,7 +6,7 @@
 - Reviewers: Repository maintainers
 - Created: 2026-08-15
 - Last Updated: 2026-09-06
-- Version: v3.3
+- Version: v3.4
 - Related Tickets: veep2012/doc_mcp#14, veep2012/doc_mcp#2
 
 ## Change Log
