@@ -5,7 +5,7 @@ playwright==1.61.0
 markdownify==1.2.3
 
 # MCP Server
-mcp==1.28.1
+mcp==1.29.1
 
 # Config
 PyYAML==6.0.3

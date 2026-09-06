@@ -69,7 +69,8 @@ def test_auth_cli_reports_missing_browser(monkeypatch, capsys):
     monkeypatch.setattr(auth_cli, "get_sites", lambda: [site])
     monkeypatch.setattr(sys, "argv", ["docmcp-auth", "--site", "Private Docs"])
 
-    def fail_authentication(_coroutine):
+    def fail_authentication(coroutine):
+        coroutine.close()
         raise BrowserUnavailableError(
             "Playwright browser 'firefox' is not installed.\n"
             "Install it with:\n"

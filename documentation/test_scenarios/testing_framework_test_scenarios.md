@@ -10,7 +10,7 @@
 - Related Tickets: veep2012/doc_mcp#2
 
 ## Change Log
-- 2026-09-06 | v2.8 | Added protocol-level `resources/list` pagination coverage, including deterministic continuation, complete discovery, and invalid or expired cursor rejection.
+- 2026-09-06 | v2.9 | Added protocol-level `resources/list` pagination coverage, including deterministic continuation, complete discovery, and invalid or expired cursor rejection, plus warning-free test-run coverage and documented cleanup for intentionally rejected asynchronous authentication calls.
 - 2026-08-29 | v2.7 | Expanded MCP tool and stdio scenarios for the JSON contract, structured errors, empty states, preserved search semantics for degraded source indexes, fixed safe vector error messages with server-side raw exception logging, complete missing-page response assertions, safe configuration-failure coverage, compact site-resource metadata, discoverable site and page resource templates, canonical and scope-checked page-resource reads, MCP public contract version 1.1, explicit harness rejection of contract-version mismatches, packaged-harness resource discovery/read coverage for catalog, configured-site, and indexed-page URI shapes, and paginated `list_pages` continuation behavior.
 - 2026-08-16 | v2.4 | Extended TS-TF-022 with a real repository-built wheel rewrite and installation check, extended TS-TF-023 with concurrent-process artifact creation coverage so parallel harness runs receive distinct directories, and added diagnostics for vector sidecars built with a different embedding model than configured in sites.yaml.
 - 2026-08-15 | v1.3 | Added failure-boundary coverage for invalid harness options, malformed or mismatched MCP responses, early server exit, and preserved comparison-failure artifacts.
@@ -80,6 +80,7 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - `TS-TF-024` - Site identities and page resource URIs are NFC-normalized, percent-encoded, deterministic, and readable through discoverable MCP resource templates without exposing private configuration; legacy SQLite URL variants remain readable through emitted resource URIs.
 - `TS-TF-025` - `list_pages` returns bounded, deterministic pages with an opaque continuation cursor and a `nextCursor` only when more pages remain.
 - `TS-TF-026` - MCP `resources/list` returns a bounded, deterministic catalog of the site and indexed-page resources with an opaque protocol cursor and no duplicate or omitted entries across continuation requests.
+- `TS-TF-027` - `make test` completes without warnings from repository tests or the MCP dependency initialization path.
 
 ### Scenario Details
 #### TS-TF-001
@@ -223,6 +224,12 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - Action: Create multiple run directories concurrently from separate processes under the same writable artifact root.
 - Expected Result: Every directory exists, uses the UTC timestamp plus UUID format, and has a distinct name; no process fails because another process created a run directory at the same time.
 
+#### TS-TF-027
+- Purpose: Keep the canonical test command clean so warnings identify actionable regressions.
+- Preconditions: The development virtual environment contains the pinned test dependencies.
+- Action: Run `make test`, including unit and smoke suites; exercise the missing-browser authentication test that rejects an async operation.
+- Expected Result: All selected tests pass and pytest reports no warnings. Rejected asynchronous operations are explicitly closed when a test double interrupts their runner.
+
 ### Automated Test Mapping
 - `TS-TF-001` -> `tests/test_smoke_support.py::test_make_test_dry_run_lists_unit_before_smoke`
 - `TS-TF-002` -> `tests/test_smoke_support.py::test_direct_pytest_excludes_smoke_by_default`
@@ -250,6 +257,7 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - `TS-TF-024` -> `tests/test_config_loader.py::{test_load_config_normalizes_site_id_and_rejects_identity_collisions}`, `tests/test_tools.py::{test_mcp_resources_read_catalog_site_and_indexed_page,test_mcp_page_resource_canonicalizes_and_enforces_scope,test_legacy_url_variants_have_readable_list_and_search_resource_uris}`, `tests/test_index_store.py::test_upsert_stores_canonical_url_and_reads_legacy_url_variants`, `tests/smoke/test_mcp_smoke.py::test_mcp_stdio_search_docs_uses_prepared_index`
 - `TS-TF-025` -> `tests/test_tools.py::test_list_pages_paginates_with_opaque_cursor`
 - `TS-TF-026` -> `tests/test_tools.py::test_mcp_resource_list_paginates_with_opaque_cursor`, `tests/smoke/test_mcp_smoke.py::test_mcp_resource_list_paginates_over_stdio`
+- `TS-TF-027` -> `tests/test_auth_cli.py::test_auth_cli_reports_missing_browser`, `tests/test_smoke_support.py::test_make_test_declares_unit_before_smoke`, `Makefile`
 
 ## Edge Cases
 - If Podman is installed but not usable in the current environment, rerun smoke tests with `CONTAINER_BIN=docker`.

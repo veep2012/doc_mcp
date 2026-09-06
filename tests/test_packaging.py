@@ -149,7 +149,7 @@ def test_build_mcp_wheel_rewrites_real_repository_wheel(tmp_path: Path):
         assert f"doc_mcp_no_crawler-{version}.dist-info/RECORD" in names
         metadata = archive.read(metadata_name).decode()
     assert "Name: doc-mcp-no-crawler\n" in metadata
-    assert "Requires-Dist: mcp==1.28.1\n" in metadata
+    assert "Requires-Dist: mcp==1.29.1\n" in metadata
     assert "Requires-Dist: playwright" not in metadata
 
     subprocess.run(
