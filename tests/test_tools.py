@@ -1860,5 +1860,4 @@ def test_get_version_returns_server_metadata(monkeypatch):
         "package_name": "doc-mcp",
         "server_name": "docs-mcp",
         "version": "1.2.1",
-
     }
