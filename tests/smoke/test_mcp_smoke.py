@@ -208,6 +208,16 @@ async def test_mcp_resource_list_paginates_over_stdio():
         "docmcp://site/{site_id}/page/{page_key}",
     }
 
+    upsert_page(
+        str(index_file),
+        "https://example.test/page-999",
+        "Page 999",
+        "Content 999",
+    )
+    stale_code, stale_message = await list_mcp_resources_failure(runtime_root, cursor)
+    assert stale_code == -32602
+    assert "Resource list cursor is invalid" in stale_message
+
     error_code, error_message = await list_mcp_resources_failure(runtime_root, "bad")
     assert error_code == -32602
     assert "Resource list cursor is invalid" in error_message

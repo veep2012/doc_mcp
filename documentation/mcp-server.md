@@ -79,7 +79,7 @@ docmcp://sites
 - `search_docs` includes `resource_uri` on each result when the normalized configuration supplies a site identity, allowing clients to read the matching page directly. `list_pages` includes the same deterministic `resource_uri` for every page entry and supports bounded continuation pagination.
 
 ### Resource discovery pagination
-`resources/list` returns the readable catalog resource, configured site resources, and indexed page resources in ascending URI order. Responses contain at most 100 resources. When more resources remain, the response includes an opaque `nextCursor`; pass that value as the `cursor` request parameter to retrieve the next page. Clients that omit `cursor` receive the first page, preserving standard MCP discovery behavior.
+`resources/list` returns the readable catalog resource, configured site resources, and indexed page resources in ascending URI order. Responses contain at most 100 resources. When more resources remain, the response includes an opaque `nextCursor`; pass that value as the `cursor` request parameter to retrieve the next page. Clients that omit `cursor` receive the first page, preserving standard MCP discovery behavior. When no documentation sites are configured, the response still contains the readable `docmcp://sites` catalog resource and no `nextCursor`.
 
 The cursor is valid only for the exact resource catalog from which it was issued. Malformed, incompatible, or stale cursors return the MCP `Invalid params` protocol error with no configuration, index, or filesystem details. `resources/templates/list` remains unpaginated and advertises the parameterized site and page templates independently of the resource catalog.
 

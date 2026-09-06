@@ -304,6 +304,16 @@ def test_mcp_resource_list_paginates_with_opaque_cursor(monkeypatch, tmp_path):
         tools._resource_list_page(first_cursor)
 
 
+def test_mcp_resource_list_empty_catalog(monkeypatch):
+    """TS-TF-028: Empty resource discovery succeeds without continuation."""
+    monkeypatch.setattr(tools, "_get_sites", lambda: [])
+
+    resources, next_cursor = tools._resource_list_page()
+
+    assert [resource["uri"] for resource in resources] == ["docmcp://sites"]
+    assert next_cursor is None
+
+
 def test_keyword_score_is_monotonic_with_result_order():
     assert tools._keyword_score(-0.001, 0) > tools._keyword_score(-10.0, 1)
     assert tools._keyword_score(-10.0, 1) > tools._keyword_score(-20.0, 2)
