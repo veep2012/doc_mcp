@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-05-24
-- Version: v1.3
+- Last Updated: 2026-09-06
+- Version: v1.4
 
 ## Change Log
+- 2026-09-06 | v1.4 | Added client guidance for bounded MCP resource discovery.
 - 2026-05-24 | v1.3 | Documented the optional crawl-and-vectorize chain, the standalone vectorizer debug behavior, and the inherited `--debug` path for chained crawl/vectorize runs.
 - 2026-04-25 | v1.1 | Updated implementation references for package entry points.
 - 2026-04-24 | v1.0 | Reformatted the operations guide and kept the normal workflow, recovery, and logging steps.
@@ -33,6 +34,10 @@ Describe the day-to-day operational workflow for refreshing a site, rebuilding i
 5. Add `--debug` to the vectorizer command when you want chunk-level vector diagnostics. If you chain vectorization through `docmcp-crawl --debug --vectorize`, the vectorizer inherits the same debug mode.
 6. Start `docmcp-server`.
 7. Connect an MCP client and use `search_docs`, `list_pages`, or `fetch_page`.
+
+### Resource discovery clients
+- MCP clients should continue `resources/list` requests with the returned `nextCursor` until it is absent.
+- Clients that do not support pagination remain compatible: a cursor-free `resources/list` request returns the first bounded page, and `docmcp://sites` remains readable as the complete site catalog.
 
 ### File Layout
 - `storage/` holds session state and can be deleted if you want to re-authenticate.

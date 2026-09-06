@@ -5,11 +5,12 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-05-03
-- Last Updated: 2026-08-29
-- Version: v2.7
+- Last Updated: 2026-09-06
+- Version: v2.8
 - Related Tickets: veep2012/doc_mcp#2
 
 ## Change Log
+- 2026-09-06 | v2.8 | Added protocol-level `resources/list` pagination coverage, including deterministic continuation, complete discovery, and invalid or expired cursor rejection.
 - 2026-08-29 | v2.7 | Expanded MCP tool and stdio scenarios for the JSON contract, structured errors, empty states, preserved search semantics for degraded source indexes, fixed safe vector error messages with server-side raw exception logging, complete missing-page response assertions, safe configuration-failure coverage, compact site-resource metadata, discoverable site and page resource templates, canonical and scope-checked page-resource reads, MCP public contract version 1.1, explicit harness rejection of contract-version mismatches, packaged-harness resource discovery/read coverage for catalog, configured-site, and indexed-page URI shapes, and paginated `list_pages` continuation behavior.
 - 2026-08-16 | v2.4 | Extended TS-TF-022 with a real repository-built wheel rewrite and installation check, extended TS-TF-023 with concurrent-process artifact creation coverage so parallel harness runs receive distinct directories, and added diagnostics for vector sidecars built with a different embedding model than configured in sites.yaml.
 - 2026-08-15 | v1.3 | Added failure-boundary coverage for invalid harness options, malformed or mismatched MCP responses, early server exit, and preserved comparison-failure artifacts.
@@ -78,6 +79,7 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - `TS-TF-023` - Harness artifact run directories retain a UTC timestamp and add a collision-resistant UUID suffix so repeated or parallel runs receive distinct diagnostic directories.
 - `TS-TF-024` - Site identities and page resource URIs are NFC-normalized, percent-encoded, deterministic, and readable through discoverable MCP resource templates without exposing private configuration; legacy SQLite URL variants remain readable through emitted resource URIs.
 - `TS-TF-025` - `list_pages` returns bounded, deterministic pages with an opaque continuation cursor and a `nextCursor` only when more pages remain.
+- `TS-TF-026` - MCP `resources/list` returns a bounded, deterministic catalog of the site and indexed-page resources with an opaque protocol cursor and no duplicate or omitted entries across continuation requests.
 
 ### Scenario Details
 #### TS-TF-001
@@ -130,6 +132,12 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - Preconditions: A configured temporary index contains more pages than the requested page limit.
 - Action: Call `list_pages` with a positive `limit`, then call it again with the returned `cursor`; also submit malformed, mismatched, and non-positive pagination arguments.
 - Expected Result: Each successful page contains `title`, `url`, `resource_uri`, and `last_crawled`; pages are returned in stable title-and-URL order, at most `limit` pages are returned, `nextCursor` is present only when another page is available, and the cursor resumes immediately after the prior page without duplicates or omissions. Invalid limits or cursors return the standard `invalid_argument` contract without internal diagnostics.
+
+#### TS-TF-026
+- Purpose: Validate MCP protocol-level resource discovery pagination.
+- Preconditions: Configured temporary indexes contain enough site and page resources to exceed the resource-list page size.
+- Action: Call `resources/list` without a cursor, continue with each returned `nextCursor`, repeat the initial request, and submit malformed, incompatible, and stale cursors.
+- Expected Result: Each response contains at most the fixed server page size of resources in URI order; `nextCursor` is present only while additional resources remain. Continuation requests return every catalog, site, and indexed-page resource exactly once with no duplicates or omissions. Repeated initial requests preserve order. A malformed, incompatible, or stale cursor returns the MCP `Invalid params` protocol error without internal details. `resources/templates/list` remains available and continues to advertise the site and page templates.
 
 #### TS-TF-009
 - Purpose: Make missing smoke prerequisites actionable.
@@ -241,6 +249,7 @@ Document the automated test framework scenarios for `doc-mcp`, including the exp
 - `TS-TF-023` -> `tests/test_harness.py::{test_create_run_dir_uses_unique_timestamped_names,test_create_run_dir_is_safe_for_parallel_processes}`
 - `TS-TF-024` -> `tests/test_config_loader.py::{test_load_config_normalizes_site_id_and_rejects_identity_collisions}`, `tests/test_tools.py::{test_mcp_resources_read_catalog_site_and_indexed_page,test_mcp_page_resource_canonicalizes_and_enforces_scope,test_legacy_url_variants_have_readable_list_and_search_resource_uris}`, `tests/test_index_store.py::test_upsert_stores_canonical_url_and_reads_legacy_url_variants`, `tests/smoke/test_mcp_smoke.py::test_mcp_stdio_search_docs_uses_prepared_index`
 - `TS-TF-025` -> `tests/test_tools.py::test_list_pages_paginates_with_opaque_cursor`
+- `TS-TF-026` -> `tests/test_tools.py::test_mcp_resource_list_paginates_with_opaque_cursor`, `tests/smoke/test_mcp_smoke.py::test_mcp_resource_list_paginates_over_stdio`
 
 ## Edge Cases
 - If Podman is installed but not usable in the current environment, rerun smoke tests with `CONTAINER_BIN=docker`.

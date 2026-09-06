@@ -251,6 +251,59 @@ def test_list_pages_paginates_with_opaque_cursor(monkeypatch, tmp_path):
     )
 
 
+def test_mcp_resource_list_paginates_with_opaque_cursor(monkeypatch, tmp_path):
+    """TS-TF-026: Resource discovery resumes stable entries with a safe cursor."""
+    index_file = tmp_path / "docs.db"
+    init_db(str(index_file))
+    for url, title in (
+        ("https://example.test/a", "Alpha"),
+        ("https://example.test/b", "Beta"),
+        ("https://example.test/c", "Gamma"),
+    ):
+        upsert_page(str(index_file), url, title, title)
+
+    sites = [
+        {
+            "name": "Example Docs",
+            "site_id": "Example%20Docs",
+            "url": "https://example.test",
+            "auth_required": False,
+            "index_file": str(index_file),
+        }
+    ]
+    monkeypatch.setattr(tools, "_get_sites", lambda: sites)
+    monkeypatch.setattr(tools, "_RESOURCE_LIST_PAGE_SIZE", 2)
+
+    first, first_cursor = tools._resource_list_page()
+    second, second_cursor = tools._resource_list_page(first_cursor)
+    third, third_cursor = tools._resource_list_page(second_cursor)
+
+    entries = first + second + third
+    assert [entry["uri"] for entry in entries] == sorted(entry["uri"] for entry in entries)
+    assert len({entry["uri"] for entry in entries}) == len(entries) == 5
+    assert first_cursor and second_cursor
+    assert third_cursor is None
+    assert tools._resource_list_page()[0] == first
+    with pytest.raises(ValueError, match="cursor is invalid"):
+        tools._resource_list_page("bad")
+    with pytest.raises(ValueError, match="cursor is invalid"):
+        tools._resource_list_page(
+            tools._encode_resource_list_cursor(tools._resource_list_entries(), "docmcp://missing")
+        )
+
+    sites.append(
+        {
+            "name": "Other Docs",
+            "site_id": "Other%20Docs",
+            "url": "https://other.example.test",
+            "auth_required": False,
+            "index_file": str(index_file),
+        }
+    )
+    with pytest.raises(ValueError, match="cursor is invalid"):
+        tools._resource_list_page(first_cursor)
+
+
 def test_keyword_score_is_monotonic_with_result_order():
     assert tools._keyword_score(-0.001, 0) > tools._keyword_score(-10.0, 1)
     assert tools._keyword_score(-10.0, 1) > tools._keyword_score(-20.0, 2)

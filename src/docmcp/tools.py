@@ -12,6 +12,7 @@ Tools:
 
 import base64
 import binascii
+import hashlib
 import json
 import logging
 import os
@@ -21,7 +22,9 @@ from urllib.parse import quote, unquote, urlsplit
 
 try:
     from mcp.server.fastmcp import FastMCP
+    from mcp import types as _mcp_types
 except ModuleNotFoundError:  # pragma: no cover - only used in minimal test environments
+    _mcp_types = None
 
     class FastMCP:  # type: ignore[too-many-ancestors]
         def __init__(self, name: str):
@@ -101,6 +104,7 @@ def _page_resource_uri(site: dict, url: str) -> str:
 
 
 _LIST_PAGES_LIMIT_MAX = 100
+_RESOURCE_LIST_PAGE_SIZE = 100
 
 
 def _encode_pages_cursor(site: dict, page: dict) -> str:
@@ -127,6 +131,134 @@ def _decode_pages_cursor(site: dict, cursor: str) -> tuple[str, str] | None:
     if not isinstance(title, str) or not isinstance(url, str) or not title or not url:
         return None
     return title, url
+
+
+def _resource_list_entries() -> list[dict[str, str | None]]:
+    """Return the complete public resource catalog in stable URI order."""
+    entries = [
+        {
+            "uri": "docmcp://sites",
+            "name": "Documentation sites",
+            "description": "Configured documentation sites.",
+            "mime_type": "text/markdown",
+        }
+    ]
+    for site in _load_sites():
+        site_uri = f"docmcp://site/{site['site_id']}"
+        entries.append(
+            {
+                "uri": site_uri,
+                "name": site["name"],
+                "description": "Configured documentation site.",
+                "mime_type": "text/markdown",
+            }
+        )
+        try:
+            pages = _list_pages(site["index_file"])
+        except (OSError, sqlite3.Error):
+            logger.warning("Could not list resources for site %r", site["name"], exc_info=True)
+            continue
+        entries.extend(
+            {
+                "uri": _page_resource_uri(site, page["url"]),
+                "name": page["title"],
+                "description": "Indexed documentation page.",
+                "mime_type": "text/markdown",
+            }
+            for page in pages
+        )
+    return sorted(entries, key=lambda entry: entry["uri"] or "")
+
+
+def _resource_catalog_fingerprint(entries: list[dict[str, str | None]]) -> str:
+    payload = json.dumps(
+        [entry["uri"] for entry in entries], ensure_ascii=False, separators=(",", ":")
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _encode_resource_list_cursor(entries: list[dict[str, str | None]], uri: str) -> str:
+    payload = json.dumps(
+        {"catalog": _resource_catalog_fingerprint(entries), "uri": uri},
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return base64.urlsafe_b64encode(payload).decode("ascii").rstrip("=")
+
+
+def _decode_resource_list_cursor(
+    entries: list[dict[str, str | None]], cursor: str
+) -> str | None:
+    allowed_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+    if not _valid_nonempty_text(cursor) or any(char not in allowed_chars for char in cursor):
+        return None
+    try:
+        padding = "=" * (-len(cursor) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(cursor + padding).decode("utf-8"))
+    except (ValueError, UnicodeDecodeError, binascii.Error):
+        return None
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != {"catalog", "uri"}
+        or payload.get("catalog") != _resource_catalog_fingerprint(entries)
+        or not isinstance(payload.get("uri"), str)
+    ):
+        return None
+    return payload["uri"] if any(entry["uri"] == payload["uri"] for entry in entries) else None
+
+
+def _resource_list_page(cursor: str | None = None) -> tuple[list[dict[str, str | None]], str | None]:
+    """Return one bounded, cursor-addressable page of the public resource catalog."""
+    catalog = _resource_list_entries()
+    entries = catalog
+    if cursor is not None:
+        after_uri = _decode_resource_list_cursor(entries, cursor)
+        if after_uri is None:
+            raise ValueError("Resource list cursor is invalid.")
+        entries = [entry for entry in entries if (entry["uri"] or "") > after_uri]
+    page = entries[:_RESOURCE_LIST_PAGE_SIZE]
+    next_cursor = (
+        _encode_resource_list_cursor(catalog, page[-1]["uri"] or "")
+        if len(entries) > len(page)
+        else None
+    )
+    return page, next_cursor
+
+
+async def _list_mcp_resources(request: "_mcp_types.ListResourcesRequest"):
+    """Serve the MCP resource-list pagination contract."""
+    from mcp import types
+    from mcp.shared.exceptions import McpError
+
+    try:
+        entries, next_cursor = _resource_list_page(
+            request.params.cursor if request.params is not None else None
+        )
+    except ValueError as exc:
+        raise McpError(
+            types.ErrorData(code=types.INVALID_PARAMS, message="Resource list cursor is invalid.")
+        ) from exc
+    except _ConfigurationUnavailableError as exc:
+        raise McpError(
+            types.ErrorData(code=types.INTERNAL_ERROR, message="Server configuration is unavailable.")
+        ) from exc
+    return types.ListResourcesResult(
+        resources=[
+            types.Resource(
+                uri=entry["uri"],
+                name=entry["name"] or "",
+                description=entry["description"],
+                mimeType=entry["mime_type"],
+            )
+            for entry in entries
+        ],
+        nextCursor=next_cursor,
+    )
+
+
+# FastMCP 1.28 registers its non-paginated handler during initialization, so
+# replace that low-level handler with the protocol-aware implementation.
+if hasattr(mcp, "_mcp_server"):
+    mcp._mcp_server.list_resources()(_list_mcp_resources)
 
 
 def _decode_page_key(page_key: str) -> str | None:

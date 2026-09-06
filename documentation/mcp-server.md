@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-08-30
-- Version: v4.3
+- Last Updated: 2026-09-06
+- Version: v4.4
 
 ## Change Log
+- 2026-09-06 | v4.4 | Documented bounded, deterministic MCP `resources/list` pagination and safe opaque cursor validation.
 - 2026-08-30 | v4.3 | Clarified that site discovery, page listing, search, and page retrieval use the configured/local index and that `search_docs` uses the configured search engine.
 - 2026-08-29 | v4.2 | Bumped the public MCP contract version to 1.1 to include the resources capability, discoverable site and page resource templates, compact site-resource metadata, resource links in the server contract, deterministic and scope-checked page `resource_uri` values on every `list_pages` entry, paginated page listing with continuation cursors, and canonical-identity resolution for newly stored and legacy URL variants so emitted page resource URIs remain readable.
 - 2026-08-23 | v4.1 | Standardized MCP tool contracts on JSON with structured errors, safe configuration/index degradation, and complete missing-page behavior; added catalog, site, and indexed-page resources with normalized URI identities and search-result resource links.
@@ -76,6 +77,11 @@ docmcp://sites
 - Reading a valid page resource returns the indexed Markdown content only when the canonical URL belongs to the configured site host and crawl start path. Missing sites/pages, malformed page keys, out-of-scope URLs, unavailable indexes, and unavailable configuration return safe MCP protocol errors without filesystem paths, credentials, or raw configuration diagnostics.
 - For sites with `auth_required: true`, authentication is performed before crawling and indexing; MCP resource reads use the resulting configured index and do not implement per-caller identity or session authorization.
 - `search_docs` includes `resource_uri` on each result when the normalized configuration supplies a site identity, allowing clients to read the matching page directly. `list_pages` includes the same deterministic `resource_uri` for every page entry and supports bounded continuation pagination.
+
+### Resource discovery pagination
+`resources/list` returns the readable catalog resource, configured site resources, and indexed page resources in ascending URI order. Responses contain at most 100 resources. When more resources remain, the response includes an opaque `nextCursor`; pass that value as the `cursor` request parameter to retrieve the next page. Clients that omit `cursor` receive the first page, preserving standard MCP discovery behavior.
+
+The cursor is valid only for the exact resource catalog from which it was issued. Malformed, incompatible, or stale cursors return the MCP `Invalid params` protocol error with no configuration, index, or filesystem details. `resources/templates/list` remains unpaginated and advertises the parameterized site and page templates independently of the resource catalog.
 
 ### Tool Behavior
 

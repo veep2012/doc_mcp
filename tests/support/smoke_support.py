@@ -291,6 +291,41 @@ async def read_mcp_resource(runtime_root: Path, uri: str) -> tuple[list, list, s
             return resources, templates, result.contents[0].text
 
 
+async def list_mcp_resources(runtime_root: Path, cursor: str | None = None) -> tuple[list, list, str | None]:
+    """List one MCP resource-discovery page and the advertised templates."""
+    server = StdioServerParameters(
+        command=sys.executable,
+        args=["-m", "src.main"],
+        cwd=REPO_ROOT,
+        env=smoke_env(runtime_root),
+    )
+    async with stdio_client(server) as streams:
+        async with ClientSession(*streams) as session:
+            await session.initialize()
+            result = await session.list_resources(cursor)
+            templates = (await session.list_resource_templates()).resourceTemplates
+            return result.resources, templates, result.nextCursor
+
+
+async def list_mcp_resources_failure(runtime_root: Path, cursor: str) -> tuple[int | None, str]:
+    """Return the protocol error raised for an invalid resource-list cursor."""
+    server = StdioServerParameters(
+        command=sys.executable,
+        args=["-m", "src.main"],
+        cwd=REPO_ROOT,
+        env=smoke_env(runtime_root),
+    )
+    async with stdio_client(server) as streams:
+        async with ClientSession(*streams) as session:
+            await session.initialize()
+            try:
+                await session.list_resources(cursor)
+            except Exception as exc:
+                error = getattr(exc, "error", None)
+                return getattr(error, "code", None), str(exc)
+    raise AssertionError("Resource list unexpectedly succeeded")
+
+
 async def read_mcp_resource_failure(runtime_root: Path, uri: str) -> str:
     """Return the protocol error raised when a resource read is rejected."""
     server = StdioServerParameters(

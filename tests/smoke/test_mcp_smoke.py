@@ -8,6 +8,8 @@ from smoke_support import (
     call_mcp_tool,
     call_search_docs,
     initialize_mcp_capabilities,
+    list_mcp_resources,
+    list_mcp_resources_failure,
     print_smoke_context,
     read_mcp_resource,
     read_mcp_resource_failure,
@@ -161,3 +163,51 @@ async def test_mcp_stdio_search_docs_uses_prepared_index():
     )
     assert missing_site_payload["ok"] is False
     assert missing_site_payload["error"]["code"] == "site_not_found"
+
+
+@pytest.mark.smoke
+@pytest.mark.mcp_smoke
+async def test_mcp_resource_list_paginates_over_stdio():
+    """TS-TF-026: MCP resource discovery paginates and validates cursors."""
+    runtime_root = smoke_artifact_root("mcp-resource-list")
+    index_file = runtime_root / "index" / "prepared.db"
+    init_db(str(index_file))
+    for number in range(101):
+        upsert_page(
+            str(index_file),
+            f"https://example.test/page-{number:03d}",
+            f"Page {number:03d}",
+            f"Content {number}",
+        )
+    (runtime_root / "config" / "sites.yaml").write_text(
+        textwrap.dedent(
+            """
+            sites:
+              - name: "Prepared Docs"
+                url: "https://example.test"
+                auth_required: false
+                session_file: null
+                search_engine: keyword
+                index_file: "index/prepared.db"
+            """
+        ).strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    first, templates, cursor = await list_mcp_resources(runtime_root)
+    second, _, final_cursor = await list_mcp_resources(runtime_root, cursor)
+
+    uris = [str(resource.uri) for resource in first + second]
+    assert len(first) == 100
+    assert len(uris) == len(set(uris)) == 103
+    assert uris == sorted(uris)
+    assert cursor and final_cursor is None
+    assert {template.uriTemplate for template in templates} == {
+        "docmcp://site/{site_id}",
+        "docmcp://site/{site_id}/page/{page_key}",
+    }
+
+    error_code, error_message = await list_mcp_resources_failure(runtime_root, "bad")
+    assert error_code == -32602
+    assert "Resource list cursor is invalid" in error_message
