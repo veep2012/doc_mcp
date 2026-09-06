@@ -67,7 +67,7 @@ async def test_mcp_stdio_search_docs_uses_prepared_index():
 
     payload = json.loads(response)
     assert payload["ok"] is True
-    assert payload["contract_version"] == "1.1"
+    assert payload["contract_version"] == "1.2"
     assert payload["mode"] == "keyword"
     assert payload["vector_hits"] == 0
     assert payload["keyword_hits"] == 1
@@ -114,7 +114,7 @@ async def test_mcp_stdio_search_docs_uses_prepared_index():
 
     version_payload = json.loads(await call_mcp_tool(runtime_root, "get_version", {}))
     assert version_payload["ok"] is True
-    assert version_payload["contract_version"] == "1.1"
+    assert version_payload["contract_version"] == "1.2"
 
     pages_payload = json.loads(
         await call_mcp_tool(

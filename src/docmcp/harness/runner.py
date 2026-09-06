@@ -16,7 +16,13 @@ from pathlib import Path
 
 from .artifacts import create_run_dir, redact, write_json, write_text
 from .comparison import compare_responses, normalize_response
-from .config import HarnessConfig, HarnessError, _is_notification, load_config
+from .config import (
+    HarnessConfig,
+    HarnessError,
+    _CURSOR_REFERENCE,
+    _is_notification,
+    load_config,
+)
 
 _HARNESS_LABEL = "docmcp.harness=true"
 _BUILD_TIMEOUT_SECONDS = 900
@@ -219,7 +225,24 @@ def _run_version(
         stderr_thread.start()
         responses = []
         stdout_buffer = bytearray()
+        previous_response: dict | None = None
         for request in requests:
+            request = json.loads(json.dumps(request))
+            if (
+                request.get("method") == "resources/list"
+                and request.get("params", {}).get("cursor") == _CURSOR_REFERENCE
+            ):
+                if not previous_response:
+                    raise HarnessError(
+                        f"{wheel.name} cannot resolve the resources/list cursor reference."
+                    )
+                result = previous_response.get("result")
+                cursor = result.get("nextCursor") if isinstance(result, dict) else None
+                if not isinstance(cursor, str) or not cursor:
+                    raise HarnessError(
+                        f"{wheel.name} did not return a continuation cursor for resources/list."
+                    )
+                request["params"]["cursor"] = cursor
             process.stdin.write((json.dumps(request, separators=(",", ":")) + "\n").encode())
             process.stdin.flush()
             if _is_notification(request):
@@ -245,6 +268,7 @@ def _run_version(
                     f"{wheel.name} returned an invalid response for request id {request['id']!r}."
                 )
             responses.append(response)
+            previous_response = response
         process.stdin.close()
         process.stdin = None
         return_code = process.wait(timeout=_REQUEST_TIMEOUT_SECONDS)

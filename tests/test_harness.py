@@ -373,7 +373,7 @@ def test_comparison_allows_only_explicit_version_difference():
 def test_comparison_rejects_contract_version_difference():
     """TS-TF-013: Contract-version changes are semantic, not metadata drift."""
     baseline_payload = json.dumps(
-        {"contract_version": "1.1", "ok": True, "version": "1.2.0"}, indent=2
+        {"contract_version": "1.2", "ok": True, "version": "1.2.0"}, indent=2
     )
     current_payload = json.dumps(
         {"contract_version": "1.0", "ok": True, "version": "1.2.1"}, indent=2
@@ -388,7 +388,7 @@ def test_comparison_allowlists_version_in_get_version_tool_payload():
     """TS-TF-013: Allowlist the version without hiding another tool-result change."""
     baseline_payload = json.dumps(
         {
-            "contract_version": "1.1",
+            "contract_version": "1.2",
             "ok": True,
             "package_name": "doc-mcp",
             "server_name": "docs-mcp",
@@ -398,7 +398,7 @@ def test_comparison_allowlists_version_in_get_version_tool_payload():
     )
     current_payload = json.dumps(
         {
-            "contract_version": "1.1",
+            "contract_version": "1.2",
             "ok": True,
             "package_name": "doc-mcp",
             "server_name": "docs-mcp",
@@ -428,7 +428,7 @@ def test_comparison_allowlists_version_in_get_version_tool_payload():
 
     current[0]["result"]["content"][0]["text"] = json.dumps(
         {
-            "contract_version": "1.1",
+            "contract_version": "1.2",
             "ok": True,
             "package_name": "doc-mcp",
             "server_name": "other-server",
@@ -567,6 +567,51 @@ def test_run_version_skips_notification_responses(tmp_path: Path, monkeypatch: p
     ]
 
     responses = _run_version(config, config.current_wheel, requests, tmp_path / "run")
+
+    assert [response["id"] for response in responses] == [1, 2]
+
+
+def test_run_version_resolves_resources_list_cursor_reference(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """TS-TF-013: Packaged harness follows the preceding resources/list cursor."""
+    child = (
+        "import json,sys\n"
+        "for line in sys.stdin:\n"
+        " request=json.loads(line)\n"
+        " result={'resources': []}\n"
+        " if request['id'] == 1: result['nextCursor']='cursor-1'\n"
+        " elif request['id'] == 2: assert request['params']['cursor'] == 'cursor-1'\n"
+        " print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':result}), flush=True)\n"
+    )
+    monkeypatch.setattr(
+        "docmcp.harness.runner._server_command",
+        lambda _config, _wheel, _image=None: [sys.executable, "-c", child],
+    )
+    config = HarnessConfig(
+        tmp_path / "baseline.whl",
+        tmp_path / "current.whl",
+        tmp_path / "fixture",
+        tmp_path / "artifacts",
+        "podman",
+        "python:3.11-slim",
+        (),
+    )
+
+    responses = _run_version(
+        config,
+        config.current_wheel,
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "resources/list", "params": {}},
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "resources/list",
+                "params": {"cursor": "$previous.nextCursor"},
+            },
+        ],
+        tmp_path / "run",
+    )
 
     assert [response["id"] for response in responses] == [1, 2]
 

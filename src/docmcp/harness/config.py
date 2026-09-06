@@ -32,6 +32,7 @@ _REQUIRED = (
 )
 _SECRET_MARKERS = ("KEY", "PASSWORD", "TOKEN", "SECRET", "CREDENTIAL", "CERTIFICATE", "PRIVATE")
 _IMAGE_PREFIX_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$")
+_CURSOR_REFERENCE = "$previous.nextCursor"
 
 
 class HarnessError(RuntimeError):
@@ -141,7 +142,7 @@ def _validate_corpus(path: Path) -> list[dict]:
             "MCP request corpus must include resources/read requests for catalog, site, and "
             f"indexed-page URI shapes; missing: {missing}"
         )
-    for request in corpus:
+    for index, request in enumerate(corpus):
         if request.get("jsonrpc") != "2.0" or not request.get("method"):
             raise HarnessError("Each MCP request must contain jsonrpc='2.0' and method.")
         if _is_notification(request):
@@ -149,6 +150,16 @@ def _validate_corpus(path: Path) -> list[dict]:
                 raise HarnessError("MCP notifications must not contain an id.")
         elif "id" not in request:
             raise HarnessError("Each MCP request must contain an id unless it is a notification.")
+        if (
+            request.get("method") == "resources/list"
+            and isinstance(request.get("params"), dict)
+            and request["params"].get("cursor") == _CURSOR_REFERENCE
+        ):
+            previous = corpus[index - 1] if index else None
+            if not previous or previous.get("method") != "resources/list":
+                raise HarnessError(
+                    "A resources/list cursor reference must immediately follow resources/list."
+                )
     return corpus
 
 

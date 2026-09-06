@@ -86,7 +86,7 @@ The cursor is valid only for the exact resource catalog from which it was issued
 ### Tool Behavior
 
 All tools return a JSON string. Successful responses include `ok: true` and
-`contract_version: "1.1"`; expected failures include `ok: false`, the same
+`contract_version: "1.2"`; expected failures include `ok: false`, the same
 contract version, and an `error` object with a stable `code` and a safe,
 human-readable `message`. Error messages are fixed per public error code; raw
 exception text, credentials, URLs, SQL details, and filesystem paths are logged
@@ -99,17 +99,17 @@ the shared envelope metadata; search failures use the same envelope.
 
 | Tool | Arguments and defaults | Success / empty response | Expected errors | Compatibility |
 | --- | --- | --- | --- | --- |
-| `get_sites` | None | `{"ok": true, "contract_version": "1.1", "sites": [...]}`; empty configuration has `sites: []`. Site entries contain `name`, `url`, `auth_required`, and index `status`/`page_count`. | An unreadable index has `index.status: "unavailable"`; configuration failures return `configuration_unavailable` with a fixed safe message. | The top-level `ok: true` means the site discovery request succeeded; callers must inspect each site's nested index status. |
-| `get_version` | None | `{"ok": true, "contract_version": "1.1", "server_name", "package_name", "version"}`. | None expected. | Preserves prior version fields; version values vary between packages. |
-| `list_pages` | `site_name`: non-empty string; `limit`: integer from 1 to 100, default 100; `cursor`: optional opaque cursor from a prior response | `{"ok": true, "contract_version": "1.1", "site_name", "pages": [...]}`; empty index has `pages: []`. Pages have `title`, `url`, `resource_uri`, `last_crawled`; `resource_uri` uses the indexed page resource template and is deterministic for the configured site and canonical URL. A response includes `nextCursor` only when more pages are available. Pass `nextCursor` as `cursor` to continue. | `invalid_argument`, `site_not_found`, `index_unavailable`, `configuration_unavailable`. Invalid or site-mismatched cursors are `invalid_argument`. | Replaces the former Markdown listing. |
+| `get_sites` | None | `{"ok": true, "contract_version": "1.2", "sites": [...]}`; empty configuration has `sites: []`. Site entries contain `name`, `url`, `auth_required`, and index `status`/`page_count`. | An unreadable index has `index.status: "unavailable"`; configuration failures return `configuration_unavailable` with a fixed safe message. | The top-level `ok: true` means the site discovery request succeeded; callers must inspect each site's nested index status. |
+| `get_version` | None | `{"ok": true, "contract_version": "1.2", "server_name", "package_name", "version"}`. | None expected. | Preserves prior version fields; version values vary between packages. |
+| `list_pages` | `site_name`: non-empty string; `limit`: integer from 1 to 100, default 100; `cursor`: optional opaque cursor from a prior response | `{"ok": true, "contract_version": "1.2", "site_name", "pages": [...]}`; empty index has `pages: []`. Pages have `title`, `url`, `resource_uri`, `last_crawled`; `resource_uri` uses the indexed page resource template and is deterministic for the configured site and canonical URL. A response includes `nextCursor` only when more pages are available. Pass `nextCursor` as `cursor` to continue. | `invalid_argument`, `site_not_found`, `index_unavailable`, `configuration_unavailable`. Invalid or site-mismatched cursors are `invalid_argument`. | Replaces the former Markdown listing. |
 | `search_docs` | `site_name`, `query`: non-empty strings; `limit=10`, positive integer | `ok`, `contract_version`, plus existing `mode`, counters, and ordered `results`; zero matches use `results: []`. | `invalid_argument`, `site_not_found`, `index_unavailable`, `configuration_unavailable`, and vector fallback codes below. | Existing result fields and schema are unchanged; envelope metadata is additive. |
-| `fetch_page` | `site_name`, `url`: non-empty strings | `{"ok": true, "contract_version": "1.1", "site_name", "page": {"title", "url", "content_md"}}`. | `invalid_argument`, `site_not_found`, `page_not_found`, `index_unavailable`, `configuration_unavailable`. A `page_not_found` response retains `site_name`, the requested `url`, and `page: null`; its error includes both `code` and compatibility alias `type`, with the legacy message `Page not found in index: {url}`. | Replaces the former Markdown page document while preserving the legacy missing-page message. Render `page.content_md` when needed. |
+| `fetch_page` | `site_name`, `url`: non-empty strings | `{"ok": true, "contract_version": "1.2", "site_name", "page": {"title", "url", "content_md"}}`. | `invalid_argument`, `site_not_found`, `page_not_found`, `index_unavailable`, `configuration_unavailable`. A `page_not_found` response retains `site_name`, the requested `url`, and `page: null`; its error includes both `code` and compatibility alias `type`, with the legacy message `Page not found in index: {url}`. | Replaces the former Markdown page document while preserving the legacy missing-page message. Render `page.content_md` when needed. |
 
 Example error:
 
 ```json
 {
-  "contract_version": "1.1",
+  "contract_version": "1.2",
   "ok": false,
   "error": {"code": "site_not_found", "message": "Site 'Missing Docs' not found."}
 }
@@ -121,7 +121,7 @@ Example error:
 ```json
 {
   "ok": true,
-  "contract_version": "1.1",
+  "contract_version": "1.2",
   "mode": "keyword",
   "vector_hits": 0,
   "keyword_hits": 2,
@@ -164,7 +164,7 @@ If no keyword results are available, the tool still returns valid JSON:
 ```json
 {
   "ok": true,
-  "contract_version": "1.1",
+  "contract_version": "1.2",
   "mode": "keyword",
   "vector_hits": 0,
   "keyword_hits": 0,
@@ -180,7 +180,7 @@ If the site name is unknown, the tool returns structured JSON with an `error` ob
   "vector_hits": 0,
   "keyword_hits": 0,
   "results": [],
-  "contract_version": "1.1",
+  "contract_version": "1.2",
   "ok": false,
   "error": {
     "code": "site_not_found",

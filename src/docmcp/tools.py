@@ -410,7 +410,7 @@ def _emit_observation(event: str, **fields) -> None:
     obs_logger.info(json.dumps(payload, sort_keys=True, default=str))
 
 
-CONTRACT_VERSION = "1.1"
+CONTRACT_VERSION = "1.2"
 
 _VECTOR_ERROR_MESSAGES = {
     "vector_index_missing": "Vector search index is missing.",
