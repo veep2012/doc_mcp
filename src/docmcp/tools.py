@@ -133,41 +133,107 @@ def _decode_pages_cursor(site: dict, cursor: str) -> tuple[str, str] | None:
     return title, url
 
 
-def _resource_list_entries() -> list[dict[str, str | None]]:
-    """Return the complete public resource catalog in stable URI order."""
-    entries = [
-        {
-            "uri": "docmcp://sites",
+def _resource_site_entry(site: dict) -> dict[str, str | None]:
+    return {
+        "uri": f"docmcp://site/{site['site_id']}",
+        "name": site["name"],
+        "description": "Configured documentation site.",
+        "mime_type": "text/markdown",
+    }
+
+
+def _resource_catalog_revision(sites: list[dict]) -> str:
+    """Hash compact per-index catalog metadata without loading page records."""
+    digest = hashlib.sha256()
+    digest.update(b"docmcp://sites\0")
+    for site in sorted(sites, key=lambda item: f"docmcp://site/{item['site_id']}"):
+        site_uri = f"docmcp://site/{site['site_id']}"
+        digest.update(site_uri.encode("utf-8"))
+        digest.update(b"\0")
+        try:
+            with sqlite3.connect(
+                f"{Path(site['index_file']).resolve(strict=False).as_uri()}?mode=ro", uri=True
+            ) as conn:
+                summary = conn.execute(
+                    """
+                    SELECT COUNT(*), COALESCE(MIN(url), ''), COALESCE(MAX(url), ''),
+                           COALESCE(SUM(LENGTH(url)), 0), COALESCE(SUM(id), 0)
+                    FROM pages
+                    """
+                ).fetchone()
+        except (OSError, sqlite3.Error):
+            logger.warning(
+                "Could not fingerprint resources for site %r", site["name"], exc_info=True
+            )
+            summary = ("unavailable",)
+        digest.update(
+            json.dumps(summary, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        )
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def _iter_resource_list_entries(
+    sites: list[dict], after_uri: str | None = None, limit: int | None = None
+):
+    """Yield the catalog first, then sorted site/page entries in the requested window."""
+    yielded = 0
+    catalog_uri = "docmcp://sites"
+    if after_uri is None and (limit is None or yielded < limit):
+        yield {
+            "uri": catalog_uri,
             "name": "Documentation sites",
             "description": "Configured documentation sites.",
             "mime_type": "text/markdown",
         }
-    ]
-    for site in _load_sites():
-        site_uri = f"docmcp://site/{site['site_id']}"
-        entries.append(
-            {
-                "uri": site_uri,
-                "name": site["name"],
-                "description": "Configured documentation site.",
-                "mime_type": "text/markdown",
-            }
-        )
+        yielded += 1
+    for site in sorted(sites, key=lambda item: f"docmcp://site/{item['site_id']}"):
+        site_entry = _resource_site_entry(site)
+        site_uri = site_entry["uri"] or ""
+        after_catalog = after_uri == catalog_uri
+        if (after_uri is None or after_catalog or site_uri > after_uri) and (
+            limit is None or yielded < limit
+        ):
+            yield site_entry
+            yielded += 1
+        page_after = None
+        page_prefix = site_uri + "/page/"
+        if after_uri and after_uri.startswith(page_prefix):
+            page_after = ("", unquote(after_uri[len(page_prefix) :]))
+        elif after_uri and after_uri > site_uri and after_uri != catalog_uri:
+            page_after = ("", "\uffff")
         try:
-            pages = _list_pages(site["index_file"])
+            pages = _list_pages(
+                site["index_file"],
+                limit=None if limit is None else limit - yielded + 1,
+                after=page_after,
+                order="url",
+            )
         except (OSError, sqlite3.Error):
             logger.warning("Could not list resources for site %r", site["name"], exc_info=True)
             continue
-        entries.extend(
-            {
+        for page in pages:
+            entry = {
                 "uri": _page_resource_uri(site, page["url"]),
                 "name": page["title"],
                 "description": "Indexed documentation page.",
                 "mime_type": "text/markdown",
             }
-            for page in pages
-        )
-    return sorted(entries, key=lambda entry: entry["uri"] or "")
+            if (
+                after_uri is not None
+                and after_uri != catalog_uri
+                and (entry["uri"] or "") <= after_uri
+            ):
+                continue
+            yield entry
+            yielded += 1
+            if limit is not None and yielded >= limit:
+                return
+
+
+def _resource_list_entries() -> list[dict[str, str | None]]:
+    """Return the complete public resource catalog for compatibility and diagnostics."""
+    return list(_iter_resource_list_entries(_load_sites()))
 
 
 def _resource_catalog_fingerprint(entries: list[dict[str, str | None]]) -> str:
@@ -177,15 +243,20 @@ def _resource_catalog_fingerprint(entries: list[dict[str, str | None]]) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
-def _encode_resource_list_cursor(entries: list[dict[str, str | None]], uri: str) -> str:
+def _encode_resource_list_cursor_revision(revision: str, uri: str) -> str:
     payload = json.dumps(
-        {"catalog": _resource_catalog_fingerprint(entries), "uri": uri},
+        {"catalog": revision, "uri": uri},
         separators=(",", ":"),
     ).encode("utf-8")
     return base64.urlsafe_b64encode(payload).decode("ascii").rstrip("=")
 
 
-def _decode_resource_list_cursor(entries: list[dict[str, str | None]], cursor: str) -> str | None:
+def _encode_resource_list_cursor(entries: list[dict[str, str | None]], uri: str) -> str:
+    """Encode a cursor from a materialized catalog for compatibility with diagnostics/tests."""
+    return _encode_resource_list_cursor_revision(_resource_catalog_fingerprint(entries), uri)
+
+
+def _decode_resource_list_cursor(revision: str, cursor: str) -> str | None:
     allowed_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
     if not _valid_nonempty_text(cursor) or any(char not in allowed_chars for char in cursor):
         return None
@@ -197,27 +268,59 @@ def _decode_resource_list_cursor(entries: list[dict[str, str | None]], cursor: s
     if (
         not isinstance(payload, dict)
         or set(payload) != {"catalog", "uri"}
-        or payload.get("catalog") != _resource_catalog_fingerprint(entries)
+        or payload.get("catalog") != revision
         or not isinstance(payload.get("uri"), str)
     ):
         return None
-    return payload["uri"] if any(entry["uri"] == payload["uri"] for entry in entries) else None
+    return payload["uri"]
+
+
+def _resource_uri_exists(sites: list[dict], uri: str) -> bool:
+    """Check a cursor endpoint with one bounded site/index lookup."""
+    if uri == "docmcp://sites":
+        return True
+    for site in sites:
+        site_uri = f"docmcp://site/{site['site_id']}"
+        if uri == site_uri:
+            return True
+        prefix = site_uri + "/page/"
+        if not uri.startswith(prefix):
+            continue
+        page_url = unquote(uri[len(prefix) :])
+        try:
+            with sqlite3.connect(
+                f"{Path(site['index_file']).resolve(strict=False).as_uri()}?mode=ro", uri=True
+            ) as conn:
+                return (
+                    conn.execute(
+                        "SELECT 1 FROM pages WHERE url = ? LIMIT 1", (page_url,)
+                    ).fetchone()
+                    is not None
+                )
+        except (OSError, sqlite3.Error):
+            return False
+    return False
 
 
 def _resource_list_page(
     cursor: str | None = None,
 ) -> tuple[list[dict[str, str | None]], str | None]:
     """Return one bounded, cursor-addressable page of the public resource catalog."""
-    catalog = _resource_list_entries()
-    entries = catalog
+    sites = _load_sites()
+    revision = _resource_catalog_revision(sites)
+    after_uri = None
     if cursor is not None:
-        after_uri = _decode_resource_list_cursor(entries, cursor)
+        after_uri = _decode_resource_list_cursor(revision, cursor)
         if after_uri is None:
             raise ValueError("Resource list cursor is invalid.")
-        entries = [entry for entry in entries if (entry["uri"] or "") > after_uri]
+    entries = list(
+        _iter_resource_list_entries(sites, after_uri=after_uri, limit=_RESOURCE_LIST_PAGE_SIZE + 1)
+    )
     page = entries[:_RESOURCE_LIST_PAGE_SIZE]
+    if after_uri is not None and not _resource_uri_exists(sites, after_uri):
+        raise ValueError("Resource list cursor is invalid.")
     next_cursor = (
-        _encode_resource_list_cursor(catalog, page[-1]["uri"] or "")
+        _encode_resource_list_cursor_revision(revision, page[-1]["uri"] or "")
         if len(entries) > len(page)
         else None
     )

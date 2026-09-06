@@ -10,7 +10,7 @@
 - Related Tickets: veep2012/doc_mcp#14, veep2012/doc_mcp#2
 
 ## Change Log
-- 2026-09-06 | v3.4 | Updated the packaged harness for public contract version 1.2 and protocol resource-list continuation: the corpus uses a cursor reference and the runner resolves it from the preceding `nextCursor` response.
+- 2026-09-06 | v3.4 | Updated the packaged harness for public contract version 1.2 and protocol resource-list continuation: the corpus uses a cursor reference and the runner resolves it from the preceding `nextCursor` response. Expanded the generated fixture to 103 indexed pages so its 105-resource catalog crosses the fixed 100-resource page boundary, and documented vector-sidecar regeneration.
 - 2026-08-29 | v3.2 | Confirmed that contract version 1.1 and resource discovery/read requests for the catalog, configured site, and indexed page URI shapes are part of the MCP comparison surface, and any baseline/current contract mismatch must fail the harness comparison.
 - 2026-08-23 | v3.1 | Clarified that `contract_version` differences are semantic incompatibilities that must fail comparison, and documented the exact package-version paths that may be allowlisted while retaining all other response fields.
 - 2026-08-16 | v3.0 | Documented the required `notifications/initialized` handshake, notification no-response behavior, redacted nonblocking stderr artifact handling, deadline-bound partial-response handling, source/vector fixture integrity preflight, container-runtime precedence, deterministic fixture index/sidecar regeneration, actual checked-in corpus coverage, end-to-end MCP-only wheel rewrite verification, collision-resistant artifact directories, explicit vector embedding-model mismatch diagnostics, and CI validation of the real MCP-only wheel metadata.
@@ -145,6 +145,13 @@ index = "tests/fixtures/harness/index/example.db"
 init_db(index)
 upsert_page(index, "https://example.test/alpha", "Alpha", "Alpha documentation content.")
 upsert_page(index, "https://example.test/beta", "Beta", "Beta documentation content.")
+for number in range(1, 102):
+    upsert_page(
+        index,
+        f"https://example.test/generated-{number:03d}",
+        f"Generated Page {number:03d}",
+        f"Generated harness documentation page {number:03d}.",
+    )
 PY
 
 PYTHONPATH=src .venv/bin/python -m docmcp.vectorize_cli --site "Harness Docs"
@@ -152,7 +159,7 @@ test -s tests/fixtures/harness/index/example.db
 test -s tests/fixtures/harness/index/example.vec.db
 ```
 
-The reset makes regeneration deterministic from the two fixture pages. The vectorizer reads the configured `index/example.db` and replaces the derived `index/example.vec.db` sidecar using the checked-in embedding model and vectorizer settings.
+The reset makes regeneration deterministic from 103 fixture pages. The resulting catalog contains 105 resources (the public catalog, one site resource, and 103 page resources), so the first fixed-size `resources/list` response must return `nextCursor`; the copied corpus then exercises the continuation request. The vectorizer reads the configured `index/example.db` and replaces the derived `index/example.vec.db` sidecar using the checked-in embedding model and vectorizer settings.
 
 The checked-in corpus initializes the MCP session, sends `notifications/initialized`, discovers MCP resources and templates, reads the catalog, configured site, and a stable indexed page, requests `get_version`, searches `Harness Docs` for representative phrases, and requests a missing site. The guide does not promise domain-specific semantic queries or a particular `mode` in this corpus; those behaviors require separate fixture data and assertions. Keep the configured site name, URL scope, and index path aligned with `tests/fixtures/harness/config/sites.yaml`.
 

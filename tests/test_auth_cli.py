@@ -60,6 +60,7 @@ def test_auth_cli_list_reports_supported_authentication_status(monkeypatch, caps
 
 
 def test_auth_cli_reports_missing_browser(monkeypatch, capsys):
+    """TS-TF-027: Missing-browser cleanup does not emit pytest warnings."""
     site = {
         "name": "Private Docs",
         "url": "https://example.test/docs",

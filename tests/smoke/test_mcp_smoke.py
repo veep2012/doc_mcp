@@ -201,7 +201,8 @@ async def test_mcp_resource_list_paginates_over_stdio():
     uris = [str(resource.uri) for resource in first + second]
     assert len(first) == 100
     assert len(uris) == len(set(uris)) == 103
-    assert uris == sorted(uris)
+    assert uris[0] == "docmcp://sites"
+    assert uris[1:] == sorted(uris[1:])
     assert cursor and final_cursor is None
     assert {template.uriTemplate for template in templates} == {
         "docmcp://site/{site_id}",

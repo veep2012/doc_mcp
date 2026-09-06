@@ -160,17 +160,24 @@ def list_pages(
     index_file: str,
     limit: int | None = None,
     after: tuple[str, str] | None = None,
+    order: str = "title",
 ) -> list[dict]:
-    """List indexed pages, optionally after a title/URL key and up to a limit."""
+    """List indexed pages, optionally after a key and up to a limit."""
     conn = _get_ro_conn(index_file)
     if conn is None:
         return []
+    if order not in {"title", "url"}:
+        raise ValueError("order must be 'title' or 'url'")
     query = "SELECT url, title, last_crawled FROM pages"
     parameters: tuple[object, ...] = ()
     if after is not None:
-        query += " WHERE (title > ? OR (title = ? AND url > ?))"
-        parameters = (after[0], after[0], after[1])
-    query += " ORDER BY title, url"
+        if order == "url":
+            query += " WHERE url > ?"
+            parameters = (after[1],)
+        else:
+            query += " WHERE (title > ? OR (title = ? AND url > ?))"
+            parameters = (after[0], after[0], after[1])
+    query += " ORDER BY url" if order == "url" else " ORDER BY title, url"
     if limit is not None:
         query += " LIMIT ?"
         parameters += (limit,)

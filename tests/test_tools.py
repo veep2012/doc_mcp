@@ -279,7 +279,8 @@ def test_mcp_resource_list_paginates_with_opaque_cursor(monkeypatch, tmp_path):
     third, third_cursor = tools._resource_list_page(second_cursor)
 
     entries = first + second + third
-    assert [entry["uri"] for entry in entries] == sorted(entry["uri"] for entry in entries)
+    assert entries[0]["uri"] == "docmcp://sites"
+    assert [entry["uri"] for entry in entries[1:]] == sorted(entry["uri"] for entry in entries[1:])
     assert len({entry["uri"] for entry in entries}) == len(entries) == 5
     assert first_cursor and second_cursor
     assert third_cursor is None
@@ -302,6 +303,76 @@ def test_mcp_resource_list_paginates_with_opaque_cursor(monkeypatch, tmp_path):
     )
     with pytest.raises(ValueError, match="cursor is invalid"):
         tools._resource_list_page(first_cursor)
+
+
+def test_mcp_resource_list_keeps_catalog_first_for_large_catalog(monkeypatch, tmp_path):
+    """TS-TF-026: Cursor-free discovery keeps the catalog on the first page."""
+    index_file = tmp_path / "docs.db"
+    init_db(str(index_file))
+    for number in range(101):
+        upsert_page(
+            str(index_file),
+            f"https://example.test/{number:03d}",
+            f"Page {number:03d}",
+            f"Content {number:03d}",
+        )
+    monkeypatch.setattr(
+        tools,
+        "_get_sites",
+        lambda: [
+            {
+                "name": "Example Docs",
+                "site_id": "Example%20Docs",
+                "url": "https://example.test",
+                "auth_required": False,
+                "index_file": str(index_file),
+            }
+        ],
+    )
+
+    first, cursor = tools._resource_list_page()
+
+    assert first[0]["uri"] == "docmcp://sites"
+    assert len(first) == tools._RESOURCE_LIST_PAGE_SIZE
+    assert cursor
+
+
+def test_mcp_resource_list_retrieves_bounded_index_windows(monkeypatch, tmp_path):
+    """TS-TF-026: Resource discovery does not load a complete index per page."""
+    index_file = tmp_path / "docs.db"
+    init_db(str(index_file))
+    for number in range(10):
+        upsert_page(
+            str(index_file),
+            f"https://example.test/{number}",
+            f"Page {number}",
+            f"Content {number}",
+        )
+    sites = [
+        {
+            "name": "Example Docs",
+            "site_id": "Example%20Docs",
+            "url": "https://example.test",
+            "auth_required": False,
+            "index_file": str(index_file),
+        }
+    ]
+    monkeypatch.setattr(tools, "_get_sites", lambda: sites)
+    monkeypatch.setattr(tools, "_RESOURCE_LIST_PAGE_SIZE", 2)
+    original_list_pages = tools._list_pages
+    retrieval_limits = []
+
+    def tracked_list_pages(*args, **kwargs):
+        retrieval_limits.append(kwargs.get("limit"))
+        return original_list_pages(*args, **kwargs)
+
+    monkeypatch.setattr(tools, "_list_pages", tracked_list_pages)
+
+    page, cursor = tools._resource_list_page()
+
+    assert len(page) == 2
+    assert cursor
+    assert retrieval_limits == [2]
 
 
 def test_mcp_resource_list_empty_catalog(monkeypatch):

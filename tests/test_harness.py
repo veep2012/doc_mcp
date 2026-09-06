@@ -119,24 +119,30 @@ def _fixture(tmp_path: Path) -> None:
                 {
                     "jsonrpc": "2.0",
                     "id": 4,
+                    "method": "resources/list",
+                    "params": {"cursor": "$previous.nextCursor"},
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 5,
                     "method": "resources/templates/list",
                     "params": {},
                 },
                 {
                     "jsonrpc": "2.0",
-                    "id": 5,
+                    "id": 6,
                     "method": "resources/read",
                     "params": {"uri": "docmcp://sites"},
                 },
                 {
                     "jsonrpc": "2.0",
-                    "id": 6,
+                    "id": 7,
                     "method": "resources/read",
                     "params": {"uri": "docmcp://site/Harness"},
                 },
                 {
                     "jsonrpc": "2.0",
-                    "id": 7,
+                    "id": 8,
                     "method": "resources/read",
                     "params": {
                         "uri": "docmcp://site/Harness/page/https%3A%2F%2Fexample.test%2Fharness"
@@ -144,15 +150,9 @@ def _fixture(tmp_path: Path) -> None:
                 },
                 {
                     "jsonrpc": "2.0",
-                    "id": 8,
-                    "method": "tools/call",
-                    "params": {"name": "get_version"},
-                },
-                {
-                    "jsonrpc": "2.0",
                     "id": 9,
                     "method": "tools/call",
-                    "params": {"name": "search_docs"},
+                    "params": {"name": "get_version"},
                 },
                 {
                     "jsonrpc": "2.0",
@@ -163,6 +163,12 @@ def _fixture(tmp_path: Path) -> None:
                 {
                     "jsonrpc": "2.0",
                     "id": 11,
+                    "method": "tools/call",
+                    "params": {"name": "search_docs"},
+                },
+                {
+                    "jsonrpc": "2.0",
+                    "id": 12,
                     "method": "tools/call",
                     "params": {"name": "search_docs"},
                 },
@@ -192,7 +198,7 @@ def test_load_config_validates_fixture_and_corpus(tmp_path: Path, monkeypatch: p
     config, corpus = load_config(_write_env(tmp_path), root=tmp_path)
 
     assert config.container_bin == "podman"
-    assert len(corpus) == 11
+    assert len(corpus) == 12
     assert corpus[1]["method"] == "notifications/initialized"
     assert "id" not in corpus[1]
 
@@ -220,6 +226,34 @@ def test_load_config_rejects_corpus_without_site_or_page_resource_reads(
     monkeypatch.setattr("docmcp.harness.config.shutil.which", lambda _: "/usr/bin/podman")
 
     with pytest.raises(HarnessError, match="missing: page, site"):
+        load_config(_write_env(tmp_path), root=tmp_path)
+
+
+def test_load_config_rejects_corpus_without_resources_list_continuation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """TS-TF-013: Harness corpus must include resources/list continuation coverage."""
+    _fixture(tmp_path)
+    corpus_path = tmp_path / "fixture" / "mcp_requests.json"
+    corpus = json.loads(corpus_path.read_text(encoding="utf-8"))
+    corpus_path.write_text(
+        json.dumps(
+            [
+                request
+                for request in corpus
+                if not (
+                    request.get("method") == "resources/list"
+                    and request.get("params", {}).get("cursor") == "$previous.nextCursor"
+                )
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "baseline.whl").touch()
+    (tmp_path / "current.whl").touch()
+    monkeypatch.setattr("docmcp.harness.config.shutil.which", lambda _: "/usr/bin/podman")
+
+    with pytest.raises(HarnessError, match="must include a cursor-free resources/list"):
         load_config(_write_env(tmp_path), root=tmp_path)
 
 

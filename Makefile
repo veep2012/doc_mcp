@@ -66,6 +66,7 @@ test-smoke: ## Run smoke tests with the selected container runtime
 	fi
 	$(CONTAINER_ENV) $(VENV_PY) -m pytest -o addopts= -m smoke
 
+# TS-TF-027: Keep the canonical test command warning-free and ordered.
 .PHONY: test
 test: test-unit test-smoke ## Run unit tests first, then smoke tests
 

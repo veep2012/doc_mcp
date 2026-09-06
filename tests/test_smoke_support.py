@@ -33,6 +33,7 @@ def test_test_files_do_not_use_forbidden_tests_package_imports():
 
 
 def test_make_test_declares_unit_before_smoke():
+    """TS-TF-027: The canonical test target preserves the unit-before-smoke order."""
     excluded = {"CONTAINER_BIN", "MAKEFLAGS", "MFLAGS", "MAKEOVERRIDES"}
     env = {key: value for key, value in os.environ.items() if key not in excluded}
     result = subprocess.run(

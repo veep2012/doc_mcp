@@ -124,6 +124,7 @@ def _validate_corpus(path: Path) -> list[dict]:
         raise HarnessError(
             "MCP request corpus must include resource discovery and read requests: " + missing
         )
+    has_resources_list_continuation = False
     resource_read_kinds = set()
     for request in corpus:
         if request.get("method") != "resources/read":
@@ -156,10 +157,23 @@ def _validate_corpus(path: Path) -> list[dict]:
             and request["params"].get("cursor") == _CURSOR_REFERENCE
         ):
             previous = corpus[index - 1] if index else None
-            if not previous or previous.get("method") != "resources/list":
+            previous_params = previous.get("params", {}) if isinstance(previous, dict) else {}
+            if (
+                not previous
+                or previous.get("method") != "resources/list"
+                or not isinstance(previous_params, dict)
+                or previous_params.get("cursor")
+            ):
                 raise HarnessError(
-                    "A resources/list cursor reference must immediately follow resources/list."
+                    "A resources/list cursor reference must immediately follow a cursor-free "
+                    "resources/list request."
                 )
+            has_resources_list_continuation = True
+    if not has_resources_list_continuation:
+        raise HarnessError(
+            "MCP request corpus must include a cursor-free resources/list request immediately "
+            "followed by a resources/list request using $previous.nextCursor."
+        )
     return corpus
 
 
