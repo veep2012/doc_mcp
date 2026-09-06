@@ -5,6 +5,7 @@ Scenario document: documentation/test_scenarios/testing_framework_test_scenarios
 
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 import uuid
@@ -23,6 +24,7 @@ from docmcp.harness.config import (
 from docmcp.harness.runner import _run_version, _server_command
 from docmcp.harness import runner
 from docmcp.index_store import init_db, upsert_page
+from scripts.build_harness_fixture import build_fixture_index
 from scripts.build_mcp_wheel import _read_mcp_requirements
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -110,6 +112,10 @@ def _fixture(tmp_path: Path) -> None:
         "  session_file: null\n  index_file: index/harness.db\n",
         encoding="utf-8",
     )
+    _write_fixture_requests(fixture)
+
+
+def _write_fixture_requests(fixture: Path) -> None:
     (fixture / "mcp_requests.json").write_text(
         json.dumps(
             [
@@ -176,6 +182,14 @@ def _fixture(tmp_path: Path) -> None:
         ),
         encoding="utf-8",
     )
+
+
+def test_build_harness_fixture_index_crosses_resource_page_boundary(tmp_path: Path):
+    """TS-TF-013: The generated harness fixture exercises resource continuation."""
+    index_file = build_fixture_index(tmp_path / "fixture")
+
+    with sqlite3.connect(index_file) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM pages").fetchone()[0] == 103
 
 
 def test_load_config_rejects_secret_setting(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

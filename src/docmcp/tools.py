@@ -256,7 +256,7 @@ def _encode_resource_list_cursor(entries: list[dict[str, str | None]], uri: str)
     return _encode_resource_list_cursor_revision(_resource_catalog_fingerprint(entries), uri)
 
 
-def _decode_resource_list_cursor(revision: str, cursor: str) -> str | None:
+def _parse_resource_list_cursor(cursor: str) -> dict | None:
     allowed_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
     if not _valid_nonempty_text(cursor) or any(char not in allowed_chars for char in cursor):
         return None
@@ -265,8 +265,13 @@ def _decode_resource_list_cursor(revision: str, cursor: str) -> str | None:
         payload = json.loads(base64.urlsafe_b64decode(cursor + padding).decode("utf-8"))
     except (ValueError, UnicodeDecodeError, binascii.Error):
         return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _decode_resource_list_cursor(revision: str, cursor: str) -> str | None:
+    payload = _parse_resource_list_cursor(cursor)
     if (
-        not isinstance(payload, dict)
+        payload is None
         or set(payload) != {"catalog", "uri"}
         or payload.get("catalog") != revision
         or not isinstance(payload.get("uri"), str)
@@ -310,19 +315,38 @@ def _resource_list_page(
     revision = _resource_catalog_revision(sites)
     after_uri = None
     if cursor is not None:
+        payload = _parse_resource_list_cursor(cursor)
+        if payload is None or set(payload) != {"catalog", "uri"}:
+            logger.debug("Rejected resources/list cursor: malformed cursor.")
+            _emit_observation("resource_list_cursor_rejected", reason="malformed")
+            raise ValueError("Resource list cursor is invalid.")
+        if payload.get("catalog") != revision:
+            logger.debug("Rejected resources/list cursor: catalog revision mismatch.")
+            _emit_observation("resource_list_cursor_rejected", reason="revision_mismatch")
+            raise ValueError("Resource list cursor is invalid.")
         after_uri = _decode_resource_list_cursor(revision, cursor)
         if after_uri is None:
+            logger.debug("Rejected resources/list cursor: malformed cursor payload.")
+            _emit_observation("resource_list_cursor_rejected", reason="malformed")
             raise ValueError("Resource list cursor is invalid.")
     entries = list(
         _iter_resource_list_entries(sites, after_uri=after_uri, limit=_RESOURCE_LIST_PAGE_SIZE + 1)
     )
     page = entries[:_RESOURCE_LIST_PAGE_SIZE]
     if after_uri is not None and not _resource_uri_exists(sites, after_uri):
+        logger.debug("Rejected resources/list cursor: endpoint is not in the current catalog.")
+        _emit_observation("resource_list_cursor_rejected", reason="missing_endpoint")
         raise ValueError("Resource list cursor is invalid.")
     next_cursor = (
         _encode_resource_list_cursor_revision(revision, page[-1]["uri"] or "")
         if len(entries) > len(page)
         else None
+    )
+    _emit_observation(
+        "resource_list_page_served",
+        cursor_present=cursor is not None,
+        resource_count=len(page),
+        has_next_cursor=next_cursor is not None,
     )
     return page, next_cursor
 

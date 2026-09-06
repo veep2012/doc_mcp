@@ -375,6 +375,87 @@ def test_mcp_resource_list_retrieves_bounded_index_windows(monkeypatch, tmp_path
     assert retrieval_limits == [2]
 
 
+def test_mcp_resource_list_logs_safe_cursor_rejection_reasons(monkeypatch, caplog, tmp_path):
+    """TS-TF-026: Cursor diagnostics classify failures without catalog details."""
+    index_file = tmp_path / "docs.db"
+    init_db(str(index_file))
+    upsert_page(str(index_file), "https://example.test/page", "Page", "Content")
+    sites = [
+        {
+            "name": "Example Docs",
+            "site_id": "Example%20Docs",
+            "url": "https://example.test",
+            "auth_required": False,
+            "index_file": str(index_file),
+        }
+    ]
+    monkeypatch.setattr(tools, "_get_sites", lambda: sites)
+    revision = tools._resource_catalog_revision(sites)
+    revision_mismatch_cursor = tools._encode_resource_list_cursor_revision(
+        "revision-mismatch", "docmcp://sites"
+    )
+    missing_endpoint_cursor = tools._encode_resource_list_cursor_revision(
+        revision, "docmcp://site/Example%20Docs/page/https%3A%2F%2Fexample.test%2Fmissing"
+    )
+
+    with caplog.at_level("DEBUG", logger=tools.logger.name):
+        for cursor in ("bad", revision_mismatch_cursor, missing_endpoint_cursor):
+            with pytest.raises(ValueError, match="cursor is invalid"):
+                tools._resource_list_page(cursor)
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert "malformed cursor" in messages[0]
+    assert "catalog revision mismatch" in messages[1]
+    assert "endpoint is not in the current catalog" in messages[2]
+    assert "Example%20Docs/page" not in " ".join(messages)
+
+
+def test_mcp_resource_list_emits_usage_observations(monkeypatch, caplog, tmp_path):
+    """TS-TF-026: Resource pagination emits safe usage metrics."""
+    index_file = tmp_path / "docs.db"
+    init_db(str(index_file))
+    upsert_page(str(index_file), "https://example.test/page", "Page", "Content")
+    monkeypatch.setattr(
+        tools,
+        "_get_sites",
+        lambda: [
+            {
+                "name": "Example Docs",
+                "site_id": "Example%20Docs",
+                "url": "https://example.test",
+                "auth_required": False,
+                "index_file": str(index_file),
+            }
+        ],
+    )
+    monkeypatch.setattr(tools, "_RESOURCE_LIST_PAGE_SIZE", 2)
+
+    with caplog.at_level("INFO", logger=tools.obs_logger.name):
+        first, cursor = tools._resource_list_page()
+        second, final_cursor = tools._resource_list_page(cursor)
+
+    events = [
+        json.loads(record.message)
+        for record in caplog.records
+        if record.name == tools.obs_logger.name
+    ]
+    assert events == [
+        {
+            "cursor_present": False,
+            "event": "resource_list_page_served",
+            "has_next_cursor": True,
+            "resource_count": len(first),
+        },
+        {
+            "cursor_present": True,
+            "event": "resource_list_page_served",
+            "has_next_cursor": False,
+            "resource_count": len(second),
+        },
+    ]
+    assert cursor and final_cursor is None
+
+
 def test_mcp_resource_list_empty_catalog(monkeypatch):
     """TS-TF-028: Empty resource discovery succeeds without continuation."""
     monkeypatch.setattr(tools, "_get_sites", lambda: [])

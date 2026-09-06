@@ -10,7 +10,7 @@
 - Related Tickets: veep2012/doc_mcp#14, veep2012/doc_mcp#2
 
 ## Change Log
-- 2026-09-06 | v3.4 | Updated the packaged harness for public contract version 1.2 and protocol resource-list continuation: the corpus uses a cursor reference and the runner resolves it from the preceding `nextCursor` response. Expanded the generated fixture to 103 indexed pages so its 105-resource catalog crosses the fixed 100-resource page boundary, and documented vector-sidecar regeneration.
+- 2026-09-06 | v3.4 | Updated the packaged harness for public contract version 1.2 and protocol resource-list continuation: the corpus uses a cursor reference and the runner resolves it from the preceding `nextCursor` response. Added a reusable fixture-index generator that creates 103 indexed pages so its 105-resource catalog crosses the fixed 100-resource page boundary, and documented vector-sidecar regeneration.
 - 2026-08-29 | v3.2 | Confirmed that contract version 1.1 and resource discovery/read requests for the catalog, configured site, and indexed page URI shapes are part of the MCP comparison surface, and any baseline/current contract mismatch must fail the harness comparison.
 - 2026-08-23 | v3.1 | Clarified that `contract_version` differences are semantic incompatibilities that must fail comparison, and documented the exact package-version paths that may be allowlisted while retaining all other response fields.
 - 2026-08-16 | v3.0 | Documented the required `notifications/initialized` handshake, notification no-response behavior, redacted nonblocking stderr artifact handling, deadline-bound partial-response handling, source/vector fixture integrity preflight, container-runtime precedence, deterministic fixture index/sidecar regeneration, actual checked-in corpus coverage, end-to-end MCP-only wheel rewrite verification, collision-resistant artifact directories, explicit vector embedding-model mismatch diagnostics, and CI validation of the real MCP-only wheel metadata.
@@ -85,6 +85,7 @@ The runner mounts the fixture at `/fixture` read-only and the wheel directory at
 - `scripts/build_mcp_wheel.py` - derives the MCP-only wheel metadata from the full wheel and reads dependencies from `requirements-mcp.txt`.
 - `tests/fixtures/harness/config/sites.yaml` - sanitized site configuration.
 - `tests/fixtures/harness/mcp_requests.json.example` - tracked example MCP request corpus.
+- `scripts/build_harness_fixture.py` - deterministic generator for the local harness source index.
 - `tests/fixtures/harness/mcp_requests.json` - local request corpus copied from the example; ignored by Git.
   - `tests/fixtures/harness/index/example.db` - local SQLite index required by the fixture; the `index/` path is ignored by Git and must be created locally.
 - `src/docmcp/harness/config.py` - settings and fixture validation.
@@ -137,22 +138,7 @@ The repository stores the fixture configuration and corpus, but not the SQLite d
 
 ```bash
 mkdir -p tests/fixtures/harness/index
-rm -f tests/fixtures/harness/index/example.db tests/fixtures/harness/index/example.vec.db
-.venv/bin/python - <<'PY'
-from docmcp.index_store import init_db, upsert_page
-
-index = "tests/fixtures/harness/index/example.db"
-init_db(index)
-upsert_page(index, "https://example.test/alpha", "Alpha", "Alpha documentation content.")
-upsert_page(index, "https://example.test/beta", "Beta", "Beta documentation content.")
-for number in range(1, 102):
-    upsert_page(
-        index,
-        f"https://example.test/generated-{number:03d}",
-        f"Generated Page {number:03d}",
-        f"Generated harness documentation page {number:03d}.",
-    )
-PY
+PYTHONPATH=src .venv/bin/python scripts/build_harness_fixture.py
 
 PYTHONPATH=src .venv/bin/python -m docmcp.vectorize_cli --site "Harness Docs"
 test -s tests/fixtures/harness/index/example.db
