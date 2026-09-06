@@ -291,7 +291,9 @@ async def read_mcp_resource(runtime_root: Path, uri: str) -> tuple[list, list, s
             return resources, templates, result.contents[0].text
 
 
-async def list_mcp_resources(runtime_root: Path, cursor: str | None = None) -> tuple[list, list, str | None]:
+async def list_mcp_resources(
+    runtime_root: Path, cursor: str | None = None
+) -> tuple[list, list, str | None]:
     """List one MCP resource-discovery page and the advertised templates."""
     server = StdioServerParameters(
         command=sys.executable,

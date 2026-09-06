@@ -185,9 +185,7 @@ def _encode_resource_list_cursor(entries: list[dict[str, str | None]], uri: str)
     return base64.urlsafe_b64encode(payload).decode("ascii").rstrip("=")
 
 
-def _decode_resource_list_cursor(
-    entries: list[dict[str, str | None]], cursor: str
-) -> str | None:
+def _decode_resource_list_cursor(entries: list[dict[str, str | None]], cursor: str) -> str | None:
     allowed_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
     if not _valid_nonempty_text(cursor) or any(char not in allowed_chars for char in cursor):
         return None
@@ -206,7 +204,9 @@ def _decode_resource_list_cursor(
     return payload["uri"] if any(entry["uri"] == payload["uri"] for entry in entries) else None
 
 
-def _resource_list_page(cursor: str | None = None) -> tuple[list[dict[str, str | None]], str | None]:
+def _resource_list_page(
+    cursor: str | None = None,
+) -> tuple[list[dict[str, str | None]], str | None]:
     """Return one bounded, cursor-addressable page of the public resource catalog."""
     catalog = _resource_list_entries()
     entries = catalog
@@ -239,7 +239,9 @@ async def _list_mcp_resources(request: "_mcp_types.ListResourcesRequest"):
         ) from exc
     except _ConfigurationUnavailableError as exc:
         raise McpError(
-            types.ErrorData(code=types.INTERNAL_ERROR, message="Server configuration is unavailable.")
+            types.ErrorData(
+                code=types.INTERNAL_ERROR, message="Server configuration is unavailable."
+            )
         ) from exc
     return types.ListResourcesResult(
         resources=[
