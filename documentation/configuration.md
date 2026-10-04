@@ -5,11 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-08-09
-- Version: v2.4
+- Last Updated: 2026-10-04
+- Version: v2.5
 
 ## Change Log
-- 2026-08-09 | v2.4 | Clarified redirected PDF response capture, PDF signature validation, and authenticated request fallback behavior.
+- 2026-10-04 | v2.5 | Clarified that crawl-time vectorization is opt-in and that standalone vectorization remains available.
 - 2026-07-29 | v2.3 | Documented proxy-backed, authenticated PDF download behavior.
 - 2026-07-19 | v2.2 | Clarified that PDF handling is automatic and applies to both `.pdf` URLs and `application/pdf` responses, including targeted reindexing.
 - 2026-07-12 | v2.1 | Removed unsupported credential and authentication-mode configuration guidance.
@@ -195,7 +195,7 @@ sites:
 
 ### Local Vector Sidecar Notes
 - `search_engine: keyword` keeps the site on keyword-only search, `search_engine: vector` uses the vector sidecar only, and `search_engine: hybrid` combines both.
-- `docmcp-crawl` still writes only the keyword SQLite index in this stage.
+- By default, `docmcp-crawl` writes only the keyword SQLite index. Add `--vectorize` to rebuild the optional vector sidecar after a successful crawl.
 - Build or refresh the local vector sidecar explicitly with `docmcp-vectorize --site "<Site Name>"` or `docmcp-crawl --vectorize --site "<Site Name>"` after crawling.
 - The vectorizer reads the existing `index_file`, chunks page Markdown deterministically, generates FastEmbed embeddings, and rewrites the configured `vector_index_file`.
 - The sidecar format is versioned; `docmcp-vectorize` rewrites it atomically with the current header and metadata schema, and older sidecars degrade to keyword search until they are rebuilt.
@@ -208,7 +208,6 @@ sites:
 - To inspect the vector tables with `sqlite3`, use a shell that supports extension loading, open `index/<site>.vec.db`, and load the platform-appropriate `vec0` library before running `.tables`:
   - `sqlite3 index/<site>.vec.db`
   - `.load <path-to-sqlite_vec>/vec0.<platform-extension>` where the platform-specific filename is `vec0.dylib` on macOS, `vec0.so` on Linux, or `vec0.dll` on Windows
-- Crawl-time vectorization chaining is available as an explicit opt-in via `docmcp-crawl --vectorize`, while the vectorizer still remains a separate post-crawl step.
 
 ## Edge Cases
 - Unset placeholders resolve to an empty string instead of crashing.

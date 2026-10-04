@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-06-21
-- Version: v1.6
+- Last Updated: 2026-10-04
+- Version: v1.7
 
 ## Change Log
+- 2026-10-04 | v1.7 | Linked the versioned machine-readable index schema contract.
 - 2026-06-21 | v1.6 | Grouped the landing page into getting started, runtime behavior, reference, and support sections and removed the obsolete semantic search planning page from the landing page navigation.
 - 2026-05-24 | v1.4 | Added a direct link to the sqlite vector query reference and moved the manual test scenarios link under `test_scenarios/`.
 - 2026-04-26 | v1.2 | Added the manual test scenarios document to the documentation navigation.
@@ -39,6 +40,7 @@ Provide the entry point for the repository documentation set and link to the ope
 
 ### Configuration And Reference
 - [Configuration](configuration.md)
+- [Index Schema Contract](index_schema_contract.md)
 - [SQLite Vector Queries](sqlite_vector_queries.md)
 
 ### Testing And Support

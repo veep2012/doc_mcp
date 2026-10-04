@@ -4,6 +4,7 @@ import sqlite3
 
 import pytest
 
+from docmcp import __version__
 import docmcp.tools as tools
 import docmcp.vector_index as vector_index
 from docmcp.index_store import init_db, upsert_page
@@ -1490,5 +1491,5 @@ def test_get_version_returns_server_metadata(monkeypatch):
     assert payload == {
         "package_name": "doc-mcp",
         "server_name": "docs-mcp",
-        "version": "1.1.3",
+        "version": __version__,
     }

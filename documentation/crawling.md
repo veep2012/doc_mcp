@@ -5,11 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-08-09
-- Version: v2.5
+- Last Updated: 2026-10-04
+- Version: v2.6
 
 ## Change Log
-- 2026-08-09 | v2.5 | Documented reliable redirected PDF capture, raw PDF signature validation, and clearer rejection of HTML error responses.
+- 2026-10-04 | v2.6 | Clarified that targeted URL inputs are normalized and deduplicated before crawling starts.
 - 2026-07-19 | v2.4 | Documented PDF detection by URL or response content type, authenticated fetching, PDF redirect policies, and failure handling in crawl and targeted reindex flows.
 - 2026-07-16 | v2.3 | Documented configured browser installation and missing-browser recovery.
 - 2026-07-05 | v2.2 | Added targeted batch-size guardrails for `docmcp-crawl --pages` and `--pages-file`, including large-batch warnings and a hard refusal above the supported limit.
@@ -75,7 +75,7 @@ docmcp-crawl --site "My Docs" --pages "https://docs.example.com/docs/guide" "htt
 docmcp-crawl --site "My Docs" --pages-file pages.txt
 ```
 
-- `--pages` and `--pages-file` can be combined; the CLI keeps the URLs in the order they were provided and preserves duplicates.
+- `--pages` and `--pages-file` can be combined; values are merged in input order, normalized, and deduplicated before crawling starts.
 - If `--pages-file` cannot be read, the command fails with a file-read error before crawling starts.
 - If `--pages-file` is empty or contains only comments and blank lines, the crawl falls back to the normal full-site crawl.
 
@@ -93,8 +93,7 @@ docmcp-crawl --version
 - If `crawl.start_delay_seconds` is set and the crawl is running headful, it loads the start page first, then waits so you can finish any manual setup in the browser before crawling begins.
 - It uses breadth-first traversal up to `crawl.max_depth`.
 - If `--pages` or `--pages-file` is provided, the crawl command switches to targeted reindex mode and processes only those explicit URLs.
-- `--pages` and `--pages-file` values are merged in order; the command does not deduplicate selected URLs.
-- Targeted batches are normalized and deduplicated before crawling starts.
+- `--pages` and `--pages-file` values are merged in order, then normalized and deduplicated before the batch-size limits are checked.
 - An empty selected-pages list means the command keeps the normal crawl path.
 - The CLI warns when a targeted batch reaches 100 pages or more because large selected-page runs can behave like a near-full crawl and are more expensive for SQLite-backed runs.
 - The CLI refuses targeted batches above 500 pages and asks you to split the file or use the normal crawl path instead.
