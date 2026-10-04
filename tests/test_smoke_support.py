@@ -219,7 +219,12 @@ def test_shared_helpers_import_under_supported_invocation_modes():
             "pytest executable",
             # Invoke the entrypoint with the active interpreter so a venv moved
             # between machines does not depend on its stale shebang path.
-([str(pytest_executable)] if os.name == "nt" else [sys.executable, str(pytest_executable)]) + ["-q", target]
+            (
+                [str(pytest_executable)]
+                if os.name == "nt"
+                else [sys.executable, str(pytest_executable)]
+            )
+            + ["-q", target],
             pytest_env,
         ),
         (

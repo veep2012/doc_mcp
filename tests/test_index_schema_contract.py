@@ -189,9 +189,9 @@ def test_vector_schema_matches_contract(contract, generated_indexes):
                 == index["unique"]
             )
         vec = spec["virtual_tables"]["chunk_embeddings"]
-        assert [row[1] for row in conn.execute("PRAGMA table_info(chunk_embeddings)")] == vec[
-            "columns"
-        ]
+        columns = [row[1] for row in conn.execute("PRAGMA table_info(chunk_embeddings)")]
+        assert "rowid" in columns
+        assert [column for column in columns if column != "rowid"] == vec["columns"]
         assert vec["dimensions_from"] == "vector_meta.embedding_dimensions"
         assert meta[1] > 0
         expected = vec["sql_template"].format(embedding_dimensions=meta[1])

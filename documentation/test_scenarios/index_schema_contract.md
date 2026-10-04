@@ -10,7 +10,7 @@
 - Related Tickets: veep2012/doc_mcp#83
 
 ## Change Log
-- 2026-10-04 | v1.0 | Defined generated-index contract verification and mismatch regression scenarios.
+- 2026-10-04 | v1.0 | Defined generated-index contract verification and mismatch regression scenarios; clarified that implicit vec0 rowid metadata is excluded from declared-column comparison.
 
 ## Purpose
 Define the verification required to keep the published index schema contract aligned with generated SQLite files.
@@ -60,6 +60,7 @@ Define the verification required to keep the published index schema contract ali
 
 ## Edge Cases
 - The fake embedding backend uses a test-specific dimension; verifiers must not assume a production model's dimension.
+- `PRAGMA table_info(chunk_embeddings)` may expose sqlite-vec's implicit `rowid`; compare declared embedding columns separately while still requiring the rowid used by `vector_chunks.vec_rowid`.
 - SQLite and sqlite-vec create internal shadow tables; compare only declared public objects.
 
 ## References
