@@ -377,7 +377,7 @@ Run these scenarios after either `MT-003A` or `MT-003B`, using the command set f
   - There is no page-only vector refresh path yet; the sidecar still rebuilds as a full pass.
   - If the crawl is run with `--debug --vectorize`, the chained vectorizer inherits the debug mode and emits chunk-level diagnostics.
   - Pass if the sidecar updates after recrawl and keyword search remains usable throughout.
-- Fail if stale vector records remain after the rebuild or if vectorization runs without being requested by `--vectorize` or a separate vectorizer command.
+  - Fail if stale vector records remain after the rebuild or if vectorization runs without being requested by `--vectorize` or a separate vectorizer command.
 
   ## MCP Server
   ### MT-014: Start MCP Server From Shell
