@@ -217,7 +217,9 @@ def test_shared_helpers_import_under_supported_invocation_modes():
     commands = [
         (
             "pytest executable",
-            [str(pytest_executable), "-q", target],
+            # Invoke the entrypoint with the active interpreter so a venv moved
+            # between machines does not depend on its stale shebang path.
+            [sys.executable, str(pytest_executable), "-q", target],
             pytest_env,
         ),
         (

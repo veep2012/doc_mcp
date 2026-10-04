@@ -31,9 +31,9 @@ endif
 .PHONY: audit
 audit: ## Run dependency vulnerability audit against project requirements
 ifneq (,$(wildcard .venv))
-	$(VENV_PY) -m pip_audit -r requirements.txt
+	$(VENV_PY) -m pip_audit --disable-pip --no-deps -r requirements.lock
 else
-	$(PYTHON_BIN) -m pip_audit -r requirements.txt
+	$(PYTHON_BIN) -m pip_audit --disable-pip --no-deps -r requirements.lock
 endif
 
 .PHONY: wheel

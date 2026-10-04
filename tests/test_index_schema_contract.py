@@ -19,7 +19,9 @@ from docmcp.index_store import init_db, upsert_page
 from docmcp.vector_index import DEFAULT_EMBEDDING_MODEL, rebuild_vector_index, vector_backend_status
 
 CONTRACT_PATH = Path(__file__).resolve().parents[1] / "schemas/index_schema_contract.json"
-SCENARIOS = Path(__file__).resolve().parents[1] / "documentation/test_scenarios/index_schema_contract.md"
+SCENARIOS = (
+    Path(__file__).resolve().parents[1] / "documentation/test_scenarios/index_schema_contract.md"
+)
 
 
 @pytest.fixture
@@ -75,9 +77,9 @@ def _verify_tables(conn, tables):
         }
         assert unique == {tuple(columns) for columns in definition.get("unique", [])}
         if "autoincrement" in definition:
-            ddl = conn.execute(
-                "SELECT sql FROM sqlite_master WHERE name = ?", (name,)
-            ).fetchone()[0]
+            ddl = conn.execute("SELECT sql FROM sqlite_master WHERE name = ?", (name,)).fetchone()[
+                0
+            ]
             assert re.search(
                 rf"\b{definition['autoincrement']}\s+INTEGER PRIMARY KEY AUTOINCREMENT\b",
                 ddl,
@@ -173,10 +175,19 @@ def test_vector_schema_matches_contract(contract, generated_indexes):
                 "SELECT tbl_name FROM sqlite_master WHERE type = 'index' AND name = ?",
                 (name,),
             ).fetchone() == (index["table"],)
-            assert [row[2] for row in conn.execute(f"PRAGMA index_info({name})")] == index["columns"]
-            assert bool(
-                next(row[2] for row in conn.execute(f"PRAGMA index_list({index['table']})") if row[1] == name)
-            ) == index["unique"]
+            assert [row[2] for row in conn.execute(f"PRAGMA index_info({name})")] == index[
+                "columns"
+            ]
+            assert (
+                bool(
+                    next(
+                        row[2]
+                        for row in conn.execute(f"PRAGMA index_list({index['table']})")
+                        if row[1] == name
+                    )
+                )
+                == index["unique"]
+            )
         vec = spec["virtual_tables"]["chunk_embeddings"]
         assert vec["dimensions_from"] == "vector_meta.embedding_dimensions"
         assert meta[1] > 0
@@ -190,7 +201,9 @@ def test_vector_schema_matches_contract(contract, generated_indexes):
 
 def _source_fingerprint(conn):
     digest = hashlib.sha256()
-    rows = conn.execute("SELECT url, title, content_md, last_crawled FROM pages ORDER BY url").fetchall()
+    rows = conn.execute(
+        "SELECT url, title, content_md, last_crawled FROM pages ORDER BY url"
+    ).fetchall()
     for url, title, content, crawled in rows:
         digest.update("\0".join((url, title or "", content or "", crawled or "")).encode("utf-8"))
         digest.update(b"\0")
@@ -212,7 +225,8 @@ def test_cross_index_checks_match_contract(contract, generated_indexes):
     assert model_rule["trim_whitespace"] is True
     configured_model = site["vectorizer"].get("embedding_model")
     effective_model = (
-        model_rule["default"] if configured_model is None or configured_model == ""
+        model_rule["default"]
+        if configured_model is None or configured_model == ""
         else configured_model.strip()
     )
     fingerprint_spec = compatibility["source_fingerprint"]
@@ -231,21 +245,34 @@ def test_cross_index_checks_match_contract(contract, generated_indexes):
         sqlite_vec.load(vector)
         vector.enable_load_extension(False)
         vector.row_factory = sqlite3.Row
-        meta = dict(vector.execute("SELECT * FROM vector_meta WHERE site_name = ?", (site["name"],)).fetchone())
+        meta = dict(
+            vector.execute(
+                "SELECT * FROM vector_meta WHERE site_name = ?", (site["name"],)
+            ).fetchone()
+        )
         values = {
             "vector_meta": meta,
             "source_fingerprint": _source_fingerprint(keyword),
-            "site": {"index_file": site["index_file"], "name": site["name"], "effective_embedding_model": effective_model},
+            "site": {
+                "index_file": site["index_file"],
+                "name": site["name"],
+                "effective_embedding_model": effective_model,
+            },
             "vector_chunks": {
                 "count": vector.execute("SELECT COUNT(*) FROM vector_chunks").fetchone()[0],
-                "site_name": [row[0] for row in vector.execute("SELECT site_name FROM vector_chunks")],
-                "vec_rowid": {row[0] for row in vector.execute("SELECT vec_rowid FROM vector_chunks")},
+                "site_name": [
+                    row[0] for row in vector.execute("SELECT site_name FROM vector_chunks")
+                ],
+                "vec_rowid": {
+                    row[0] for row in vector.execute("SELECT vec_rowid FROM vector_chunks")
+                },
             },
             "chunk_embeddings": {
                 "count": vector.execute("SELECT COUNT(*) FROM chunk_embeddings").fetchone()[0],
                 "rowid": {row[0] for row in vector.execute("SELECT rowid FROM chunk_embeddings")},
             },
         }
+
         def resolve(path):
             value = values
             for key in path.split("."):

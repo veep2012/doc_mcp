@@ -55,9 +55,9 @@ pydantic-settings==2.15.0
 pydantic_core==2.46.4
 pyee==13.0.1
 Pygments==2.20.0
-PyJWT==2.13.0
+PyJWT==2.15.1
 pyparsing==3.3.2
-pypdf==6.16.1
+pypdf==6.19.0
 pyproject_hooks==1.2.0
 pytest==9.1.1
 pytest-asyncio==1.4.0
@@ -81,6 +81,6 @@ tomli_w==1.2.0
 tqdm==4.70.0
 typing-inspection==0.4.2
 typing_extensions==4.16.0
-urllib3==2.7.0
+urllib3==2.8.0
 uvicorn==0.52.1
 wheel==0.47.0
