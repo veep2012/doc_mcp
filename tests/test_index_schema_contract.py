@@ -62,34 +62,88 @@ def generated_indexes(keyword_index, tmp_path, request):
     return keyword_index, Path(site["vector_index_file"]), site
 
 
-def _columns(conn, table):
-    return [
-        {"name": name, "type": kind, "not_null": bool(not_null), "primary_key": pk}
-        for _, name, kind, not_null, _, pk in conn.execute(f"PRAGMA table_info({table})")
-    ]
+def _declared_sql_objects(conn, object_type):
+    return {
+        name: _normalized_sql(sql)
+        for name, sql in conn.execute(
+            "SELECT name, sql FROM sqlite_master WHERE type = ? AND sql IS NOT NULL",
+            (object_type,),
+        )
+    }
 
 
-def _verify_tables(conn, tables):
+def _declared_columns(conn, table):
+    return {
+        name: {
+            "name": name,
+            "type": (kind or "").upper(),
+            "not_null": bool(not_null),
+            "primary_key": primary_key,
+        }
+        for _, name, kind, not_null, _, primary_key in conn.execute(f"PRAGMA table_info({table})")
+        if name != "rowid"
+    }
+
+
+def _declared_column_names(conn, table):
+    return {name for _, name, *_ in conn.execute(f"PRAGMA table_info({table})") if name != "rowid"}
+
+
+def _verify_public_tables(conn, expected_names):
+    actual_names = {
+        name
+        for _, name, table_type, *_ in conn.execute("PRAGMA table_list")
+        if table_type != "shadow" and not name.startswith("sqlite_")
+    }
+    assert actual_names == set(expected_names)
+
+
+def _verify_indexes(conn, indexes):
+    actual_indexes = dict(
+        conn.execute(
+            "SELECT name, tbl_name FROM sqlite_master WHERE type = 'index' AND sql IS NOT NULL"
+        )
+    )
+    for name, definition in indexes.items():
+        assert actual_indexes.get(name) == definition["table"]
+        index_list = conn.execute(f"PRAGMA index_list({definition['table']})")
+        index_info = next(
+            (row for row in index_list if row[1] == name),
+            None,
+        )
+        assert index_info is not None
+        assert bool(index_info[2]) == definition["unique"]
+        actual_columns = [row[2] for row in conn.execute(f"PRAGMA index_info({name})")]
+        assert actual_columns == definition["columns"]
+
+
+def _verify_table_definitions(conn, tables):
+    actual_sql = _declared_sql_objects(conn, "table")
     for name, definition in tables.items():
-        assert conn.execute(
-            "SELECT type FROM sqlite_master WHERE name = ?", (name,)
-        ).fetchone() == ("table",)
-        assert _columns(conn, name) == definition["columns"]
-        unique = {
+        assert name in actual_sql
+        actual_columns = _declared_columns(conn, name)
+        expected_columns = {
+            column["name"]: {**column, "type": column["type"].upper()}
+            for column in definition["columns"]
+        }
+        assert actual_columns == expected_columns
+        unique_indexes = {
             tuple(row[2] for row in conn.execute(f"PRAGMA index_info({index_name})"))
             for _, index_name, is_unique, *_ in conn.execute(f"PRAGMA index_list({name})")
             if is_unique
         }
-        assert unique == {tuple(columns) for columns in definition.get("unique", [])}
+        assert unique_indexes == {tuple(columns) for columns in definition.get("unique", [])}
         if "autoincrement" in definition:
-            ddl = conn.execute("SELECT sql FROM sqlite_master WHERE name = ?", (name,)).fetchone()[
-                0
-            ]
+            ddl = actual_sql[name]
             assert re.search(
                 rf"\b{definition['autoincrement']}\s+INTEGER PRIMARY KEY AUTOINCREMENT\b",
                 ddl,
                 re.IGNORECASE,
             )
+
+
+def _verify_tables(conn, tables):
+    _verify_table_definitions(conn, tables)
 
 
 def _normalized_sql(value):
@@ -103,13 +157,22 @@ def _normalized_sql(value):
 
 
 def _verify_sql_objects(conn, object_type, definitions):
+    actual = _declared_sql_objects(conn, object_type)
     for name, definition in definitions.items():
-        actual = conn.execute(
-            "SELECT sql FROM sqlite_master WHERE type = ? AND name = ?",
-            (object_type, name),
-        ).fetchone()
-        assert actual is not None, name
-        assert _normalized_sql(actual[0]) == _normalized_sql(definition["sql"])
+        assert actual.get(name) == _normalized_sql(definition["sql"]), name
+
+
+def _verify_trigger_objects(conn, triggers):
+    actual_sql = _declared_sql_objects(conn, "trigger")
+    actual_targets = dict(
+        conn.execute("SELECT name, tbl_name FROM sqlite_master WHERE type = 'trigger'")
+    )
+    expected_targets = {
+        name: definition["event"].rsplit(" ON ", 1)[1] for name, definition in triggers.items()
+    }
+    assert set(actual_sql) == set(triggers)
+    assert actual_targets == expected_targets
+    _verify_sql_objects(conn, "trigger", triggers)
 
 
 def test_contract_identity(contract):
@@ -119,7 +182,14 @@ def test_contract_identity(contract):
     package = tomllib.loads(
         (CONTRACT_PATH.parent.parent / "pyproject.toml").read_text(encoding="utf-8")
     )
-    assert contract["doc_mcp_releases"]["compatible"] == package["project"]["version"]
+    schema_source = contract["schema_source"]
+    assert schema_source["artifact_type"] == "SQLite keyword index and vector sidecar"
+    assert schema_source["producer"] == "doc_mcp"
+    assert schema_source["producer_version_field"] == "doc_mcp_releases.compatible"
+    producer_version_section, producer_version_key = schema_source["producer_version_field"].split(
+        ".", 1
+    )
+    assert contract[producer_version_section][producer_version_key] == package["project"]["version"]
     assert contract["keyword_index"]["schema_version"] is None
     scenario_text = SCENARIOS.read_text(encoding="utf-8")
     for number, entrypoint in enumerate(
@@ -142,6 +212,7 @@ def test_keyword_schema_matches_contract(contract, keyword_index):
     with sqlite3.connect(keyword_index) as conn:
         assert conn.execute("PRAGMA user_version").fetchone()[0] == spec["sqlite_user_version"]
         _verify_tables(conn, spec["tables"])
+        _verify_public_tables(conn, set(spec["tables"]) | set(spec["virtual_tables"]))
         for definition in spec["virtual_tables"].values():
             expected = (
                 f"CREATE VIRTUAL TABLE pages_fts USING {definition['module']}"
@@ -150,13 +221,37 @@ def test_keyword_schema_matches_contract(contract, keyword_index):
                 f"content_rowid='{definition['options']['content_rowid']}')"
             )
             assert _normalized_sql(definition["sql"]) == _normalized_sql(expected)
-        for definition in spec["triggers"].values():
-            assert definition["event"].lower() in definition["sql"].lower()
         _verify_sql_objects(conn, "table", spec["virtual_tables"])
-        _verify_sql_objects(conn, "trigger", spec["triggers"])
-        assert set(spec["triggers"]) == {
-            row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'trigger'")
-        }
+        _verify_trigger_objects(conn, spec["triggers"])
+
+        conn.execute(
+            "INSERT INTO pages(url, title, content_md) VALUES (?, ?, ?)",
+            ("https://example.test/fts", "Trigger test", "insertneedle originalword"),
+        )
+        page_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        assert conn.execute(
+            "SELECT rowid FROM pages_fts WHERE pages_fts MATCH 'insertneedle'"
+        ).fetchone() == (page_id,)
+        conn.execute(
+            "UPDATE pages SET title = ?, content_md = ? WHERE id = ?",
+            ("Updated trigger test", "replacementneedle", page_id),
+        )
+        assert (
+            conn.execute(
+                "SELECT rowid FROM pages_fts WHERE pages_fts MATCH 'insertneedle'"
+            ).fetchone()
+            is None
+        )
+        assert conn.execute(
+            "SELECT rowid FROM pages_fts WHERE pages_fts MATCH 'replacementneedle'"
+        ).fetchone() == (page_id,)
+        conn.execute("DELETE FROM pages WHERE id = ?", (page_id,))
+        assert (
+            conn.execute(
+                "SELECT rowid FROM pages_fts WHERE pages_fts MATCH 'replacementneedle'"
+            ).fetchone()
+            is None
+        )
 
 
 def test_vector_schema_matches_contract(contract, generated_indexes):
@@ -175,28 +270,9 @@ def test_vector_schema_matches_contract(contract, generated_indexes):
         ).fetchone()
         assert meta[0] == spec["metadata_schema_version"]
         assert spec["metadata_version_field"] == "vector_meta.schema_version"
-        for name, index in spec["indexes"].items():
-            assert conn.execute(
-                "SELECT tbl_name FROM sqlite_master WHERE type = 'index' AND name = ?",
-                (name,),
-            ).fetchone() == (index["table"],)
-            assert [row[2] for row in conn.execute(f"PRAGMA index_info({name})")] == index[
-                "columns"
-            ]
-            assert (
-                bool(
-                    next(
-                        row[2]
-                        for row in conn.execute(f"PRAGMA index_list({index['table']})")
-                        if row[1] == name
-                    )
-                )
-                == index["unique"]
-            )
+        _verify_indexes(conn, spec["indexes"])
         vec = spec["virtual_tables"]["chunk_embeddings"]
-        columns = [row[1] for row in conn.execute("PRAGMA table_info(chunk_embeddings)")]
-        assert "rowid" in columns
-        assert [column for column in columns if column != "rowid"] == vec["columns"]
+        assert _declared_column_names(conn, "chunk_embeddings") == set(vec["columns"])
         assert vec["dimensions_from"] == "vector_meta.embedding_dimensions"
         assert meta[1] > 0
         expected = vec["sql_template"].format(embedding_dimensions=meta[1])
@@ -231,10 +307,27 @@ def test_cross_index_checks_match_contract(contract, generated_indexes):
     assert model_rule["default"] == DEFAULT_EMBEDDING_MODEL
     assert model_rule["use_default_when"] == ["missing", "null", "empty_string"]
     assert model_rule["trim_whitespace"] is True
-    assert model_rule["normalization_order"] == [
-        "apply_empty_default",
-        "trim_whitespace",
-        "reject_if_empty",
+    assert model_rule["normalization_steps"] == [
+        {
+            "step": 1,
+            "condition": "input_is_missing_null_or_empty_string",
+            "action": "return_default",
+        },
+        {
+            "step": 2,
+            "condition": "input_is_string",
+            "action": "trim_leading_and_trailing_whitespace",
+        },
+        {
+            "step": 3,
+            "condition": "trimmed_string_is_non_empty",
+            "action": "return_trimmed_string",
+        },
+        {
+            "step": 4,
+            "condition": "no_prior_step_returned",
+            "action": "reject",
+        },
     ]
     assert model_rule["reject_when"] == ["non_string", "whitespace_only"]
 

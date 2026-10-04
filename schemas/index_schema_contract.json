@@ -1,6 +1,11 @@
 {
   "contract_name": "doc_mcp_index_schema",
-  "contract_version": "1.0.2",
+  "contract_version": "1.0.4",
+  "schema_source": {
+    "artifact_type": "SQLite keyword index and vector sidecar",
+    "producer": "doc_mcp",
+    "producer_version_field": "doc_mcp_releases.compatible"
+  },
   "doc_mcp_releases": {
     "compatible": "1.1.4",
     "rule": "This contract describes the index formats produced by doc_mcp 1.1.4; compatibility with other releases must be verified and declared explicitly."
@@ -99,7 +104,28 @@
       "default": "BAAI/bge-small-en-v1.5",
       "use_default_when": ["missing", "null", "empty_string"],
       "trim_whitespace": true,
-      "normalization_order": ["apply_empty_default", "trim_whitespace", "reject_if_empty"],
+      "normalization_steps": [
+        {
+          "step": 1,
+          "condition": "input_is_missing_null_or_empty_string",
+          "action": "return_default"
+        },
+        {
+          "step": 2,
+          "condition": "input_is_string",
+          "action": "trim_leading_and_trailing_whitespace"
+        },
+        {
+          "step": 3,
+          "condition": "trimmed_string_is_non_empty",
+          "action": "return_trimmed_string"
+        },
+        {
+          "step": 4,
+          "condition": "no_prior_step_returned",
+          "action": "reject"
+        }
+      ],
       "reject_when": ["non_string", "whitespace_only"]
     },
     "source_fingerprint": {

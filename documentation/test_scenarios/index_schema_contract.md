@@ -10,7 +10,7 @@
 - Related Tickets: veep2012/doc_mcp#83
 
 ## Change Log
-- 2026-10-04 | v1.0 | Defined generated-index contract verification and mismatch regression scenarios; clarified implicit vec0 rowid metadata and embedding-model normalization order.
+- 2026-10-04 | v1.0 | Defined generated-index contract verification and mismatch regression scenarios; clarified optional vec0 rowid metadata reporting, ordered embedding-model normalization, actual DDL comparison, keyword FTS checks, and contract provenance.
 
 ## Purpose
 Define the verification required to keep the published index schema contract aligned with generated SQLite files.
@@ -23,24 +23,24 @@ Define the verification required to keep the published index schema contract ali
 ### TS-ISC-001: Contract identity
 - Preconditions: `schemas/index_schema_contract.json` exists.
 - Action: Parse the JSON.
-- Expected result: It identifies its contract version and compatible `doc_mcp` release, and explicitly marks the keyword format as unversioned.
+- Expected result: It identifies the contract version separately from the described artifact's producer and producer package version, resolves provenance to the compatible release, and explicitly marks the keyword format as unversioned.
 
 ### TS-ISC-002: Keyword index
 - Preconditions: A temporary keyword index is created with `init_db`.
-- Action: Inspect SQLite table and column metadata, FTS5 configuration, indexes, and trigger definitions.
-- Expected result: The generated `pages` table, `pages_fts`, uniqueness and synchronization triggers agree with the contract; the keyword header version is zero.
+- Action: Inspect SQLite table and column metadata, FTS5 configuration, indexes, and trigger definitions; exercise FTS synchronization across insert, update, and delete.
+- Expected result: The exact public table and trigger sets agree with the contract, excluding SQLite and FTS shadow objects; declared SQL matches the contract, FTS searches reflect page inserts, updates remove stale terms and index replacements, and deletes remove the page's terms. The keyword header version is zero.
 - Cleanup: Remove the temporary index.
 
 ### TS-ISC-003: Vector sidecar
 - Preconditions: A populated keyword index and a sidecar built using `rebuild_vector_index` with the fake test embedding backend.
 - Action: Inspect header and metadata versions, tables and columns, index, vec0 definition, and the dimensions from metadata.
-- Expected result: Both schema versions, required columns, index order, and vec0 embedding dimension agree with the contract; dimension is derived from `vector_meta.embedding_dimensions` rather than a fixed model constant.
+- Expected result: Both schema versions, required columns, index order, and vec0 embedding dimension agree with the contract; the actual `chunk_embeddings` DDL in `sqlite_master` matches the dimension-expanded contract SQL, and dimension is derived from `vector_meta.embedding_dimensions` rather than a fixed model constant.
 - Cleanup: Remove the temporary indexes.
 
 ### TS-ISC-004: Cross-index compatibility
 - Preconditions: The same populated index and sidecar.
 - Action: Evaluate the contract's source fingerprint, site identity, model, page count, and vector record consistency rules against generated files with an explicit model, an omitted model, and a model padded with whitespace; evaluate whitespace-only model rejection.
-- Expected result: Each rule resolves to actual fixture values and passes, including a positive chunk and embedding count. Model normalization applies the default to missing, null, or exactly empty input before trimming non-empty strings; whitespace-only input is rejected rather than defaulted.
+- Expected result: Each rule resolves to actual fixture values and passes, including a positive chunk and embedding count. The contract's ordered normalization steps match `_normalize_embedding_model`: missing, null, and exactly empty inputs return the default; non-empty strings are trimmed and returned; whitespace-only and non-string values are rejected.
 - Cleanup: Remove the temporary indexes.
 
 ### TS-ISC-005: Contract drift detection
@@ -60,7 +60,7 @@ Define the verification required to keep the published index schema contract ali
 
 ## Edge Cases
 - The fake embedding backend uses a test-specific dimension; verifiers must not assume a production model's dimension.
-- `PRAGMA table_info(chunk_embeddings)` may expose sqlite-vec's implicit `rowid`; compare declared embedding columns separately while still requiring the rowid used by `vector_chunks.vec_rowid`.
+- `PRAGMA table_info(chunk_embeddings)` may or may not report sqlite-vec's implicit `rowid`; ignore it when comparing declared columns. Validate rowid joins through SQL queries instead of requiring rowid to appear in table metadata.
 - Whitespace-only embedding model values must be rejected after trimming; they must not be treated as the empty-string default.
 - SQLite and sqlite-vec create internal shadow tables; compare only declared public objects.
 
