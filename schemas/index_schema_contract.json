@@ -94,6 +94,12 @@
     }
   },
   "cross_index_compatibility": {
+    "effective_embedding_model": {
+      "source": "site.vectorizer.embedding_model",
+      "default": "BAAI/bge-small-en-v1.5",
+      "use_default_when": ["missing", "null", "empty_string"],
+      "trim_whitespace": true
+    },
     "source_fingerprint": {
       "pages_order": "url ASC",
       "fields": ["url", "title", "content_md", "last_crawled"],
@@ -110,7 +116,7 @@
       {"id": "source_path", "operator": "equal", "left": "vector_meta.source_index_file", "right": "site.index_file"},
       {"id": "site_identity", "operator": "equal", "left": "vector_meta.site_name", "right": "site.name"},
       {"id": "chunk_site_identity", "operator": "all_equal", "left": "vector_chunks.site_name", "right": "site.name"},
-      {"id": "embedding_model", "operator": "equal", "left": "vector_meta.embedding_model", "right": "site.vectorizer.embedding_model"},
+      {"id": "embedding_model", "operator": "equal", "left": "vector_meta.embedding_model", "right": "site.effective_embedding_model"},
       {"id": "embedding_dimensions", "operator": "positive", "left": "vector_meta.embedding_dimensions"},
       {"id": "page_count", "operator": "equal", "left": "vector_meta.page_count", "right": "source_fingerprint.page_count"},
       {"id": "chunk_count", "operator": "positive", "left": "vector_meta.chunk_count"},

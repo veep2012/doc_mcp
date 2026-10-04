@@ -16,7 +16,7 @@ except ImportError:
     sqlite_vec = None
 
 from docmcp.index_store import init_db, upsert_page
-from docmcp.vector_index import rebuild_vector_index, vector_backend_status
+from docmcp.vector_index import DEFAULT_EMBEDDING_MODEL, rebuild_vector_index, vector_backend_status
 
 CONTRACT_PATH = Path(__file__).resolve().parents[1] / "schemas/index_schema_contract.json"
 SCENARIOS = Path(__file__).resolve().parents[1] / "documentation/test_scenarios/index_schema_contract.md"
@@ -34,21 +34,22 @@ def keyword_index(tmp_path):
     return path
 
 
-@pytest.fixture
-def generated_indexes(keyword_index, tmp_path):
+@pytest.fixture(params=["explicit", "omitted", "padded"])
+def generated_indexes(keyword_index, tmp_path, request):
     available, reason = vector_backend_status()
     if not available or sqlite_vec is None:
         pytest.skip(reason)
     upsert_page(str(keyword_index), "https://example.test/guide", "Guide", "Alpha beta gamma")
+    vectorizer = {"chunk_size": 18, "chunk_overlap": 5}
+    if request.param != "omitted":
+        vectorizer["embedding_model"] = (
+            " fake-fastembed-model " if request.param == "padded" else "fake-fastembed-model"
+        )
     site = {
         "name": "Example Docs",
         "index_file": str(keyword_index),
         "vector_index_file": str(tmp_path / "docs.vec.db"),
-        "vectorizer": {
-            "embedding_model": "fake-fastembed-model",
-            "chunk_size": 18,
-            "chunk_overlap": 5,
-        },
+        "vectorizer": vectorizer,
     }
     rebuild_vector_index(site)
     return keyword_index, Path(site["vector_index_file"]), site
@@ -203,7 +204,18 @@ def _source_fingerprint(conn):
 def test_cross_index_checks_match_contract(contract, generated_indexes):
     """TS-ISC-004: evaluate every declared compatibility rule against both indexes."""
     keyword_path, vector_path, site = generated_indexes
-    fingerprint_spec = contract["cross_index_compatibility"]["source_fingerprint"]
+    compatibility = contract["cross_index_compatibility"]
+    model_rule = compatibility["effective_embedding_model"]
+    assert model_rule["source"] == "site.vectorizer.embedding_model"
+    assert model_rule["default"] == DEFAULT_EMBEDDING_MODEL
+    assert model_rule["use_default_when"] == ["missing", "null", "empty_string"]
+    assert model_rule["trim_whitespace"] is True
+    configured_model = site["vectorizer"].get("embedding_model")
+    effective_model = (
+        model_rule["default"] if configured_model is None or configured_model == ""
+        else configured_model.strip()
+    )
+    fingerprint_spec = compatibility["source_fingerprint"]
     assert fingerprint_spec == {
         "pages_order": "url ASC",
         "fields": ["url", "title", "content_md", "last_crawled"],
@@ -223,7 +235,7 @@ def test_cross_index_checks_match_contract(contract, generated_indexes):
         values = {
             "vector_meta": meta,
             "source_fingerprint": _source_fingerprint(keyword),
-            "site": {"index_file": site["index_file"], "name": site["name"], "vectorizer": site["vectorizer"]},
+            "site": {"index_file": site["index_file"], "name": site["name"], "effective_embedding_model": effective_model},
             "vector_chunks": {
                 "count": vector.execute("SELECT COUNT(*) FROM vector_chunks").fetchone()[0],
                 "site_name": [row[0] for row in vector.execute("SELECT site_name FROM vector_chunks")],
@@ -240,7 +252,7 @@ def test_cross_index_checks_match_contract(contract, generated_indexes):
                 value = value[key]
             return value
 
-        checks = contract["cross_index_compatibility"]["checks"]
+        checks = compatibility["checks"]
         assert len(checks) == 12
         assert len({rule["id"] for rule in checks}) == len(checks)
         for rule in checks:

@@ -39,8 +39,8 @@ Define the verification required to keep the published index schema contract ali
 
 ### TS-ISC-004: Cross-index compatibility
 - Preconditions: The same populated index and sidecar.
-- Action: Evaluate the contract's source fingerprint, site identity, model, page count, and vector record consistency rules against the generated files.
-- Expected result: Each rule resolves to actual fixture values and passes, including a positive chunk and embedding count.
+- Action: Evaluate the contract's source fingerprint, site identity, model, page count, and vector record consistency rules against generated files with an explicit model, an omitted model, and a model padded with whitespace.
+- Expected result: Each rule resolves to actual fixture values and passes, including a positive chunk and embedding count. The model check uses the declared default for an omitted value and trims configured whitespace.
 - Cleanup: Remove the temporary indexes.
 
 ### TS-ISC-005: Contract drift detection
