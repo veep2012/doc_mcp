@@ -10,7 +10,7 @@
 - Related Tickets: veep2012/doc_mcp#83
 
 ## Change Log
-- 2026-10-04 | v1.1 | Corrected the compatible `doc_mcp` release to 1.1.4 and incremented the contract patch version.
+- 2026-10-04 | v1.1 | Corrected the compatible `doc_mcp` release to 1.1.4, incremented the contract patch version, and documented embedding-model normalization.
 
 ## Purpose
 Explain how external tools can inspect indexes produced by `doc_mcp` without starting the MCP server or copying its schema definitions.
@@ -21,7 +21,7 @@ Explain how external tools can inspect indexes produced by `doc_mcp` without sta
 
 ## Design / Behavior
 ### Format and versioning
-`schemas/index_schema_contract.json` is the canonical, UTF-8 JSON description of the indexes created by `init_db` and `rebuild_vector_index`. `contract_version` uses semantic versioning: increment the major version for breaking contract-format or index-format changes, the minor version for backward-compatible additions, and the patch version for clarifications that do not change validation. `doc_mcp_releases.compatible` identifies the release whose generated indexes are verified against this file (currently `1.1.4`). Other releases are not implicitly covered; add an explicitly verified release/range when supporting them.
+`schemas/index_schema_contract.json` is the canonical, UTF-8 JSON description of the indexes created by `init_db` and `rebuild_vector_index`. `contract_version` uses semantic versioning: increment the major version for breaking contract-format or index-format changes, the minor version for backward-compatible additions, and the patch version for clarifications that do not change validation. The current contract version is `1.0.2`. `doc_mcp_releases.compatible` identifies the release whose generated indexes are verified against this file (currently `1.1.4`). Other releases are not implicitly covered; add an explicitly verified release/range when supporting them.
 
 The **keyword** format is unversioned: `keyword_index.schema_version` is `null`; the generated SQLite `user_version` is zero by default, not an embedded keyword schema version. The **vector** sidecar requires both SQLite `PRAGMA user_version = 2` and `vector_meta.schema_version = 2`. Older or incompatible sidecars must be rebuilt, not migrated by this contract.
 
@@ -33,7 +33,7 @@ The **keyword** format is unversioned: `keyword_index.schema_version` is `null`;
 - `chunk_embeddings`: a sqlite-vec `vec0` virtual table with a `float` embedding column. Substitute the positive value of `vector_meta.embedding_dimensions` into its `sql_template`; **do not** assume a fixed dimension for all models. SQLite FTS5/sqlite-vec shadow tables are internal and are not listed in the contract.
 
 ### Compatibility checks
-The JSON `cross_index_compatibility.checks` array lists identifiers, operands, and comparison operators (`equal`, `positive`, `all_equal`, and `same_set`). A consumer must select the configured keyword file and site, then compare the sidecar metadata to the source fingerprint, site identity and effective model, page count, positive chunk count, chunk and embedding counts, and joined rowids. `effective_embedding_model` uses the declared default for a missing, null, or empty configuration value and trims whitespace from configured values; whitespace-only strings are invalid configuration. `source_index_file` records the configured path at build time; match it to the selected `site.index_file` when validating a capture. These are **external validation rules**, not a claim that every rule is enforced at MCP query time.
+The JSON `cross_index_compatibility.checks` array lists identifiers, operands, and comparison operators (`equal`, `positive`, `all_equal`, and `same_set`). A consumer must select the configured keyword file and site, then compare the sidecar metadata to the source fingerprint, site identity and effective model, page count, positive chunk count, chunk and embedding counts, and joined rowids. `effective_embedding_model.normalization_order` is normative: apply the default to missing, null, or exactly empty input, trim whitespace from other string values, then reject a value that is empty after trimming. Thus whitespace-only strings are invalid configuration and must not resolve to the default. `source_index_file` records the configured path at build time; match it to the selected `site.index_file` when validating a capture. These are **external validation rules**, not a claim that every rule is enforced at MCP query time.
 
 For `source_fingerprint.sha256`, visit `pages` ordered by `url` ascending. For each page concatenate UTF-8 `url`, `title`, `content_md`, `last_crawled` separated by NUL bytes, treating nullable values as empty strings, and append another NUL byte. Hash the concatenated bytes with SHA-256 (lowercase hex). The companion timestamp is the maximum non-empty `last_crawled` string or NULL. `source_fingerprint.page_count` is the number of pages. On an empty index the hash is SHA-256 of empty bytes and the timestamp is NULL, but the harness requires non-empty fixtures for vector validation.
 

@@ -16,7 +16,12 @@ except ImportError:
     sqlite_vec = None
 
 from docmcp.index_store import init_db, upsert_page
-from docmcp.vector_index import DEFAULT_EMBEDDING_MODEL, rebuild_vector_index, vector_backend_status
+from docmcp.vector_index import (
+    DEFAULT_EMBEDDING_MODEL,
+    _normalize_embedding_model,
+    rebuild_vector_index,
+    vector_backend_status,
+)
 
 CONTRACT_PATH = Path(__file__).resolve().parents[1] / "schemas/index_schema_contract.json"
 SCENARIOS = (
@@ -226,6 +231,42 @@ def test_cross_index_checks_match_contract(contract, generated_indexes):
     assert model_rule["default"] == DEFAULT_EMBEDDING_MODEL
     assert model_rule["use_default_when"] == ["missing", "null", "empty_string"]
     assert model_rule["trim_whitespace"] is True
+    assert model_rule["normalization_order"] == [
+        "apply_empty_default",
+        "trim_whitespace",
+        "reject_if_empty",
+    ]
+    assert model_rule["reject_when"] == ["non_string", "whitespace_only"]
+
+    def resolve_model_from_contract(value, *, missing=False):
+        if missing or value is None or value == "":
+            return model_rule["default"]
+        if not isinstance(value, str):
+            raise ValueError("embedding model must be a string")
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("embedding model must not be whitespace-only")
+        return normalized
+
+    contract_cases = [
+        ("omitted", None, True),
+        ("null", None, False),
+        ("empty", "", False),
+        ("padded", " fake-fastembed-model ", False),
+    ]
+    for label, value, missing in contract_cases:
+        expected = resolve_model_from_contract(value, missing=missing)
+        actual_input = None if missing else value
+        assert expected == _normalize_embedding_model(actual_input), label
+    with pytest.raises(ValueError):
+        resolve_model_from_contract("   ")
+    with pytest.raises(ValueError):
+        _normalize_embedding_model("   ")
+    with pytest.raises(ValueError):
+        resolve_model_from_contract(123)
+    with pytest.raises(ValueError):
+        _normalize_embedding_model(123)
+
     configured_model = site["vectorizer"].get("embedding_model")
     effective_model = (
         model_rule["default"]

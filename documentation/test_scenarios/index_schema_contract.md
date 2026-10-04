@@ -10,7 +10,7 @@
 - Related Tickets: veep2012/doc_mcp#83
 
 ## Change Log
-- 2026-10-04 | v1.0 | Defined generated-index contract verification and mismatch regression scenarios; clarified that implicit vec0 rowid metadata is excluded from declared-column comparison.
+- 2026-10-04 | v1.0 | Defined generated-index contract verification and mismatch regression scenarios; clarified implicit vec0 rowid metadata and embedding-model normalization order.
 
 ## Purpose
 Define the verification required to keep the published index schema contract aligned with generated SQLite files.
@@ -39,8 +39,8 @@ Define the verification required to keep the published index schema contract ali
 
 ### TS-ISC-004: Cross-index compatibility
 - Preconditions: The same populated index and sidecar.
-- Action: Evaluate the contract's source fingerprint, site identity, model, page count, and vector record consistency rules against generated files with an explicit model, an omitted model, and a model padded with whitespace.
-- Expected result: Each rule resolves to actual fixture values and passes, including a positive chunk and embedding count. The model check uses the declared default for an omitted value and trims configured whitespace.
+- Action: Evaluate the contract's source fingerprint, site identity, model, page count, and vector record consistency rules against generated files with an explicit model, an omitted model, and a model padded with whitespace; evaluate whitespace-only model rejection.
+- Expected result: Each rule resolves to actual fixture values and passes, including a positive chunk and embedding count. Model normalization applies the default to missing, null, or exactly empty input before trimming non-empty strings; whitespace-only input is rejected rather than defaulted.
 - Cleanup: Remove the temporary indexes.
 
 ### TS-ISC-005: Contract drift detection
@@ -61,6 +61,7 @@ Define the verification required to keep the published index schema contract ali
 ## Edge Cases
 - The fake embedding backend uses a test-specific dimension; verifiers must not assume a production model's dimension.
 - `PRAGMA table_info(chunk_embeddings)` may expose sqlite-vec's implicit `rowid`; compare declared embedding columns separately while still requiring the rowid used by `vector_chunks.vec_rowid`.
+- Whitespace-only embedding model values must be rejected after trimming; they must not be treated as the empty-string default.
 - SQLite and sqlite-vec create internal shadow tables; compare only declared public objects.
 
 ## References
