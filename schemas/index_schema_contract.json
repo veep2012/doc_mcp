@@ -1,0 +1,122 @@
+{
+  "contract_name": "doc_mcp_index_schema",
+  "contract_version": "1.0.0",
+  "doc_mcp_releases": {
+    "compatible": "1.1.3",
+    "rule": "This contract describes the index formats produced by doc_mcp 1.1.3; compatibility with other releases must be verified and declared explicitly."
+  },
+  "keyword_index": {
+    "schema_version": null,
+    "sqlite_user_version": 0,
+    "tables": {
+      "pages": {
+        "columns": [
+          {"name": "id", "type": "INTEGER", "not_null": false, "primary_key": 1},
+          {"name": "url", "type": "TEXT", "not_null": true, "primary_key": 0},
+          {"name": "title", "type": "TEXT", "not_null": false, "primary_key": 0},
+          {"name": "content_md", "type": "TEXT", "not_null": false, "primary_key": 0},
+          {"name": "last_crawled", "type": "TEXT", "not_null": false, "primary_key": 0}
+        ],
+        "autoincrement": "id",
+        "unique": [["url"]]
+      }
+    },
+    "virtual_tables": {
+      "pages_fts": {
+        "module": "fts5",
+        "columns": ["title", "content_md"],
+        "options": {"content": "pages", "content_rowid": "id"},
+        "sql": "CREATE VIRTUAL TABLE pages_fts USING fts5(title, content_md, content='pages', content_rowid='id')"
+      }
+    },
+    "triggers": {
+      "pages_ai": {
+        "event": "AFTER INSERT ON pages",
+        "sql": "CREATE TRIGGER pages_ai AFTER INSERT ON pages BEGIN INSERT INTO pages_fts(rowid, title, content_md) VALUES (new.id, new.title, new.content_md); END"
+      },
+      "pages_au": {
+        "event": "AFTER UPDATE ON pages",
+        "sql": "CREATE TRIGGER pages_au AFTER UPDATE ON pages BEGIN INSERT INTO pages_fts(pages_fts, rowid, title, content_md) VALUES ('delete', old.id, old.title, old.content_md); INSERT INTO pages_fts(rowid, title, content_md) VALUES (new.id, new.title, new.content_md); END"
+      },
+      "pages_ad": {
+        "event": "AFTER DELETE ON pages",
+        "sql": "CREATE TRIGGER pages_ad AFTER DELETE ON pages BEGIN INSERT INTO pages_fts(pages_fts, rowid, title, content_md) VALUES ('delete', old.id, old.title, old.content_md); END"
+      }
+    }
+  },
+  "vector_sidecar": {
+    "sqlite_user_version": 2,
+    "metadata_schema_version": 2,
+    "metadata_version_field": "vector_meta.schema_version",
+    "tables": {
+      "vector_meta": {
+        "columns": [
+          {"name": "site_name", "type": "TEXT", "not_null": false, "primary_key": 1},
+          {"name": "schema_version", "type": "INTEGER", "not_null": true, "primary_key": 0},
+          {"name": "source_index_file", "type": "TEXT", "not_null": true, "primary_key": 0},
+          {"name": "built_at", "type": "TEXT", "not_null": true, "primary_key": 0},
+          {"name": "embedding_model", "type": "TEXT", "not_null": true, "primary_key": 0},
+          {"name": "page_count", "type": "INTEGER", "not_null": true, "primary_key": 0},
+          {"name": "chunk_count", "type": "INTEGER", "not_null": true, "primary_key": 0},
+          {"name": "embedding_dimensions", "type": "INTEGER", "not_null": true, "primary_key": 0},
+          {"name": "chunk_size", "type": "INTEGER", "not_null": true, "primary_key": 0},
+          {"name": "chunk_overlap", "type": "INTEGER", "not_null": true, "primary_key": 0},
+          {"name": "source_content_hash", "type": "TEXT", "not_null": true, "primary_key": 0},
+          {"name": "source_max_last_crawled", "type": "TEXT", "not_null": false, "primary_key": 0}
+        ],
+        "unique": [["site_name"]]
+      },
+      "vector_chunks": {
+        "columns": [
+          {"name": "chunk_id", "type": "TEXT", "not_null": false, "primary_key": 1},
+          {"name": "site_name", "type": "TEXT", "not_null": true, "primary_key": 0},
+          {"name": "page_url", "type": "TEXT", "not_null": true, "primary_key": 0},
+          {"name": "title", "type": "TEXT", "not_null": true, "primary_key": 0},
+          {"name": "chunk_index", "type": "INTEGER", "not_null": true, "primary_key": 0},
+          {"name": "chunk_text", "type": "TEXT", "not_null": true, "primary_key": 0},
+          {"name": "source_last_crawled", "type": "TEXT", "not_null": false, "primary_key": 0},
+          {"name": "vec_rowid", "type": "INTEGER", "not_null": true, "primary_key": 0}
+        ],
+        "unique": [["chunk_id"], ["vec_rowid"]]
+      }
+    },
+    "indexes": {
+      "idx_vector_chunks_page": {"table": "vector_chunks", "columns": ["page_url", "chunk_index"], "unique": false}
+    },
+    "virtual_tables": {
+      "chunk_embeddings": {
+        "module": "vec0",
+        "columns": ["embedding"],
+        "embedding_type": "float",
+        "dimensions_from": "vector_meta.embedding_dimensions",
+        "sql_template": "CREATE VIRTUAL TABLE chunk_embeddings USING vec0(embedding float[{embedding_dimensions}])"
+      }
+    }
+  },
+  "cross_index_compatibility": {
+    "source_fingerprint": {
+      "pages_order": "url ASC",
+      "fields": ["url", "title", "content_md", "last_crawled"],
+      "null_handling": "Treat NULL title, content_md, and last_crawled as empty strings",
+      "encoding": "UTF-8",
+      "field_separator": "U+0000",
+      "record_terminator": "U+0000",
+      "hash": "SHA-256 lowercase hex",
+      "source_max_last_crawled": "Maximum non-empty last_crawled value, or NULL"
+    },
+    "checks": [
+      {"id": "source_hash", "operator": "equal", "left": "vector_meta.source_content_hash", "right": "source_fingerprint.sha256"},
+      {"id": "source_timestamp", "operator": "equal", "left": "vector_meta.source_max_last_crawled", "right": "source_fingerprint.source_max_last_crawled"},
+      {"id": "source_path", "operator": "equal", "left": "vector_meta.source_index_file", "right": "site.index_file"},
+      {"id": "site_identity", "operator": "equal", "left": "vector_meta.site_name", "right": "site.name"},
+      {"id": "chunk_site_identity", "operator": "all_equal", "left": "vector_chunks.site_name", "right": "site.name"},
+      {"id": "embedding_model", "operator": "equal", "left": "vector_meta.embedding_model", "right": "site.vectorizer.embedding_model"},
+      {"id": "embedding_dimensions", "operator": "positive", "left": "vector_meta.embedding_dimensions"},
+      {"id": "page_count", "operator": "equal", "left": "vector_meta.page_count", "right": "source_fingerprint.page_count"},
+      {"id": "chunk_count", "operator": "positive", "left": "vector_meta.chunk_count"},
+      {"id": "chunk_records", "operator": "equal", "left": "vector_meta.chunk_count", "right": "vector_chunks.count"},
+      {"id": "embedding_records", "operator": "equal", "left": "vector_meta.chunk_count", "right": "chunk_embeddings.count"},
+      {"id": "embedding_rowids", "operator": "same_set", "left": "vector_chunks.vec_rowid", "right": "chunk_embeddings.rowid"}
+    ]
+  }
+}
