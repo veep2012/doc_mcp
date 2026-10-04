@@ -5,6 +5,7 @@ import hashlib
 import json
 import re
 import sqlite3
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -107,7 +108,10 @@ def test_contract_identity(contract):
     """TS-ISC-001: contract identity and bidirectional scenario mapping."""
     assert contract["contract_name"] == "doc_mcp_index_schema"
     assert re.fullmatch(r"\d+\.\d+\.\d+", contract["contract_version"])
-    assert contract["doc_mcp_releases"]["compatible"]
+    package = tomllib.loads(
+        (CONTRACT_PATH.parent.parent / "pyproject.toml").read_text(encoding="utf-8")
+    )
+    assert contract["doc_mcp_releases"]["compatible"] == package["project"]["version"]
     assert contract["keyword_index"]["schema_version"] is None
     scenario_text = SCENARIOS.read_text(encoding="utf-8")
     for number, entrypoint in enumerate(
@@ -130,6 +134,16 @@ def test_keyword_schema_matches_contract(contract, keyword_index):
     with sqlite3.connect(keyword_index) as conn:
         assert conn.execute("PRAGMA user_version").fetchone()[0] == spec["sqlite_user_version"]
         _verify_tables(conn, spec["tables"])
+        for definition in spec["virtual_tables"].values():
+            expected = (
+                f"CREATE VIRTUAL TABLE pages_fts USING {definition['module']}"
+                f"({', '.join(definition['columns'])}, "
+                f"content='{definition['options']['content']}', "
+                f"content_rowid='{definition['options']['content_rowid']}')"
+            )
+            assert _normalized_sql(definition["sql"]) == _normalized_sql(expected)
+        for definition in spec["triggers"].values():
+            assert definition["event"].lower() in definition["sql"].lower()
         _verify_sql_objects(conn, "table", spec["virtual_tables"])
         _verify_sql_objects(conn, "trigger", spec["triggers"])
         assert set(spec["triggers"]) == {
@@ -166,6 +180,10 @@ def test_vector_schema_matches_contract(contract, generated_indexes):
         assert vec["dimensions_from"] == "vector_meta.embedding_dimensions"
         assert meta[1] > 0
         expected = vec["sql_template"].format(embedding_dimensions=meta[1])
+        assert _normalized_sql(expected) == _normalized_sql(
+            f"CREATE VIRTUAL TABLE chunk_embeddings USING {vec['module']}"
+            f"({vec['columns'][0]} {vec['embedding_type']}[{meta[1]}])"
+        )
         _verify_sql_objects(conn, "table", {"chunk_embeddings": {"sql": expected}})
 
 

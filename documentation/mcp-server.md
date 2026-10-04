@@ -5,10 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-08-15
-- Version: v3.0
+- Last Updated: 2026-10-04
+- Version: v3.1
 
 ## Change Log
+- 2026-10-04 | v3.1 | Linked the canonical machine-readable keyword and vector index schema contract.
 - 2026-08-15 | v3.0 | Consolidated packaged-version harness instructions in the dedicated harness testing guide and kept this reference as a cross-link.
 - 2026-08-02 | v2.3 | Added the packaged-wheel MCP version comparison harness, its safe configuration, fixtures, diagnostics, and CI usage.
 - 2026-06-21 | v2.2 | Defined the vector sidecar compatibility contract with strict schema-version checks, deterministic keyword fallback reasons, rebuild-based migration guidance, crawl-fingerprint stale detection based on source content hashes and crawl timestamps, and release-facing search contract wording.
@@ -98,6 +99,7 @@ Mode and fallback behavior:
 - `vector_index_schema_mismatch` is returned when the sidecar header or stored schema version does not match the current runtime contract; rebuild the sidecar with `docmcp-vectorize` to migrate it.
 - `vector_index_incompatible` covers configuration problems such as a missing usable `index_file` and query-time metadata mismatches such as an embedding-model change or missing embedding dimensions.
 - Vector queries require the sidecar header version and the stored metadata schema version to match the current runtime contract, and also require the metadata to match the current `index_file` and `vectorizer.embedding_model`; rebuild the sidecar after changing any of those inputs.
+- External index consumers can use the [machine-readable index schema contract](index_schema_contract.md) to check generated keyword and vector files independently of MCP search behavior.
 - `vector_index_stale` is driven by durable crawl fingerprints: the stored source content hash and crawl timestamp must match the current crawl index. Filesystem mtime does not participate in the stale decision.
 - Cross-source duplicates are removed deterministically using stable chunk/page-text identity, and the retained row keeps its original `source` label.
 - In hybrid mode, vector lookup failures are logged and the tool still falls back to keyword results when they are available.
@@ -278,6 +280,7 @@ configuration, fixture requirements, artifacts, CI usage, and troubleshooting.
 - If `MCP_SERVER_NAME` changes between crawl and query workflows, the client-visible name also changes.
 
 ## References
+- [Index schema contract](index_schema_contract.md)
 - [src/docmcp/main.py](../src/docmcp/main.py)
 - [src/docmcp/tools.py](../src/docmcp/tools.py)
 - [src/docmcp/config/loader.py](../src/docmcp/config/loader.py)
