@@ -6,10 +6,10 @@
 - Reviewers: Repository maintainers
 - Created: 2026-05-24
 - Last Updated: 2026-10-04
-- Version: v1.4
+- Version: v1.5
 
 ## Change Log
-- 2026-10-04 | v1.4 | Linked the canonical machine-readable index schema contract.
+- 2026-10-04 | v1.5 | Linked the canonical machine-readable index schema contract and clarified the dimension limit of the literal-vector example.
 - 2026-06-21 | v1.3 | Documented the versioned sidecar header and metadata schema used by the runtime contract, and added the source crawl fingerprint columns used for stale-sidecar validation.
 - 2026-06-14 | v1.1 | Clarified rebuild-needed guidance when vector query dimensions no longer match the recorded FastEmbed model.
 - 2026-05-24 | v1.0 | Added practical sqlite3 commands for inspecting the local vector index and running nearest-neighbor queries against `chunk_embeddings`.
@@ -98,7 +98,7 @@ Notes:
 - The `distance` column is smaller for closer matches.
 
 ### Test A Query With A Literal Vector
-If you just want to verify the SQL, use a literal `vec_f32(...)` value with the right dimension:
+The literal below contains 32 values and is valid only when `vector_meta.embedding_dimensions` is `32`. Check that metadata first and replace the literal with a vector containing exactly the configured number of values; vector dimensions depend on the embedding model.
 
 ```sql
 SELECT

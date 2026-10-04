@@ -5,11 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-24
-- Last Updated: 2026-06-21
-- Version: v1.4
+- Last Updated: 2026-10-04
+- Version: v1.5
 
 ## Change Log
-- 2026-06-21 | v1.4 | Added the local vector sidecar to the runtime overview and clarified the data flow between crawl, vectorize, and MCP query time.
+- 2026-10-04 | v1.5 | Corrected the architecture flow to show that vectorization is optional and can run separately or be chained after a successful crawl.
 - 2026-05-21 | v1.3 | Clarified the full MCP tool surface and the runtime env resolution behavior.
 - 2026-05-20 | v1.2 | Noted the current CLI version/help behavior and the source-tree versus installed command model.
 - 2026-04-25 | v1.1 | Updated architecture references for the docmcp package entry points and moved implementation modules.
@@ -33,7 +33,8 @@ flowchart TD
   A["docmcp-auth"] --> B["storage/<site>.json"]
   B --> C["docmcp-crawl"]
   C --> D["index/<site>.db"]
-  C --> D2["index/<site>.vec.db"]
+  C --> V["docmcp-vectorize (optional)"]
+  V --> D2["index/<site>.vec.db"]
   D --> E["docmcp-server"]
   D2 --> E
   E --> F["src/docmcp/tools.py"]

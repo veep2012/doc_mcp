@@ -5,11 +5,11 @@
 - Owner: Documentation Maintainers
 - Reviewers: Repository maintainers
 - Created: 2026-04-26
-- Last Updated: 2026-07-29
-- Version: v1.7
+- Last Updated: 2026-10-04
+- Version: v1.8
 
 ## Change Log
-- 2026-07-29 | v1.7 | Added proxy-only PDF download verification.
+- 2026-10-04 | v1.8 | Clarified that vectorization may be chained to a successful crawl with `--vectorize` or run separately.
 - 2026-07-19 | v1.6 | Expanded PDF crawl and targeted-reindex checks to cover content-type detection, failures, redirects, and continued processing.
 - 2026-07-16 | v1.5 | Added configured-browser installation and missing-browser recovery expectations.
 - 2026-07-05 | v1.4 | Updated the manual setup and wheel-install verification steps to use `python -m playwright install --with-deps chromium`.
@@ -368,18 +368,16 @@ Run these scenarios after either `MT-003A` or `MT-003B`, using the command set f
 ### MT-013: Rebuild Local Vector Sidecar After Recrawl
 - Steps:
   1. Change or recrawl at least one known page for `My Docs`.
-  2. Run the selected crawl command again with `--site "My Docs"`.
-  3. Run the selected vectorize command again with `--site "My Docs"`.
-  4. Inspect the vector index file timestamp or contents.
+  2. Either run `docmcp-crawl --site "My Docs" --vectorize` or run the selected crawl command followed by `docmcp-vectorize --site "My Docs"`.
+  3. Inspect the vector index file timestamp or contents.
 - Expected result:
   - The keyword SQLite index refreshes first.
   - The vector sidecar rebuild then reflects the refreshed crawl data.
-  - No separate crawl-time vectorization toggle is required; the operator still runs the vectorizer explicitly.
+  - The operator may run `docmcp-crawl --vectorize` to chain a full sidecar rebuild after a successful crawl, or run `docmcp-vectorize` as a separate step.
   - There is no page-only vector refresh path yet; the sidecar still rebuilds as a full pass.
   - If the crawl is run with `--debug --vectorize`, the chained vectorizer inherits the debug mode and emits chunk-level diagnostics.
-  - Pass/Fail:
-    - Pass if the sidecar updates after recrawl and keyword search remains usable throughout.
-    - Fail if stale vector records remain after the rebuild or if crawl tries to invoke vectorization automatically.
+  - Pass if the sidecar updates after recrawl and keyword search remains usable throughout.
+- Fail if stale vector records remain after the rebuild or if vectorization runs without being requested by `--vectorize` or a separate vectorizer command.
 
   ## MCP Server
   ### MT-014: Start MCP Server From Shell
